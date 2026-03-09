@@ -96,20 +96,20 @@ export default function ProjectsPage() {
 
   const openCreate = () => {
     setEditing(null);
-    form.reset({ projectType: 'project', status: 'active' });
+    form.reset({ projectCode: '', projectName: '', projectType: 'project', clientName: '', status: 'active', startDate: '', endDate: '', description: '' });
     setOpen(true);
   };
 
   const openEdit = (p: Project) => {
     setEditing(p);
     form.reset({
-      projectCode: p.projectCode,
-      projectName: p.projectName,
+      projectCode: p.projectCode ?? '',
+      projectName: p.projectName ?? '',
       projectType: p.projectType,
-      clientName: p.clientName,
+      clientName: p.clientName ?? '',
       status: p.status,
       startDate: p.startDate?.slice(0, 10) ?? '',
-      endDate: p.endDate?.slice(0, 10),
+      endDate: p.endDate?.slice(0, 10) ?? '',
       description: p.description ?? '',
     });
     setOpen(true);
@@ -117,6 +117,7 @@ export default function ProjectsPage() {
 
   const onSubmit = (values: FormValues) => {
     if (editing) {
+      console.log("values",values)
       updateMutation.mutate({ id: editing.id, dto: values });
     } else {
       createMutation.mutate(values as CreateProjectDto);

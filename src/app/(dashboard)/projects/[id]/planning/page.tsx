@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useState } from 'react';
@@ -9,13 +10,13 @@ import { z } from 'zod';
 import { toast } from 'sonner';
 import {
   Plus, Pencil, Trash2, Loader2, ChevronDown, ChevronRight,
-  MessageSquare, Calendar, Clock, User, Target, Zap,
+  MessageSquare, Calendar, Clock, User, Target, Zap, History,
 } from 'lucide-react';
 import { projectPlanningApi } from '@/lib/api/project-planning';
 import { projectsApi } from '@/lib/api/projects';
 import { employeesApi } from '@/lib/api/employees';
 import {
-  ProjectPhase, ProjectTask, ProjectTaskComment,
+  ProjectPhase, ProjectTask, ProjectTaskComment, ProjectTaskHistory,
   CreatePhaseDto, CreateTaskDto, UpdateTaskDto,
   Employee, ProjectTaskStatus, TaskPriority,
 } from '@/types';
@@ -53,7 +54,7 @@ const taskSchema = z.object({
   phaseId: z.string().optional(),
   assigneeId: z.string().optional(),
   priority: z.enum(['low', 'medium', 'high', 'critical']).optional(),
-  status: z.enum(['todo', 'in_progress', 'in_review', 'done']).optional(),
+  status: z.enum(['todo', 'in_progress', 'in_review', 'done', 'closed']).optional(),
   dueDate: z.string().optional(),
   estimatedHours: z.string().optional(),
 });
@@ -68,6 +69,7 @@ const statusColors: Record<string, string> = {
   in_progress: 'bg-blue-500/15 text-blue-600 ring-1 ring-blue-500/30 dark:text-blue-400',
   in_review: 'bg-amber-500/15 text-amber-600 ring-1 ring-amber-500/30 dark:text-amber-400',
   done: 'bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/30 dark:text-emerald-400',
+  closed: 'bg-purple-500/15 text-purple-600 ring-1 ring-purple-500/30 dark:text-purple-400',
 };
 
 const priorityColors: Record<string, string> = {
@@ -84,7 +86,7 @@ const phaseStatusColors: Record<string, string> = {
 };
 
 const statusLabels: Record<string, string> = {
-  todo: 'To Do', in_progress: 'In Progress', in_review: 'In Review', done: 'Done',
+  todo: 'To Do', in_progress: 'In Progress', in_review: 'In Review', done: 'Done', closed: 'Closed',
 };
 const priorityLabels: Record<string, string> = {
   low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical',
@@ -109,6 +111,10 @@ export default function ProjectPlanningPage() {
   const [detailTask, setDetailTask] = useState<ProjectTask | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [commentText, setCommentText] = useState('');
+
+  // History dialog
+  const [historyTaskId, setHistoryTaskId] = useState<number | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Collapsible phases
   const [expandedPhases, setExpandedPhases] = useState<Record<number, boolean>>({});
@@ -272,6 +278,7 @@ export default function ProjectPlanningPage() {
     onSuccess: async () => {
       await qc.refetchQueries({ queryKey: ['planning-tasks', projectId] });
       await qc.refetchQueries({ queryKey: ['planning-summary', projectId] });
+      qc.invalidateQueries({ queryKey: ['task-history'] });
       toast.success('Task created');
       setTaskOpen(false);
       taskForm.reset();
@@ -285,6 +292,7 @@ export default function ProjectPlanningPage() {
     onSuccess: async () => {
       await qc.refetchQueries({ queryKey: ['planning-tasks', projectId] });
       await qc.refetchQueries({ queryKey: ['planning-summary', projectId] });
+      qc.invalidateQueries({ queryKey: ['task-history'] });
       toast.success('Task updated');
       setTaskOpen(false);
       setEditingTask(null);
@@ -368,6 +376,13 @@ export default function ProjectPlanningPage() {
       toast.success('Comment added');
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
+  });
+
+  // ── Task history ────────────────────────────────────────────────────
+  const { data: historyData, isLoading: historyLoading } = useQuery({
+    queryKey: ['task-history', historyTaskId],
+    queryFn: () => projectPlanningApi.getHistory(projectId, historyTaskId!).then((r) => r.data.data),
+    enabled: !!historyTaskId && historyOpen,
   });
 
   const openDetail = (t: ProjectTask) => {
@@ -463,6 +478,7 @@ export default function ProjectPlanningPage() {
             <SelectItem value="in_progress">In Progress</SelectItem>
             <SelectItem value="in_review">In Review</SelectItem>
             <SelectItem value="done">Done</SelectItem>
+            <SelectItem value="closed">Closed</SelectItem>
           </SelectContent>
         </Select>
         <Select value={priorityFilter} onValueChange={setPriorityFilter}>
@@ -725,6 +741,7 @@ export default function ProjectPlanningPage() {
                         <SelectItem value="in_progress">In Progress</SelectItem>
                         <SelectItem value="in_review">In Review</SelectItem>
                         <SelectItem value="done">Done</SelectItem>
+                        <SelectItem value="closed">Closed</SelectItem>
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -797,7 +814,9 @@ export default function ProjectPlanningPage() {
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <User className="h-3.5 w-3.5" />
-                    {taskDetail.assignee?.empName ?? 'Unassigned'}
+                    {taskDetail.status === 'closed' && taskDetail.assignedAdmin?.name
+                      ? `Admin: ${taskDetail.assignedAdmin.name}`
+                      : taskDetail.assignee?.empName ?? 'Unassigned'}
                   </div>
                   {taskDetail.dueDate && (
                     <div className="flex items-center gap-2 text-muted-foreground">
@@ -820,6 +839,17 @@ export default function ProjectPlanningPage() {
                 </div>
 
                 {/* Comments list */}
+                {/* History button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-fit"
+                  onClick={() => { setHistoryTaskId(taskDetail.id); setHistoryOpen(true); }}
+                >
+                  <History className="h-4 w-4 mr-1.5" />
+                  View History
+                </Button>
+
                 <div className="border-t pt-3">
                   <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
                     <MessageSquare className="h-4 w-4" />
@@ -864,6 +894,56 @@ export default function ProjectPlanningPage() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      {/* ── History Dialog ────────────────────────────────────────────── */}
+      <Dialog open={historyOpen} onOpenChange={(open) => { if (!open) { setHistoryOpen(false); setHistoryTaskId(null); } }}>
+        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5 text-violet-500" />
+              Ticket History
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto min-h-0 pr-1">
+            {historyLoading ? (
+              <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+            ) : !historyData?.length ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No history recorded yet.</p>
+            ) : (
+              <div className="relative pl-6">
+                <div className="absolute left-2.5 top-2 bottom-2 w-px bg-border" />
+                {(historyData ?? []).map((h: ProjectTaskHistory) => (
+                  <div key={h.id} className="relative mb-4 last:mb-0">
+                    <div className={`absolute -left-3.5 top-1.5 h-3 w-3 rounded-full border-2 border-background ${
+                      h.action === 'created' ? 'bg-emerald-500' :
+                      h.action === 'closed' ? 'bg-purple-500' :
+                      h.action === 'assigned' || h.action === 'reassigned' ? 'bg-blue-500' :
+                      h.action === 'status_changed' ? 'bg-amber-500' :
+                      h.action === 'priority_changed' ? 'bg-orange-500' :
+                      'bg-slate-400'
+                    }`} />
+                    <div className="rounded-md border p-3">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-xs font-semibold capitalize">
+                          {h.action.replace(/_/g, ' ')}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                          {new Date(h.createdAt).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">{h.details}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        by <span className="font-medium text-foreground">{h.performedByName}</span>
+                        <span className="ml-1 capitalize">({h.performedByType})</span>
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -906,7 +986,9 @@ function TaskTable({
             <TableCell className="text-xs font-mono text-violet-600 dark:text-violet-400 whitespace-nowrap">{t.ticketNumber ?? '—'}</TableCell>
             <TableCell className="font-medium">{t.title}</TableCell>
             <TableCell className="text-muted-foreground text-sm">
-              {t.assignee?.empName ?? <span className="italic text-muted-foreground/50">Unassigned</span>}
+              {t.status === 'closed' && t.assignedAdmin?.name
+                ? `Admin: ${t.assignedAdmin.name}`
+                : t.assignee?.empName ?? <span className="italic text-muted-foreground/50">Unassigned</span>}
             </TableCell>
             <TableCell>
               <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${priorityColors[t.priority]}`}>

@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, FolderKanban, Tags, Users,
   ClipboardList, BarChart3, ChevronDown, TrendingUp, X,
-  ChevronLeft, ChevronRight, CalendarDays, Building2, LogOut, Settings, ListTodo,
+  ChevronLeft, ChevronRight, CalendarDays, Building2, LogOut, Settings, ListTodo, Ticket,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -78,6 +78,12 @@ const navItems: NavItem[] = [
     iconColor: 'text-teal-400', iconBg: 'bg-teal-500/20',
     activeBg: 'bg-teal-500/20', hoverBg: 'hover:bg-teal-500/10',
     borderColor: 'border-l-teal-400', dotColor: 'bg-teal-400',
+  },
+  {
+    label: 'All Tickets', href: '/full-tickets', icon: Ticket,
+    iconColor: 'text-purple-400', iconBg: 'bg-purple-500/20',
+    activeBg: 'bg-purple-500/20', hoverBg: 'hover:bg-purple-500/10',
+    borderColor: 'border-l-purple-400', dotColor: 'bg-purple-400',
   },
   {
     label: 'Reports', icon: BarChart3,

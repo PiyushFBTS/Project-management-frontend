@@ -1,14 +1,16 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
-  Loader2, MessageSquare, Calendar, Clock, User, Target, ListTodo, Search, X, FolderKanban, UserRoundPlus, History,
+  Loader2, MessageSquare, Calendar, Clock, User, Target, Search, X,
+  FolderKanban, UserRoundPlus, Ticket, History,
 } from 'lucide-react';
-import { myTasksApi } from '@/lib/api/project-planning';
+import { projectTicketsApi, adminTicketsApi } from '@/lib/api/project-planning';
 import { employeesApi } from '@/lib/api/employees';
-import { taskSheetsApi } from '@/lib/api/task-sheets';
+import { useAuth } from '@/providers/auth-provider';
 import {
   ProjectTask, ProjectTaskComment, ProjectTaskHistory, ProjectTaskStatus, TaskPriority,
 } from '@/types';
@@ -51,8 +53,13 @@ const priorityLabels: Record<string, string> = {
   low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical',
 };
 
-export default function MyTasksPage() {
+export default function FullTicketsPage() {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?._type === 'admin';
+
+  // Pick the correct API based on user role
+  const ticketsApi = isAdmin ? adminTicketsApi : projectTicketsApi;
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -62,10 +69,10 @@ export default function MyTasksPage() {
   // Search
   const [search, setSearch] = useState('');
 
-  // Projects dropdown
+  // Projects dropdown — admin sees all, employee sees accessible only
   const { data: projectsList } = useQuery({
-    queryKey: ['employee-projects'],
-    queryFn: () => taskSheetsApi.getProjects().then((r) => r.data.data),
+    queryKey: ['accessible-projects', isAdmin],
+    queryFn: () => ticketsApi.getProjects().then((r) => r.data.data),
   });
 
   // Detail dialog
@@ -86,9 +93,9 @@ export default function MyTasksPage() {
   // ── Query ────────────────────────────────────────────────────────────────
 
   const { data: tasksData, isLoading } = useQuery({
-    queryKey: ['my-tasks', search, statusFilter, priorityFilter, projectFilter],
+    queryKey: ['project-tickets', search, statusFilter, priorityFilter, projectFilter],
     queryFn: async (): Promise<ProjectTask[]> => {
-      const r = await myTasksApi.getAll({
+      const r = await ticketsApi.getAll({
         limit: 100,
         ...(search ? { search } : {}),
         ...(statusFilter !== 'all' ? { status: statusFilter as ProjectTaskStatus } : {}),
@@ -106,8 +113,8 @@ export default function MyTasksPage() {
 
   // ── Company admins for close assignment ─────────────────────────────────
   const { data: companyAdmins } = useQuery({
-    queryKey: ['company-admins-mytasks'],
-    queryFn: () => myTasksApi.getAdmins().then((r) => {
+    queryKey: ['company-admins', isAdmin],
+    queryFn: () => ticketsApi.getAdmins().then((r) => {
       const d = r.data;
       if (Array.isArray(d?.data)) return d.data;
       if (Array.isArray((d as any)?.data?.data)) return (d as any).data.data;
@@ -119,10 +126,10 @@ export default function MyTasksPage() {
 
   const updateStatusMut = useMutation({
     mutationFn: ({ taskId, status, assignToAdminId }: { taskId: number; status: ProjectTaskStatus; assignToAdminId?: number }) =>
-      myTasksApi.updateStatus(taskId, status, assignToAdminId),
+      ticketsApi.updateStatus(taskId, status, assignToAdminId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['my-tasks'] });
-      qc.invalidateQueries({ queryKey: ['my-task-detail', detailTask?.id] });
+      qc.invalidateQueries({ queryKey: ['project-tickets'] });
+      qc.invalidateQueries({ queryKey: ['project-ticket-detail', detailTask?.id] });
       qc.invalidateQueries({ queryKey: ['task-history'] });
       toast.success('Status updated');
       setCloseDialogOpen(false);
@@ -136,8 +143,10 @@ export default function MyTasksPage() {
     if (newStatus === 'closed') {
       const admins = companyAdmins ?? [];
       if (admins.length === 1) {
+        // Only one admin — auto-assign
         updateStatusMut.mutate({ taskId, status: 'closed' as ProjectTaskStatus, assignToAdminId: admins[0].id });
       } else {
+        // Multiple admins — open selection dialog
         setCloseTaskId(taskId);
         setSelectedAdminId('');
         setCloseDialogOpen(true);
@@ -150,15 +159,15 @@ export default function MyTasksPage() {
   // ── Task detail ──────────────────────────────────────────────────────────
 
   const { data: taskDetail, isLoading: detailLoading } = useQuery({
-    queryKey: ['my-task-detail', detailTask?.id],
-    queryFn: () => myTasksApi.getOne(detailTask!.id).then((r) => r.data.data),
+    queryKey: ['project-ticket-detail', detailTask?.id],
+    queryFn: () => ticketsApi.getOne(detailTask!.id).then((r) => r.data.data),
     enabled: !!detailTask,
   });
 
   const addCommentMut = useMutation({
-    mutationFn: (content: string) => myTasksApi.addComment(detailTask!.id, { content }),
+    mutationFn: (content: string) => ticketsApi.addComment(detailTask!.id, { content }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['my-task-detail', detailTask?.id] });
+      qc.invalidateQueries({ queryKey: ['project-ticket-detail', detailTask?.id] });
       setCommentText('');
       toast.success('Comment added');
     },
@@ -168,22 +177,25 @@ export default function MyTasksPage() {
   // ── Task history ────────────────────────────────────────────────────
   const { data: historyData, isLoading: historyLoading } = useQuery({
     queryKey: ['task-history', historyTaskId],
-    queryFn: () => myTasksApi.getHistory(historyTaskId!).then((r) => r.data.data),
+    queryFn: () => ticketsApi.getHistory(historyTaskId!).then((r) => r.data.data),
     enabled: !!historyTaskId && historyOpen,
   });
 
   // ── Employees list for reassign ─────────────────────────────────────
   const { data: companyEmployees } = useQuery({
-    queryKey: ['company-employees-list'],
-    queryFn: () => employeesApi.employeeGetAll({ limit: 100, isActive: true }).then((r) => r.data.data),
+    queryKey: ['company-employees-list', isAdmin],
+    queryFn: () => {
+      const fn = isAdmin ? employeesApi.getAll : employeesApi.employeeGetAll;
+      return fn({ limit: 100, isActive: true }).then((r) => r.data.data);
+    },
   });
 
   const reassignMut = useMutation({
     mutationFn: ({ taskId, assigneeId }: { taskId: number; assigneeId: number }) =>
-      myTasksApi.reassign(taskId, assigneeId),
+      ticketsApi.reassign(taskId, assigneeId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['my-tasks'] });
-      qc.invalidateQueries({ queryKey: ['my-task-detail', detailTask?.id] });
+      qc.invalidateQueries({ queryKey: ['project-tickets'] });
+      qc.invalidateQueries({ queryKey: ['project-ticket-detail', detailTask?.id] });
       qc.invalidateQueries({ queryKey: ['task-history'] });
       toast.success('Task reassigned successfully');
       setDetailOpen(false);
@@ -199,23 +211,19 @@ export default function MyTasksPage() {
     setReassignTo('');
   };
 
-  // ── Search helpers ──────────────────────────────────────────────────────
-
-  const isSearchMode = search.length >= 1;
-
   return (
     <div className="space-y-4">
       {/* Gradient Header */}
       <div className="relative overflow-hidden rounded-2xl shadow-lg">
-        <div className="absolute inset-0 bg-linear-to-r from-teal-600 via-cyan-600 to-blue-600" />
+        <div className="absolute inset-0 bg-linear-to-r from-violet-600 via-purple-600 to-indigo-600" />
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djZoLTZWMzRoNnptMC0zMHY2aC02VjRoNnptMCAzMHY2aC02di02aDZ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30" />
         <div className="relative px-6 py-5 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
-            <ListTodo className="h-5 w-5 text-white" />
+            <Ticket className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">My Tasks</h1>
-            <p className="text-sm text-white/60">Track your assigned tasks</p>
+            <h1 className="text-xl font-bold text-white">All Tickets</h1>
+            <p className="text-sm text-white/60">All tickets from your projects</p>
           </div>
         </div>
       </div>
@@ -224,7 +232,7 @@ export default function MyTasksPage() {
       {!isLoading && tasks.length > 0 && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { label: 'To Do', count: tasks.filter(t => t.status === 'todo').length, gradient: 'bg-gradient-to-br from-slate-500 to-slate-600', icon: ListTodo },
+            { label: 'To Do', count: tasks.filter(t => t.status === 'todo').length, gradient: 'bg-gradient-to-br from-slate-500 to-slate-600', icon: Ticket },
             { label: 'In Progress', count: tasks.filter(t => t.status === 'in_progress').length, gradient: 'bg-gradient-to-br from-blue-500 to-indigo-600', icon: Clock },
             { label: 'In Review', count: tasks.filter(t => t.status === 'in_review').length, gradient: 'bg-gradient-to-br from-amber-500 to-orange-600', icon: MessageSquare },
             { label: 'Done', count: tasks.filter(t => t.status === 'done').length, gradient: 'bg-gradient-to-br from-emerald-500 to-teal-600', icon: Target },
@@ -301,32 +309,19 @@ export default function MyTasksPage() {
         </div>
       </div>
 
-      {/* Search results banner */}
-      {isSearchMode && !isLoading && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground bg-teal-500/10 border border-teal-500/20 rounded-md px-3 py-2">
-          <Search className="h-3.5 w-3.5 text-teal-600" />
-          <span>
-            Showing <strong className="text-foreground">{tasks.length}</strong> result{tasks.length !== 1 ? 's' : ''} for &quot;{search}&quot;
-          </span>
-          <button onClick={() => setSearch('')} className="ml-auto text-xs text-teal-600 hover:underline">Clear search</button>
-        </div>
-      )}
-
-      {/* Empty / Loading state (shared) */}
+      {/* Empty / Loading state */}
       {isLoading ? (
         <>
-          {/* Mobile/Tablet skeleton */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:hidden">
             {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-36 rounded-xl" />)}
           </div>
-          {/* Desktop skeleton */}
           <div className="hidden lg:block rounded-lg border bg-card shadow-sm">
-            <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-teal-500 via-cyan-500 to-blue-500" />
+            <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-violet-500 via-purple-500 to-indigo-500" />
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Ticket</TableHead><TableHead>Title</TableHead><TableHead>Project</TableHead>
-                  <TableHead>Priority</TableHead><TableHead>Status</TableHead><TableHead>Due Date</TableHead>
+                  <TableHead>Assignee</TableHead><TableHead>Priority</TableHead><TableHead>Status</TableHead>
                   <TableHead className="w-36">Quick Status</TableHead>
                 </TableRow>
               </TableHeader>
@@ -342,15 +337,11 @@ export default function MyTasksPage() {
         </>
       ) : tasks.length === 0 ? (
         <div className="flex flex-col items-center justify-center text-center py-16 rounded-xl border bg-card shadow-sm">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-teal-500/10 mb-3">
-            <ListTodo className="h-6 w-6 text-teal-500" />
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-violet-500/10 mb-3">
+            <Ticket className="h-6 w-6 text-violet-500" />
           </div>
-          <p className="text-sm font-medium text-foreground">
-            {isSearchMode ? 'No tasks match your search' : 'No tasks assigned yet'}
-          </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            {isSearchMode ? 'Try a different ticket ID' : 'Tasks assigned to you will appear here'}
-          </p>
+          <p className="text-sm font-medium text-foreground">No tickets found</p>
+          <p className="text-xs text-muted-foreground mt-1">Tickets from your projects will appear here</p>
         </div>
       ) : (
         <>
@@ -359,21 +350,25 @@ export default function MyTasksPage() {
             {tasks.map((t) => (
               <div
                 key={t.id}
-                className="rounded-xl border bg-card shadow-sm p-4 cursor-pointer hover:ring-1 hover:ring-teal-500/30 transition-all"
+                className="rounded-xl border bg-card shadow-sm p-4 cursor-pointer hover:ring-1 hover:ring-violet-500/30 transition-all"
                 onClick={() => openDetail(t)}
               >
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="min-w-0">
-                    <span className="text-xs font-mono font-semibold text-teal-600 dark:text-teal-400">{t.ticketNumber ?? '—'}</span>
+                    <span className="text-xs font-mono font-semibold text-violet-600 dark:text-violet-400">{t.ticketNumber ?? '—'}</span>
                     <h3 className="text-sm font-semibold truncate mt-0.5">{t.title}</h3>
                   </div>
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium shrink-0 ${priorityColors[t.priority]}`}>
                     {priorityLabels[t.priority]}
                   </span>
                 </div>
-                <p className="text-xs text-muted-foreground truncate mb-3">
+                <p className="text-xs text-muted-foreground truncate mb-1">
                   <FolderKanban className="inline h-3 w-3 mr-1 -mt-0.5" />
                   {t.project?.projectName ?? '—'}
+                </p>
+                <p className="text-xs text-muted-foreground truncate mb-3">
+                  <User className="inline h-3 w-3 mr-1 -mt-0.5" />
+                  {t.status === 'closed' && t.assignedAdmin?.name ? `Admin: ${t.assignedAdmin.name}` : t.assignee?.empName ?? 'Unassigned'}
                   {t.dueDate && (
                     <span className="ml-3">
                       <Calendar className="inline h-3 w-3 mr-1 -mt-0.5" />
@@ -409,26 +404,29 @@ export default function MyTasksPage() {
 
           {/* ── Desktop: Table layout ──────────────────────────────────────── */}
           <div className="hidden lg:block rounded-lg border bg-card overflow-x-auto shadow-sm">
-            <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-teal-500 via-cyan-500 to-blue-500" />
+            <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-violet-500 via-purple-500 to-indigo-500" />
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Ticket</TableHead>
                   <TableHead>Title</TableHead>
                   <TableHead>Project</TableHead>
+                  <TableHead>Assignee</TableHead>
                   <TableHead>Priority</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Due Date</TableHead>
                   <TableHead className="w-36">Quick Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {tasks.map((t) => (
                   <TableRow key={t.id} className="cursor-pointer hover:bg-accent/50" onClick={() => openDetail(t)}>
-                    <TableCell className="text-xs font-mono text-teal-600 dark:text-teal-400 whitespace-nowrap">{t.ticketNumber ?? '—'}</TableCell>
+                    <TableCell className="text-xs font-mono text-violet-600 dark:text-violet-400 whitespace-nowrap">{t.ticketNumber ?? '—'}</TableCell>
                     <TableCell className="font-medium">{t.title}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {t.project?.projectName ?? '—'}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {t.status === 'closed' && t.assignedAdmin?.name ? `Admin: ${t.assignedAdmin.name}` : t.assignee?.empName ?? 'Unassigned'}
                     </TableCell>
                     <TableCell>
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${priorityColors[t.priority]}`}>
@@ -440,7 +438,6 @@ export default function MyTasksPage() {
                         {statusLabels[t.status]}
                       </span>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{t.dueDate ?? '—'}</TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <Select
                         value={t.status}
@@ -469,11 +466,11 @@ export default function MyTasksPage() {
       {/* ── Task Detail Dialog ─────────────────────────────────────────────── */}
       <Dialog open={detailOpen} onOpenChange={(v) => { setDetailOpen(v); if (!v) setDetailTask(null); }}>
         <DialogContent className="max-w-[95vw] sm:max-w-xl flex flex-col max-h-[85vh] sm:max-h-[80vh] overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-teal-500 via-cyan-500 to-blue-500" />
+          <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-violet-500 via-purple-500 to-indigo-500" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ListTodo className="h-4 w-4 text-teal-500" />
-              Task Detail
+              <Ticket className="h-4 w-4 text-violet-500" />
+              Ticket Detail
             </DialogTitle>
           </DialogHeader>
           {detailLoading ? (
@@ -488,7 +485,7 @@ export default function MyTasksPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     {taskDetail.ticketNumber && (
-                      <span className="text-xs font-mono font-semibold text-teal-600 dark:text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded">{taskDetail.ticketNumber}</span>
+                      <span className="text-xs font-mono font-semibold text-violet-600 dark:text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded">{taskDetail.ticketNumber}</span>
                     )}
                     <h3 className="text-lg font-semibold">{taskDetail.title}</h3>
                   </div>
@@ -506,8 +503,12 @@ export default function MyTasksPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="flex items-center gap-2 text-muted-foreground">
-                    <User className="h-3.5 w-3.5" />
+                    <FolderKanban className="h-3.5 w-3.5" />
                     {taskDetail.project?.projectName ?? '—'}
+                  </div>
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <User className="h-3.5 w-3.5" />
+                    {taskDetail.status === 'closed' && taskDetail.assignedAdmin?.name ? `Admin: ${taskDetail.assignedAdmin.name}` : taskDetail.assignee?.empName ?? 'Unassigned'}
                   </div>
                   {taskDetail.dueDate && (
                     <div className="flex items-center gap-2 text-muted-foreground">

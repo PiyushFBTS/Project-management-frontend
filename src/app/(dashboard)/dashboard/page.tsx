@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
@@ -6,7 +7,7 @@ import Link from 'next/link';
 import {
   Users, FolderKanban, CalendarCheck, TrendingUp,
   ClipboardList, Clock, FileCheck, BarChart3, ArrowRight,
-  CheckCircle2, XCircle,
+  CheckCircle2, XCircle, ListTodo, PlayCircle, Eye, CircleCheckBig, Ticket,
 } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { useCompany } from '@/providers/company-provider';
@@ -19,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { dashboardApi } from '@/lib/api/dashboard';
+import { myTasksApi } from '@/lib/api/project-planning';
 import { companiesApi, PlatformDashboard as PlatformDashboardData } from '@/lib/api/companies';
 
 const thisMonth = format(new Date(), 'yyyy-MM');
@@ -63,6 +65,11 @@ function EmployeeDashboard() {
   const { data: personal, isLoading } = useQuery({
     queryKey: ['emp-personal-dashboard'],
     queryFn: () => dashboardApi.getPersonalDashboard().then((r) => r.data.data),
+  });
+
+  const { data: taskSummary, isLoading: taskLoading } = useQuery({
+    queryKey: ['emp-task-summary'],
+    queryFn: () => myTasksApi.getSummary().then((r) => r.data.data),
   });
 
   const todayFilled = personal?.today?.filled ?? false;
@@ -144,6 +151,51 @@ function EmployeeDashboard() {
             sub={thisMonthLabel}
             icon={TrendingUp}
             gradient="bg-gradient-to-br from-amber-400 to-orange-500"
+            textColor="text-white"
+          />
+        </div>
+      )}
+
+      {/* Task / Ticket Stats */}
+      {taskLoading ? (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+          {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+          <KpiCard
+            title="Total Tickets"
+            value={taskSummary?.totalTasks ?? 0}
+            icon={Ticket}
+            gradient="bg-gradient-to-br from-slate-600 to-slate-800"
+            textColor="text-white"
+          />
+          <KpiCard
+            title="To Do"
+            value={taskSummary?.todoCount ?? 0}
+            icon={ListTodo}
+            gradient="bg-gradient-to-br from-blue-500 to-indigo-600"
+            textColor="text-white"
+          />
+          <KpiCard
+            title="In Progress"
+            value={taskSummary?.inProgressCount ?? 0}
+            icon={PlayCircle}
+            gradient="bg-gradient-to-br from-amber-400 to-orange-500"
+            textColor="text-white"
+          />
+          <KpiCard
+            title="In Review"
+            value={taskSummary?.inReviewCount ?? 0}
+            icon={Eye}
+            gradient="bg-gradient-to-br from-purple-500 to-fuchsia-600"
+            textColor="text-white"
+          />
+          <KpiCard
+            title="Done"
+            value={taskSummary?.doneCount ?? 0}
+            icon={CircleCheckBig}
+            gradient="bg-gradient-to-br from-emerald-500 to-green-600"
             textColor="text-white"
           />
         </div>
@@ -326,6 +378,11 @@ function AdminDashboard() {
     queryFn: () => dashboardApi.getSummary().then((r) => r.data.data),
   });
 
+  const { data: taskSummary, isLoading: taskLoading } = useQuery({
+    queryKey: ['dashboard-task-summary'],
+    queryFn: () => dashboardApi.getTaskSummary().then((r) => r.data.data),
+  });
+
   const { data: byType } = useQuery({
     queryKey: ['dashboard-by-type', thisMonth],
     queryFn: () => dashboardApi.getManDaysByType(thisMonth).then((r) => r.data.data),
@@ -390,6 +447,51 @@ function AdminDashboard() {
             sub={`${summary?.filledToday ?? 0} / ${summary?.totalActiveEmployees ?? 0} filled`}
             icon={TrendingUp}
             gradient="bg-gradient-to-br from-amber-400 to-orange-500"
+            textColor="text-white"
+          />
+        </div>
+      )}
+
+      {/* Task / Ticket Stats */}
+      {taskLoading ? (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+          {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+          <KpiCard
+            title="Total Tickets"
+            value={taskSummary?.totalTasks ?? 0}
+            icon={Ticket}
+            gradient="bg-gradient-to-br from-slate-600 to-slate-800"
+            textColor="text-white"
+          />
+          <KpiCard
+            title="To Do"
+            value={taskSummary?.todoCount ?? 0}
+            icon={ListTodo}
+            gradient="bg-gradient-to-br from-blue-500 to-indigo-600"
+            textColor="text-white"
+          />
+          <KpiCard
+            title="In Progress"
+            value={taskSummary?.inProgressCount ?? 0}
+            icon={PlayCircle}
+            gradient="bg-gradient-to-br from-amber-400 to-orange-500"
+            textColor="text-white"
+          />
+          <KpiCard
+            title="In Review"
+            value={taskSummary?.inReviewCount ?? 0}
+            icon={Eye}
+            gradient="bg-gradient-to-br from-purple-500 to-fuchsia-600"
+            textColor="text-white"
+          />
+          <KpiCard
+            title="Done"
+            value={taskSummary?.doneCount ?? 0}
+            icon={CircleCheckBig}
+            gradient="bg-gradient-to-br from-emerald-500 to-green-600"
             textColor="text-white"
           />
         </div>

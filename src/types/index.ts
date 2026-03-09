@@ -380,7 +380,7 @@ export interface DailyFillRow {
 
 export type PhaseStatus = 'not_started' | 'in_progress' | 'completed';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'critical';
-export type ProjectTaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done';
+export type ProjectTaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done' | 'closed';
 export type AuthorType = 'admin' | 'employee';
 
 export interface ProjectPhase {
@@ -408,6 +408,8 @@ export interface ProjectTask {
   description: string | null;
   assigneeId: number | null;
   assignee?: Employee | null;
+  assignedAdminId?: number | null;
+  assignedAdmin?: { id: number; name: string; email: string } | null;
   priority: TaskPriority;
   status: ProjectTaskStatus;
   dueDate: string | null;
@@ -425,6 +427,22 @@ export interface ProjectTaskComment {
   authorId: number;
   authorType: AuthorType;
   content: string;
+  companyId: number;
+  createdAt: string;
+}
+
+export type TaskHistoryAction = 'created' | 'status_changed' | 'assigned' | 'reassigned' | 'closed' | 'priority_changed' | 'updated';
+
+export interface ProjectTaskHistory {
+  id: number;
+  taskId: number;
+  action: TaskHistoryAction;
+  performedById: number;
+  performedByType: 'admin' | 'employee';
+  performedByName: string;
+  oldValue: string | null;
+  newValue: string | null;
+  details: string | null;
   companyId: number;
   createdAt: string;
 }
