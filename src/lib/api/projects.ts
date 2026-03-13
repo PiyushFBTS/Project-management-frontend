@@ -15,4 +15,8 @@ export const projectsApi = {
   remove: (id: number) => api.delete<ApiResponse<null>>(`/projects/${id}`),
 
   getEmployees: (id: number) => api.get<ApiResponse<Employee[]>>(`/projects/${id}/employees`),
+
+  // Employee: only projects where employee has assigned tickets
+  employeeGetAll: () =>
+    api.get<ApiResponse<Project[]>>('/employee/projects'),
 };

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useAuth } from '@/providers/auth-provider';
@@ -8,12 +9,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import Link from 'next/link';
-import { LogOut, User, Menu, ChevronDown, Search } from 'lucide-react';
+import { LogOut, User, Menu, ChevronDown, Search, Building2 } from 'lucide-react';
 import { ThemeToggle } from './theme-toggle';
 import { CompanySelector } from './company-selector';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useSidebar } from '@/providers/sidebar-provider';
+import { useCompany } from '@/providers/company-provider';
 import { NotificationBell } from './notification-bell';
 import { useState } from 'react';
 
@@ -24,7 +26,7 @@ const pageTitles: Record<string, string> = {
   '/task-types':            'Task Types',
   '/employees':             'Employees',
   '/task-sheets':           'Task Sheets',
-  '/leave-reasons':         'Leave Reasons',
+  '/leave-types':           'Leave Types',
   '/leave-requests':        'Leave Requests',
   '/task-sheets/fill':      'Fill Task Sheet',
   '/reports/employee-wise': 'Employee-Wise Report',
@@ -44,11 +46,21 @@ const pageParents: Record<string, string> = {
 export function Header() {
   const { user, logout } = useAuth();
   const { toggle } = useSidebar();
+  const { selectedCompany, isSuperAdmin } = useCompany();
   const router = useRouter();
   const pathname = usePathname();
   const [searchOpen, setSearchOpen] = useState(false);
+  const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
 
   const handleLogout = () => { logout(); router.push('/login'); };
+
+  // Determine company logo: super admin → selected company, others → their own company
+  const logoUrl = isSuperAdmin
+    ? selectedCompany?.logoUrl
+    : (user as any)?.companyLogoUrl;
+  const logoName = isSuperAdmin
+    ? selectedCompany?.name
+    : (user as any)?.companyName;
 
   const displayName = user
     ? user._type === 'employee' ? (user as { empName: string }).empName : user.name
@@ -87,6 +99,13 @@ export function Header() {
         </Button>
 
         <div className="flex items-center gap-2 min-w-0">
+          {/* Company logo: own company for admin/employee, selected company for super admin */}
+          {logoUrl && (
+            <>
+              <img src={`${apiBase}${logoUrl}`} alt={logoName ?? ''} className="h-7 w-7 rounded-md object-cover ring-1 ring-border/50 shrink-0" />
+              <div className="h-4 w-px bg-border/60 shrink-0" />
+            </>
+          )}
           {parent && (
             <>
               <span className="hidden text-xs font-medium text-muted-foreground sm:block">{parent}</span>

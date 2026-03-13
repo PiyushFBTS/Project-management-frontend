@@ -9,6 +9,7 @@ export interface SelectedCompany {
   id: number;
   name: string;
   slug: string;
+  logoUrl?: string | null;
 }
 
 interface CompanyContextType {

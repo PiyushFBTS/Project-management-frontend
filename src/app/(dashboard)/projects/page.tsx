@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useState } from 'react';
@@ -10,6 +11,7 @@ import { Plus, Pencil, Trash2, Loader2, ClipboardList, FolderKanban, Search as S
 import { format } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import { projectsApi } from '@/lib/api/projects';
+import { useAuth } from '@/providers/auth-provider';
 import { Project, CreateProjectDto } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,13 +51,18 @@ const statusColors: Record<string, string> = {
 export default function ProjectsPage() {
   const qc = useQueryClient();
   const router = useRouter();
+  const { user } = useAuth();
+  const isEmployee = user?._type === 'employee';
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['projects', search],
-    queryFn: () => projectsApi.getAll({ search, limit: 100 }).then((r) => r.data.data),
+    queryKey: ['projects', search, isEmployee],
+    queryFn: () =>
+      isEmployee
+        ? projectsApi.employeeGetAll().then((r) => r.data.data)
+        : projectsApi.getAll({ search, limit: 100 }).then((r) => r.data.data),
   });
 
   const form = useForm<FormValues>({ resolver: zodResolver(schema) });
@@ -139,12 +146,14 @@ export default function ProjectsPage() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-white">Projects</h1>
-              <p className="text-sm text-white/60">Manage all your projects</p>
+              <p className="text-sm text-white/60">{isEmployee ? 'Projects with your assigned tickets' : 'Manage all your projects'}</p>
             </div>
           </div>
-          <Button size="sm" onClick={openCreate} className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg">
-            <Plus className="mr-1.5 h-4 w-4" /> New Project
-          </Button>
+          {!isEmployee && (
+            <Button size="sm" onClick={openCreate} className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg">
+              <Plus className="mr-1.5 h-4 w-4" /> New Project
+            </Button>
+          )}
         </div>
       </div>
 
@@ -171,7 +180,7 @@ export default function ProjectsPage() {
               <TableHead>Client</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Start Date</TableHead>
-              <TableHead className="w-20">Actions</TableHead>
+              <TableHead className="w-20">{isEmployee ? '' : 'Actions'}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -206,15 +215,19 @@ export default function ProjectsPage() {
                         >
                           <ClipboardList className="h-3.5 w-3.5" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(p)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600"
-                          onClick={() => { if (confirm(`Remove "${p.projectName}"?`)) deleteMutation.mutate({ id: p.id, name: p.projectName }); }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        {!isEmployee && (
+                          <>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(p)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600"
+                              onClick={() => { if (confirm(`Remove "${p.projectName}"?`)) deleteMutation.mutate({ id: p.id, name: p.projectName }); }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

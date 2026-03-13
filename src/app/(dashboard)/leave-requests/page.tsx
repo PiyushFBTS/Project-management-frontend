@@ -85,9 +85,9 @@ function LeaveRequestsContent() {
     }
   }, [searchParams, isEmployee]);
 
-  // Fetch leave reasons for the form
+  // Fetch leave types for the form
   const { data: leaveReasons } = useQuery({
-    queryKey: ['leave-reasons-dropdown'],
+    queryKey: ['leave-types-dropdown'],
     queryFn: () => leaveRequestsApi.getLeaveReasons().then((r) => r.data.data),
     enabled: isEmployee,
   });
@@ -445,9 +445,9 @@ function LeaveRequestsContent() {
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              {/* Leave Reason */}
+              {/* Leave Type */}
               <div className="space-y-1.5">
-                <Label className="text-sm font-medium">Leave Reason <span className="text-destructive">*</span></Label>
+                <Label className="text-sm font-medium">Leave Type <span className="text-destructive">*</span></Label>
                 <Select value={applyForm.leaveReasonId} onValueChange={(v) => setApplyForm((p) => ({ ...p, leaveReasonId: v }))}>
                   <SelectTrigger  className="w-full">
                     <SelectValue placeholder="Select a reason" />

@@ -4,10 +4,24 @@ import { ApiResponse, Company, AdminUser, PaginationMeta } from '@/types';
 export interface CreateCompanyDto {
   name: string;
   slug: string;
+  companyCode?: string;
   logoUrl?: string;
   address?: string;
+  countryId?: number;
+  stateId?: number;
+  cityId?: number;
+  postalCode?: string;
+  contactPersonName?: string;
   contactEmail?: string;
   contactPhone?: string;
+  gstNumber?: string;
+  panNumber?: string;
+  taxId?: string;
+  gstin?: string;
+  taxRegistrationNumber?: string;
+  gstEnabled?: boolean;
+  vatEnabled?: boolean;
+  baseCurrencyCode?: string;
   userLimit?: number;
   licenseExpiryDate: string;
   subscriptionPlan?: string;
@@ -66,6 +80,14 @@ export const companiesApi = {
 
   createAdmin: (id: number, dto: CreateCompanyAdminDto) =>
     api.post<ApiResponse<AdminUser>>(`/platform/companies/${id}/admins`, dto),
+
+  uploadLogo: (id: number, file: File) => {
+    const formData = new FormData();
+    formData.append('logo', file);
+    return api.post<ApiResponse<{ logoUrl: string }>>(`/platform/companies/${id}/logo`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 
   getPlatformDashboard: () =>
     api.get<ApiResponse<PlatformDashboard>>('/platform/dashboard'),

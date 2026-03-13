@@ -46,6 +46,7 @@ const typeLabels: Record<string, string> = {
   technical: 'Technical',
   management: 'Management',
   core_team: 'Core Team',
+  admin: 'Admin',
 };
 
 export default function EmployeesPage() {
@@ -253,7 +254,7 @@ export default function EmployeesPage() {
                 </TableRow>
               ))
               : (data ?? []).map((emp) => (
-                <TableRow key={emp.id}>
+                <TableRow key={`${(emp as any)._type === 'admin' ? 'admin' : 'emp'}-${emp.id}`}>
                   <TableCell className="font-mono text-xs">{emp.empCode}</TableCell>
                   <TableCell className="font-medium">{emp.empName}</TableCell>
                   <TableCell className="text-muted-foreground text-xs">{emp.email}</TableCell>

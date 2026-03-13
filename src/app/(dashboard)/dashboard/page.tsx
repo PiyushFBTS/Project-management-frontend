@@ -1,3 +1,5 @@
+/* eslint-disable @next/next/no-img-element */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 'use client';
 
@@ -287,13 +289,12 @@ function EmployeeDashboard() {
                 return (
                   <div
                     key={i}
-                    className={`flex flex-col items-center justify-center rounded-xl p-3 transition-all ${
-                      d.submitted
+                    className={`flex flex-col items-center justify-center rounded-xl p-3 transition-all ${d.submitted
                         ? 'bg-emerald-50 dark:bg-emerald-500/10 ring-1 ring-emerald-200 dark:ring-emerald-500/20'
                         : d.hours > 0
                           ? 'bg-amber-50 dark:bg-amber-500/10 ring-1 ring-amber-200 dark:ring-amber-500/20'
                           : 'bg-gray-50 dark:bg-gray-500/5 ring-1 ring-gray-200 dark:ring-gray-500/10'
-                    } ${isToday ? 'ring-2 ring-indigo-400 dark:ring-indigo-500' : ''}`}
+                      } ${isToday ? 'ring-2 ring-indigo-400 dark:ring-indigo-500' : ''}`}
                   >
                     <p className={`text-[10px] font-bold uppercase tracking-wider ${isToday ? 'text-indigo-600 dark:text-indigo-400' : 'text-muted-foreground'}`}>
                       {d.day}
@@ -306,9 +307,8 @@ function EmployeeDashboard() {
                     ) : (
                       <XCircle className="h-5 w-5 text-gray-300 dark:text-gray-600 mt-1.5" />
                     )}
-                    <p className={`text-xs font-semibold mt-1 ${
-                      d.submitted ? 'text-emerald-600 dark:text-emerald-400' : d.hours > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'
-                    }`}>
+                    <p className={`text-xs font-semibold mt-1 ${d.submitted ? 'text-emerald-600 dark:text-emerald-400' : d.hours > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'
+                      }`}>
                       {d.hours > 0 ? `${Number(d.hours).toFixed(1)}h` : '--'}
                     </p>
                   </div>
@@ -638,6 +638,7 @@ function PlatformDashboard() {
   });
 
   const companies = companiesRes?.data?.data ?? [];
+  const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
 
   return (
     <div className="space-y-6">
@@ -667,16 +668,25 @@ function PlatformDashboard() {
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {companies.map((c) => (
-            <Card key={c.id} className="cursor-pointer hover:ring-1 hover:ring-indigo-500/30 transition-all" onClick={() => selectCompany({ id: c.id, name: c.name, slug: c.slug })}>
+            <Card key={c.id} className="cursor-pointer hover:ring-1 hover:ring-indigo-500/30 transition-all" onClick={() => selectCompany({ id: c.id, name: c.name, slug: c.slug, logoUrl: c.logoUrl })}>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
-                  <div className="min-w-0">
-                    <p className="font-semibold text-sm truncate">{c.name}</p>
-                    <p className="text-xs text-muted-foreground">{c.slug}</p>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 overflow-hidden">
+                      {c.logoUrl ? (
+                        <img src={`${apiBase}${c.logoUrl}`} alt="" className="h-full w-full object-cover" />
+                      ) : (
+                        <FolderKanban className="h-5 w-5 text-indigo-500" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm truncate">{c.name}</p>
+                      <p className="text-xs text-muted-foreground">{c.slug}</p>
+                    </div>
                   </div>
                   <div className="text-right shrink-0 ml-3">
-                    <p className="text-lg font-bold text-indigo-500">{c.employeeCount}</p>
-                    <p className="text-[10px] text-muted-foreground">employees</p>
+                    <p className="text-lg font-bold text-indigo-500">{(c.adminCount ?? 0) + (c.employeeCount ?? 0)}</p>
+                    <p className="text-[10px] text-muted-foreground">members</p>
                   </div>
                 </div>
               </CardContent>

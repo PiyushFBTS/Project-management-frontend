@@ -34,6 +34,8 @@ export interface AdminUser {
   email: string;
   role: AdminRole;
   companyId: number | null;
+  companyLogoUrl?: string | null;
+  companyName?: string | null;
   isActive: boolean;
   createdAt: string;
 }
@@ -48,17 +50,70 @@ export interface Company {
   id: number;
   name: string;
   slug: string;
+  companyCode?: string;
   logoUrl?: string;
   address?: string;
+  countryId?: number;
+  stateId?: number;
+  cityId?: number;
+  postalCode?: string;
+  contactPersonName?: string;
   contactEmail?: string;
   contactPhone?: string;
+  gstNumber?: string;
+  panNumber?: string;
+  taxId?: string;
+  gstin?: string;
+  taxRegistrationNumber?: string;
+  gstEnabled: boolean;
+  vatEnabled: boolean;
+  baseCurrencyCode?: string;
   userLimit: number;
   licenseExpiryDate: string;
   isActive: boolean;
   subscriptionPlan: SubscriptionPlan;
   subscriptionStart?: string;
+  createdBy?: number;
+  updatedBy?: number;
   createdAt: string;
   updatedAt: string;
+}
+
+// ── Location & Currency ──────────────────────────────────────────────────
+
+export interface LookupCountry {
+  id: number;
+  name: string;
+  code: string;
+  phoneCode?: string;
+}
+
+export interface LookupState {
+  id: number;
+  name: string;
+  code?: string;
+  countryId: number;
+}
+
+export interface LookupCity {
+  id: number;
+  name: string;
+  stateId: number;
+}
+
+export interface LookupPostalCode {
+  id: number;
+  code: string;
+  areaName?: string;
+  cityId: number;
+}
+
+export interface LookupCurrency {
+  id: number;
+  code: string;
+  name: string;
+  symbol: string;
+  isActive: boolean;
 }
 
 // ── Projects ─────────────────────────────────────────────────────────────
@@ -236,9 +291,9 @@ export interface TopEmployee {
 
 // ── Notifications ─────────────────────────────────────────────────────────
 
-// ── Leave Reasons ────────────────────────────────────────────────────────
+// ── Leave Types ─────────────────────────────────────────────────────────
 
-export interface LeaveReason {
+export interface LeaveType {
   id: number;
   reasonCode: string;
   reasonName: string;
@@ -248,13 +303,13 @@ export interface LeaveReason {
   updatedAt: string;
 }
 
-export interface CreateLeaveReasonDto {
+export interface CreateLeaveTypeDto {
   reasonCode: string;
   reasonName: string;
   description?: string;
 }
 
-export type UpdateLeaveReasonDto = Partial<CreateLeaveReasonDto>;
+export type UpdateLeaveTypeDto = Partial<CreateLeaveTypeDto>;
 
 // ── Leave Requests ───────────────────────────────────────────────────────
 
@@ -271,7 +326,7 @@ export interface LeaveRequest {
   employeeId: number;
   employee?: Employee;
   leaveReasonId: number;
-  leaveReason?: LeaveReason;
+  leaveReason?: LeaveType;
   dateFrom: string;
   dateTo: string;
   totalDays: number;

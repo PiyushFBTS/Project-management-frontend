@@ -49,7 +49,7 @@ export const taskSheetsApi = {
 
   // ── Employee dropdown data ──
   getProjects: () =>
-    api.get<ApiResponse<Project[]>>('/employee/projects'),
+    api.get<ApiResponse<Project[]>>('/employee/projects/all-active'),
 
   getTaskTypes: () =>
     api.get<ApiResponse<TaskType[]>>('/employee/task-types'),

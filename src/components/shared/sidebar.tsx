@@ -63,7 +63,7 @@ const navItems: NavItem[] = [
     activeBg: 'bg-orange-500/20', hoverBg: 'hover:bg-orange-500/10',
     borderColor: 'border-l-orange-400', dotColor: 'bg-orange-400',
     children: [
-      { label: 'Leave Reasons',  href: '/leave-reasons',  dotColor: 'bg-rose-400' },
+      { label: 'Leave Types',  href: '/leave-types',  dotColor: 'bg-rose-400' },
       { label: 'Leave Requests', href: '/leave-requests', dotColor: 'bg-orange-400' },
     ],
   },
@@ -130,6 +130,7 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr }: { onNavigate?: 
   const pathname = usePathname();
   const router = useRouter();
   const { selectedCompany, clearCompany, isSuperAdmin } = useCompany();
+  const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     Reports: pathname.startsWith('/reports'),
     'Leave Management': pathname.startsWith('/leave-r'),
@@ -156,7 +157,11 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr }: { onNavigate?: 
       {/* Super admin company context banner */}
       {isSuperAdmin && selectedCompany && !collapsed && (
         <div className="mx-1 mb-3 flex items-center gap-2 rounded-lg bg-indigo-500/10 px-2.5 py-2 ring-1 ring-indigo-500/20">
-          <Building2 className="h-3.5 w-3.5 shrink-0 text-indigo-400" />
+          {selectedCompany.logoUrl ? (
+            <img src={`${apiBase}${selectedCompany.logoUrl}`} alt="" className="h-5 w-5 shrink-0 rounded-sm object-cover" />
+          ) : (
+            <Building2 className="h-3.5 w-3.5 shrink-0 text-indigo-400" />
+          )}
           <span className="flex-1 truncate text-xs font-medium text-indigo-300">{selectedCompany.name}</span>
           <button
             onClick={() => { clearCompany(); router.push('/dashboard'); }}

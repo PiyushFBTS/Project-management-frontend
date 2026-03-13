@@ -25,6 +25,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -189,6 +190,8 @@ export default function FullTicketsPage() {
       return fn({ limit: 100, isActive: true }).then((r) => r.data.data);
     },
   });
+  console.log("companyEmployees",companyEmployees);
+  
 
   const reassignMut = useMutation({
     mutationFn: ({ taskId, assigneeId }: { taskId: number; assigneeId: number }) =>
@@ -208,7 +211,7 @@ export default function FullTicketsPage() {
     setDetailTask(t);
     setDetailOpen(true);
     setCommentText('');
-    setReassignTo('');
+    setReassignTo(t.assigneeId ? String(t.assigneeId) : '');
   };
 
   return (
@@ -553,27 +556,26 @@ export default function FullTicketsPage() {
                 </div>
 
                 {/* Reassign */}
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                <div className={`flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 ${taskDetail.status === 'closed' ? 'opacity-50 pointer-events-none' : ''}`}>
                   <span className="text-sm font-medium flex items-center gap-1.5">
                     <UserRoundPlus className="h-3.5 w-3.5" />
                     Reassign To:
+                    {taskDetail.status === 'closed' && <span className="text-xs text-muted-foreground ml-1">(Closed)</span>}
                   </span>
-                  <Select value={reassignTo || undefined} onValueChange={setReassignTo}>
-                    <SelectTrigger className="w-full sm:w-52">
-                      <SelectValue placeholder="Select employee..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(companyEmployees ?? []).map((emp) => (
-                        <SelectItem key={emp.id} value={String(emp.id)}>
-                          {emp.empName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={reassignTo}
+                    onValueChange={setReassignTo}
+                    options={(companyEmployees ?? [])
+                      .filter((emp: any) => emp._type !== 'admin')
+                      .map((emp) => ({ value: String(emp.id), label: emp.empName }))}
+                    placeholder="Select employee..."
+                    disabled={taskDetail.status === 'closed'}
+                    className="w-full sm:w-52"
+                  />
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={!reassignTo || reassignMut.isPending}
+                    disabled={!reassignTo || reassignMut.isPending || taskDetail.status === 'closed'}
                     onClick={() => reassignMut.mutate({ taskId: taskDetail.id, assigneeId: Number(reassignTo) })}
                   >
                     {reassignMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Reassign'}

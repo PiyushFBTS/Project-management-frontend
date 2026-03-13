@@ -1,26 +1,28 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
-  Plus, Pencil, Trash2, Loader2, Shield, LogIn, RefreshCw,
-  Building2, Users, Key, ToggleLeft, Mail, Search as SearchIcon,
+  Plus, Pencil, Loader2, Shield, LogIn, Upload, X,
+  Building2, Key, ToggleLeft, Mail, Search as SearchIcon,
 } from 'lucide-react';
 import { companiesApi, CompanyWithCounts, CreateCompanyDto, UpdateLicenseDto, CreateCompanyAdminDto } from '@/lib/api/companies';
+import { lookupApi } from '@/lib/api/lookup';
 import { smtpApi } from '@/lib/api/smtp';
 import { SmtpConfigForm } from '@/components/shared/smtp-config-form';
 import { useCompany } from '@/providers/company-provider';
 import { useAuth } from '@/providers/auth-provider';
-import { AdminUser } from '@/types';
+import { AdminUser, LookupCountry, LookupState, LookupCity, LookupCurrency, LookupPostalCode } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -45,6 +47,14 @@ const planColors: Record<string, string> = {
   enterprise: 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30',
 };
 
+const defaultForm = {
+  name: '', slug: '', companyCode: '', contactPersonName: '', contactEmail: '', contactPhone: '', address: '',
+  subscriptionPlan: 'trial', userLimit: '50', licenseExpiryDate: '',
+  countryId: '', stateId: '', cityId: '', postalCode: '',
+  gstNumber: '', panNumber: '', taxId: '', gstin: '', taxRegistrationNumber: '',
+  gstEnabled: false, vatEnabled: false, baseCurrencyCode: '',
+};
+
 export default function CompaniesPage() {
   const { user } = useAuth();
   const { selectCompany } = useCompany();
@@ -64,10 +74,10 @@ export default function CompaniesPage() {
   const [smtpCompany, setSmtpCompany] = useState<CompanyWithCounts | null>(null);
 
   // Form state
-  const [form, setForm] = useState({
-    name: '', slug: '', contactEmail: '', contactPhone: '', address: '',
-    subscriptionPlan: 'trial', userLimit: '50', licenseExpiryDate: '',
-  });
+  const [form, setForm] = useState({ ...defaultForm });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   // License form state
   const [licenseForm, setLicenseForm] = useState({
@@ -76,6 +86,54 @@ export default function CompaniesPage() {
 
   // Admin form state
   const [adminForm, setAdminForm] = useState({ name: '', email: '', password: '' });
+
+  // Lookup data
+  const [countries, setCountries] = useState<LookupCountry[]>([]);
+  const [states, setStates] = useState<LookupState[]>([]);
+  const [cities, setCities] = useState<LookupCity[]>([]);
+  const [currencies, setCurrencies] = useState<LookupCurrency[]>([]);
+  const [postalCodes, setPostalCodes] = useState<LookupPostalCode[]>([]);
+
+  // Extract array from axios response — handles both raw array and { data: [...] } wrapper
+  const extractArray = (res: any): any[] => {
+    const d = res?.data;
+    return Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : [];
+  };
+
+  // Load countries and currencies once when dialog opens
+  useEffect(() => {
+    if (formOpen) {
+      lookupApi.getCountries().then((r) => setCountries(extractArray(r))).catch(() => {});
+      lookupApi.getCurrencies().then((r) => setCurrencies(extractArray(r))).catch(() => {});
+    }
+  }, [formOpen]);
+
+  // Load states when country changes
+  useEffect(() => {
+    if (form.countryId) {
+      lookupApi.getStates(Number(form.countryId)).then((r) => setStates(extractArray(r))).catch(() => {});
+    } else {
+      setStates([]);
+    }
+  }, [form.countryId]);
+
+  // Load cities when state changes
+  useEffect(() => {
+    if (form.stateId) {
+      lookupApi.getCities(Number(form.stateId)).then((r) => setCities(extractArray(r))).catch(() => {});
+    } else {
+      setCities([]);
+    }
+  }, [form.stateId]);
+
+  // Load postal codes when city changes
+  useEffect(() => {
+    if (form.cityId) {
+      lookupApi.getPostalCodes(Number(form.cityId)).then((r) => setPostalCodes(extractArray(r))).catch(() => {});
+    } else {
+      setPostalCodes([]);
+    }
+  }, [form.cityId]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['platform-companies', search],
@@ -89,18 +147,37 @@ export default function CompaniesPage() {
     enabled: !!adminsCompany,
   });
 
-  const companies = data?.data?.data ?? [];
+  const raw = data?.data;
+  const companies: CompanyWithCounts[] = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
+
+  // Upload logo helper
+  async function uploadLogoIfNeeded(companyId: number) {
+    if (logoFile) {
+      try {
+        await companiesApi.uploadLogo(companyId, logoFile);
+      } catch {
+        toast.error('Company saved, but logo upload failed');
+      }
+    }
+  }
 
   // CRUD mutations
   const createMutation = useMutation({
     mutationFn: (dto: CreateCompanyDto) => companiesApi.create(dto),
-    onSuccess: () => { toast.success('Company created'); closeForm(); qc.invalidateQueries({ queryKey: ['platform-companies'] }); },
+    onSuccess: async (res) => {
+      const created = res?.data?.data ?? res?.data;
+      if (created?.id) await uploadLogoIfNeeded(created.id);
+      toast.success('Company created'); closeForm(); qc.invalidateQueries({ queryKey: ['platform-companies'] });
+    },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to create company'),
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, dto }: { id: number; dto: Partial<CreateCompanyDto> }) => companiesApi.update(id, dto),
-    onSuccess: () => { toast.success('Company updated'); closeForm(); qc.invalidateQueries({ queryKey: ['platform-companies'] }); },
+    onSuccess: async () => {
+      if (editing?.id) await uploadLogoIfNeeded(editing.id);
+      toast.success('Company updated'); closeForm(); qc.invalidateQueries({ queryKey: ['platform-companies'] });
+    },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to update company'),
   });
 
@@ -125,7 +202,12 @@ export default function CompaniesPage() {
   function closeForm() { setFormOpen(false); setEditing(null); resetForm(); }
 
   function resetForm() {
-    setForm({ name: '', slug: '', contactEmail: '', contactPhone: '', address: '', subscriptionPlan: 'trial', userLimit: '50', licenseExpiryDate: '' });
+    setForm({ ...defaultForm });
+    setStates([]);
+    setCities([]);
+    setPostalCodes([]);
+    setLogoFile(null);
+    setLogoPreview(null);
   }
 
   function openCreate() { resetForm(); setEditing(null); setFormOpen(true); }
@@ -134,10 +216,24 @@ export default function CompaniesPage() {
     setEditing(c);
     setForm({
       name: c.name, slug: c.slug,
+      companyCode: c.companyCode ?? '',
+      contactPersonName: c.contactPersonName ?? '',
       contactEmail: c.contactEmail ?? '', contactPhone: c.contactPhone ?? '',
       address: c.address ?? '', subscriptionPlan: c.subscriptionPlan,
       userLimit: String(c.userLimit), licenseExpiryDate: c.licenseExpiryDate,
+      countryId: c.countryId ? String(c.countryId) : '',
+      stateId: c.stateId ? String(c.stateId) : '',
+      cityId: c.cityId ? String(c.cityId) : '',
+      postalCode: c.postalCode ?? '',
+      gstNumber: c.gstNumber ?? '', panNumber: c.panNumber ?? '',
+      taxId: c.taxId ?? '', gstin: c.gstin ?? '',
+      taxRegistrationNumber: c.taxRegistrationNumber ?? '',
+      gstEnabled: c.gstEnabled ?? false, vatEnabled: c.vatEnabled ?? false,
+      baseCurrencyCode: c.baseCurrencyCode ?? '',
     });
+    setLogoFile(null);
+    const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
+    setLogoPreview(c.logoUrl ? `${apiBase}${c.logoUrl}` : null);
     setFormOpen(true);
   }
 
@@ -168,9 +264,23 @@ export default function CompaniesPage() {
     }
     const dto: CreateCompanyDto = {
       name: form.name, slug: form.slug,
+      companyCode: form.companyCode || undefined,
+      contactPersonName: form.contactPersonName || undefined,
       contactEmail: form.contactEmail || undefined,
       contactPhone: form.contactPhone || undefined,
       address: form.address || undefined,
+      countryId: form.countryId ? Number(form.countryId) : undefined,
+      stateId: form.stateId ? Number(form.stateId) : undefined,
+      cityId: form.cityId ? Number(form.cityId) : undefined,
+      postalCode: form.postalCode || undefined,
+      gstNumber: form.gstNumber || undefined,
+      panNumber: form.panNumber || undefined,
+      taxId: form.taxId || undefined,
+      gstin: form.gstin || undefined,
+      taxRegistrationNumber: form.taxRegistrationNumber || undefined,
+      gstEnabled: form.gstEnabled,
+      vatEnabled: form.vatEnabled,
+      baseCurrencyCode: form.baseCurrencyCode || undefined,
       subscriptionPlan: form.subscriptionPlan,
       userLimit: parseInt(form.userLimit) || 50,
       licenseExpiryDate: form.licenseExpiryDate,
@@ -201,7 +311,7 @@ export default function CompaniesPage() {
   }
 
   function handleEnterCompany(c: CompanyWithCounts) {
-    selectCompany({ id: c.id, name: c.name, slug: c.slug });
+    selectCompany({ id: c.id, name: c.name, slug: c.slug, logoUrl: c.logoUrl });
     router.push('/dashboard');
   }
 
@@ -213,6 +323,15 @@ export default function CompaniesPage() {
   const isLicenseSaving = licenseMutation.isPending;
   const isAdminSaving = createAdminMutation.isPending;
   const admins = (adminsData?.data as any)?.data ?? adminsData?.data ?? [];
+
+  const countryOptions = countries.map((c) => ({ value: String(c.id), label: `${c.name} (${c.code})` }));
+  const stateOptions = states.map((s) => ({ value: String(s.id), label: s.name }));
+  const cityOptions = cities.map((c) => ({ value: String(c.id), label: c.name }));
+  const postalCodeOptions = postalCodes.map((p) => ({
+    value: p.code,
+    label: p.areaName ? `${p.code} — ${p.areaName}` : p.code,
+  }));
+  const currencyOptions = currencies.map((c) => ({ value: c.code, label: `${c.code} - ${c.name} (${c.symbol})` }));
 
   return (
     <div className="space-y-4">
@@ -257,10 +376,12 @@ export default function CompaniesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Company</TableHead>
+                {/* <TableHead className="w-20">Code</TableHead> */}
                 <TableHead className="w-28">Plan</TableHead>
                 <TableHead className="w-20">Status</TableHead>
                 <TableHead className="w-20 text-center">Admins</TableHead>
                 <TableHead className="w-24 text-center">Employees</TableHead>
+                {/* <TableHead className="w-20">Currency</TableHead> */}
                 <TableHead className="w-28">License</TableHead>
                 <TableHead className="w-60">Actions</TableHead>
               </TableRow>
@@ -268,7 +389,7 @@ export default function CompaniesPage() {
             <TableBody>
               {companies.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-32">
+                  <TableCell colSpan={9} className="h-32">
                     <div className="flex flex-col items-center justify-center text-center">
                       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-violet-500/10 mb-3">
                         <Building2 className="h-6 w-6 text-violet-500" />
@@ -289,6 +410,9 @@ export default function CompaniesPage() {
                           <p className="text-xs text-muted-foreground">{c.slug}</p>
                         </div>
                       </TableCell>
+                      {/* <TableCell>
+                        <span className="text-xs font-mono text-muted-foreground">{c.companyCode || '—'}</span>
+                      </TableCell> */}
                       <TableCell>
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${planColors[c.subscriptionPlan] ?? planColors.trial}`}>
                           {planLabels[c.subscriptionPlan] ?? c.subscriptionPlan}
@@ -301,6 +425,9 @@ export default function CompaniesPage() {
                       </TableCell>
                       <TableCell className="text-center text-sm">{c.adminCount}</TableCell>
                       <TableCell className="text-center text-sm">{c.employeeCount} / {c.userLimit}</TableCell>
+                      {/* <TableCell>
+                        <span className="text-xs font-mono">{c.baseCurrencyCode || '—'}</span>
+                      </TableCell> */}
                       <TableCell>
                         <span className={`text-xs ${isExpired ? 'text-red-500 font-semibold' : 'text-muted-foreground'}`}>
                           {c.licenseExpiryDate}
@@ -319,9 +446,6 @@ export default function CompaniesPage() {
                           </Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" title="Admins" onClick={() => openAdmins(c)}>
                             <Shield className="h-4 w-4 text-emerald-500" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" title="SMTP" onClick={() => openSmtp(c)}>
-                            <Mail className="h-4 w-4 text-sky-500" />
                           </Button>
                           <Button
                             variant="ghost" size="icon" className="h-8 w-8" title="Toggle active"
@@ -343,57 +467,221 @@ export default function CompaniesPage() {
 
       {/* Create / Edit Company Dialog */}
       <Dialog open={formOpen} onOpenChange={(v) => { if (!v) closeForm(); }}>
-        <DialogContent className="max-w-lg overflow-hidden">
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-violet-500 via-purple-500 to-indigo-500" />
-          <DialogHeader>
+          <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <Building2 className="h-4 w-4 text-violet-500" />
               {editing ? 'Edit Company' : 'Create Company'}
             </DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-3">
+
+          {/* Basic Info */}
+          <div className="space-y-4 overflow-y-auto flex-1 pr-1 scrollbar-hide">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Basic Information</p>
+
+            {/* Logo Upload */}
+            <div className="flex items-center gap-4">
+              <div
+                className="relative h-16 w-16 shrink-0 rounded-xl border-2 border-dashed border-muted-foreground/25 flex items-center justify-center overflow-hidden cursor-pointer hover:border-violet-400 transition-colors bg-muted/30"
+                onClick={() => logoInputRef.current?.click()}
+              >
+                {logoPreview ? (
+                  <img src={logoPreview} alt="Logo" className="h-full w-full object-cover" />
+                ) : (
+                  <Upload className="h-5 w-5 text-muted-foreground/50" />
+                )}
+                <input
+                  ref={logoInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      if (file.size > 2 * 1024 * 1024) { toast.error('Logo must be under 2 MB'); return; }
+                      setLogoFile(file);
+                      setLogoPreview(URL.createObjectURL(file));
+                    }
+                  }}
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Company Logo</p>
+                <p className="text-xs text-muted-foreground">JPG, PNG or SVG. Max 2 MB.</p>
+                {logoPreview && (
+                  <button
+                    type="button"
+                    className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
+                    onClick={() => { setLogoFile(null); setLogoPreview(null); if (logoInputRef.current) logoInputRef.current.value = ''; }}
+                  >
+                    <X className="h-3 w-3" /> Remove
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               <Label>Name *</Label>
               <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="Acme Corp" />
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Slug *</Label>
+                <Input value={form.slug} onChange={(e) => setForm((p) => ({ ...p, slug: e.target.value }))} placeholder="acme" disabled={!!editing} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Company Code</Label>
+                <Input value={form.companyCode} onChange={(e) => setForm((p) => ({ ...p, companyCode: e.target.value }))} placeholder="ACME-001" />
+              </div>
+            </div>
+
             <div className="space-y-1.5">
-              <Label>Slug *</Label>
-              <Input value={form.slug} onChange={(e) => setForm((p) => ({ ...p, slug: e.target.value }))} placeholder="acme" disabled={!!editing} />
+              <Label>Contact Person Name</Label>
+              <Input value={form.contactPersonName} onChange={(e) => setForm((p) => ({ ...p, contactPersonName: e.target.value }))} placeholder="John Doe" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Contact Email</Label>
+                <Input value={form.contactEmail} onChange={(e) => setForm((p) => ({ ...p, contactEmail: e.target.value }))} placeholder="admin@acme.com" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Contact Phone</Label>
+                <Input value={form.contactPhone} onChange={(e) => setForm((p) => ({ ...p, contactPhone: e.target.value }))} placeholder="+91..." />
+              </div>
+            </div>
+
+            {/* Location */}
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-2">Location</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Country</Label>
+                <SearchableSelect
+                  options={countryOptions}
+                  value={form.countryId}
+                  onValueChange={(v) => setForm((p) => ({ ...p, countryId: v, stateId: '', cityId: '', postalCode: '' }))}
+                  placeholder="Select country"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>State</Label>
+                <SearchableSelect
+                  options={stateOptions}
+                  value={form.stateId}
+                  onValueChange={(v) => setForm((p) => ({ ...p, stateId: v, cityId: '', postalCode: '' }))}
+                  placeholder="Select state"
+                  disabled={!form.countryId}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>City</Label>
+                <SearchableSelect
+                  options={cityOptions}
+                  value={form.cityId}
+                  onValueChange={(v) => setForm((p) => ({ ...p, cityId: v, postalCode: '' }))}
+                  placeholder="Select city"
+                  disabled={!form.stateId}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Pin / Postal Code</Label>
+                {postalCodes.length > 0 ? (
+                  <SearchableSelect
+                    options={postalCodeOptions}
+                    value={form.postalCode}
+                    onValueChange={(v) => setForm((p) => ({ ...p, postalCode: v }))}
+                    placeholder="Search pin code..."
+                    disabled={!form.cityId}
+                  />
+                ) : (
+                  <Input
+                    value={form.postalCode}
+                    onChange={(e) => setForm((p) => ({ ...p, postalCode: e.target.value }))}
+                    placeholder={form.cityId ? 'No pin codes found — type manually' : '400001'}
+                  />
+                )}
+              </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Contact Email</Label>
-              <Input value={form.contactEmail} onChange={(e) => setForm((p) => ({ ...p, contactEmail: e.target.value }))} placeholder="admin@acme.com" />
+              <Label>Address</Label>
+              <Textarea value={form.address} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} rows={2} placeholder="Street, Building, etc." />
+            </div>
+
+            {/* Tax & Registration */}
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-2">Tax & Registration</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>PAN Number</Label>
+                <Input value={form.panNumber} onChange={(e) => setForm((p) => ({ ...p, panNumber: e.target.value.toUpperCase() }))} placeholder="ABCDE1234F" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>GST Number</Label>
+                <Input value={form.gstNumber} onChange={(e) => setForm((p) => ({ ...p, gstNumber: e.target.value.toUpperCase() }))} placeholder="22AAAAA0000A1Z5" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>GSTIN</Label>
+                <Input value={form.gstin} onChange={(e) => setForm((p) => ({ ...p, gstin: e.target.value.toUpperCase() }))} placeholder="GSTIN" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Tax ID</Label>
+                <Input value={form.taxId} onChange={(e) => setForm((p) => ({ ...p, taxId: e.target.value }))} placeholder="Tax ID" />
+              </div>
             </div>
             <div className="space-y-1.5">
-              <Label>Contact Phone</Label>
-              <Input value={form.contactPhone} onChange={(e) => setForm((p) => ({ ...p, contactPhone: e.target.value }))} placeholder="+91..." />
+              <Label>Tax Reg. Number</Label>
+              <Input value={form.taxRegistrationNumber} onChange={(e) => setForm((p) => ({ ...p, taxRegistrationNumber: e.target.value }))} placeholder="TRN" />
             </div>
-            <div className="space-y-1.5">
-              <Label>Plan</Label>
-              <Select value={form.subscriptionPlan} onValueChange={(v) => setForm((p) => ({ ...p, subscriptionPlan: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="trial">Trial</SelectItem>
-                  <SelectItem value="basic">Basic</SelectItem>
-                  <SelectItem value="professional">Professional</SelectItem>
-                  <SelectItem value="enterprise">Enterprise</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="flex items-center gap-6">
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input type="checkbox" checked={form.gstEnabled} onChange={(e) => setForm((p) => ({ ...p, gstEnabled: e.target.checked }))} className="rounded" />
+                GST Enabled
+              </label>
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input type="checkbox" checked={form.vatEnabled} onChange={(e) => setForm((p) => ({ ...p, vatEnabled: e.target.checked }))} className="rounded" />
+                VAT Enabled
+              </label>
+            </div>
+
+            {/* Currency & License */}
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-2">Currency & License</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Base Currency</Label>
+                <SearchableSelect
+                  options={currencyOptions}
+                  value={form.baseCurrencyCode}
+                  onValueChange={(v) => setForm((p) => ({ ...p, baseCurrencyCode: v }))}
+                  placeholder="Select currency"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Plan</Label>
+                <Select value={form.subscriptionPlan} onValueChange={(v) => setForm((p) => ({ ...p, subscriptionPlan: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="trial">Trial</SelectItem>
+                    <SelectItem value="basic">Basic</SelectItem>
+                    <SelectItem value="professional">Professional</SelectItem>
+                    <SelectItem value="enterprise">Enterprise</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label>User Limit</Label>
               <Input type="number" value={form.userLimit} onChange={(e) => setForm((p) => ({ ...p, userLimit: e.target.value }))} />
             </div>
-            <div className="space-y-1.5 col-span-2">
+            <div className="space-y-1.5">
               <Label>License Expiry *</Label>
               <Input type="date" value={form.licenseExpiryDate} onChange={(e) => setForm((p) => ({ ...p, licenseExpiryDate: e.target.value }))} />
             </div>
-            <div className="space-y-1.5 col-span-2">
-              <Label>Address</Label>
-              <Textarea value={form.address} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} rows={2} />
-            </div>
           </div>
-          <DialogFooter>
+
+          <DialogFooter className="shrink-0 border-t pt-4">
             <Button variant="outline" size="sm" onClick={closeForm}>Cancel</Button>
             <Button size="sm" className="bg-linear-to-r from-violet-500 to-purple-600 text-white hover:opacity-90 shadow-sm shadow-violet-500/25 border-0" disabled={isSaving} onClick={handleSaveCompany}>
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : editing ? 'Update' : 'Create'}

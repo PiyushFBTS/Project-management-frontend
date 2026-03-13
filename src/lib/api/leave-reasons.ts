@@ -1,29 +1,29 @@
 import { api } from './axios-instance';
-import { ApiResponse, LeaveReason, CreateLeaveReasonDto, UpdateLeaveReasonDto, PaginationParams } from '@/types';
+import { ApiResponse, LeaveType, CreateLeaveTypeDto, UpdateLeaveTypeDto, PaginationParams } from '@/types';
 
-export const leaveReasonsApi = {
+export const leaveTypesApi = {
   getAll: (params?: PaginationParams & { search?: string; isActive?: boolean }) =>
-    api.get<ApiResponse<LeaveReason[]>>('/leave-reasons', { params }),
+    api.get<ApiResponse<LeaveType[]>>('/leave-types', { params }),
 
-  getOne: (id: number) => api.get<ApiResponse<LeaveReason>>(`/leave-reasons/${id}`),
+  getOne: (id: number) => api.get<ApiResponse<LeaveType>>(`/leave-types/${id}`),
 
-  create: (dto: CreateLeaveReasonDto) => api.post<ApiResponse<LeaveReason>>('/leave-reasons', dto),
+  create: (dto: CreateLeaveTypeDto) => api.post<ApiResponse<LeaveType>>('/leave-types', dto),
 
-  update: (id: number, dto: UpdateLeaveReasonDto) =>
-    api.patch<ApiResponse<LeaveReason>>(`/leave-reasons/${id}`, dto),
+  update: (id: number, dto: UpdateLeaveTypeDto) =>
+    api.patch<ApiResponse<LeaveType>>(`/leave-types/${id}`, dto),
 
-  remove: (id: number) => api.delete<ApiResponse<null>>(`/leave-reasons/${id}`),
+  remove: (id: number) => api.delete<ApiResponse<null>>(`/leave-types/${id}`),
 
   // ── Employee endpoints ──
   employeeGetAll: (params?: PaginationParams & { search?: string; isActive?: boolean }) =>
-    api.get<ApiResponse<LeaveReason[]>>('/employee/leave-reasons', { params }),
+    api.get<ApiResponse<LeaveType[]>>('/employee/leave-types', { params }),
 
-  employeeGetOne: (id: number) => api.get<ApiResponse<LeaveReason>>(`/employee/leave-reasons/${id}`),
+  employeeGetOne: (id: number) => api.get<ApiResponse<LeaveType>>(`/employee/leave-types/${id}`),
 
-  employeeCreate: (dto: CreateLeaveReasonDto) => api.post<ApiResponse<LeaveReason>>('/employee/leave-reasons', dto),
+  employeeCreate: (dto: CreateLeaveTypeDto) => api.post<ApiResponse<LeaveType>>('/employee/leave-types', dto),
 
-  employeeUpdate: (id: number, dto: UpdateLeaveReasonDto) =>
-    api.patch<ApiResponse<LeaveReason>>(`/employee/leave-reasons/${id}`, dto),
+  employeeUpdate: (id: number, dto: UpdateLeaveTypeDto) =>
+    api.patch<ApiResponse<LeaveType>>(`/employee/leave-types/${id}`, dto),
 
-  employeeRemove: (id: number) => api.delete<ApiResponse<null>>(`/employee/leave-reasons/${id}`),
+  employeeRemove: (id: number) => api.delete<ApiResponse<null>>(`/employee/leave-types/${id}`),
 };

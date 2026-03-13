@@ -159,7 +159,8 @@ export default function ProjectPlanningPage() {
     queryFn: async () => {
       const r = await employeesApi.getAll({ isActive: true, limit: 100 });
       const d: any = r.data?.data;
-      return (Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : []) as Employee[];
+      const list = (Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : []) as any[];
+      return list.filter((e) => e._type !== 'admin') as Employee[];
     },
   });
 
