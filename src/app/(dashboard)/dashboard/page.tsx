@@ -498,7 +498,7 @@ function AdminDashboard() {
       )}
 
       {/* Charts row 1 */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {/* <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold text-muted-foreground">
@@ -542,7 +542,7 @@ function AdminDashboard() {
             </ResponsiveContainer>
           </CardContent>
         </Card>
-      </div>
+      </div> */}
 
       {/* Charts row 2 */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">

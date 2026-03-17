@@ -1,13 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Loader2, ClipboardList, FolderKanban, Search as SearchIcon } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, ClipboardList, FolderKanban, Search as SearchIcon, CheckCircle2 } from 'lucide-react';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { format } from 'date-fns';
 import { useRouter } from 'next/navigation';
 import { projectsApi } from '@/lib/api/projects';
@@ -56,6 +57,14 @@ export default function ProjectsPage() {
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
+  const [createStatus, setCreateStatus] = useState<'idle' | 'loading' | 'success'>('idle');
+
+  // Auto-close success dialog after 3 s
+  useEffect(() => {
+    if (createStatus !== 'success') return;
+    const t = setTimeout(() => setCreateStatus('idle'), 3000);
+    return () => clearTimeout(t);
+  }, [createStatus]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['projects', search, isEmployee],
@@ -69,14 +78,17 @@ export default function ProjectsPage() {
 
   const createMutation = useMutation({
     mutationFn: (dto: CreateProjectDto) => projectsApi.create(dto),
-    onMutate: () => ({ id: toast.loading('Creating project…') }),
-    onSuccess: (res, _, ctx) => {
+    onMutate: () => setCreateStatus('loading'),
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['projects'] });
-      toast.success(`"${res.data.data.projectName}" created`, { id: ctx?.id });
       setOpen(false);
       form.reset();
+      setCreateStatus('success');
     },
-    onError: (e: any, _, ctx) => toast.error(e?.response?.data?.message ?? 'Failed to create project', { id: ctx?.id }),
+    onError: (e: any) => {
+      setCreateStatus('idle');
+      toast.error(e?.response?.data?.message ?? 'Failed to create project');
+    },
   });
 
   const updateMutation = useMutation({
@@ -235,6 +247,51 @@ export default function ProjectsPage() {
           </TableBody>
         </Table>
       </div>
+
+      {/* Create status dialog — Loading / Success */}
+      <Dialog open={createStatus !== 'idle'} onOpenChange={(o) => { if (!o && createStatus === 'success') setCreateStatus('idle'); }}>
+        <DialogContent className="sm:max-w-sm overflow-hidden" onPointerDownOutside={(e) => { if (createStatus === 'loading') e.preventDefault(); }}>
+          <VisuallyHidden><DialogTitle>{createStatus === 'loading' ? 'Creating Project' : 'Project Created'}</DialogTitle></VisuallyHidden>
+
+          {/* Top accent bar */}
+          {createStatus === 'loading' ? (
+            <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-indigo-400 to-violet-500" />
+          ) : (
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-muted overflow-hidden rounded-t-[inherit]">
+              <div
+                key="progress"
+                className="h-full bg-linear-to-r from-emerald-400 to-teal-500 rounded-r"
+                style={{ animation: 'grow-width 3s linear forwards' }}
+              />
+              <style>{`@keyframes grow-width { from { width: 0% } to { width: 100% } }`}</style>
+            </div>
+          )}
+
+          <div className="flex flex-col items-center gap-4 py-6 text-center">
+            {createStatus === 'loading' ? (
+              <>
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-indigo-500/10">
+                  <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+                </div>
+                <div>
+                  <p className="text-base font-semibold">Creating Project…</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Please wait while your project is being created.</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10">
+                  <CheckCircle2 className="h-9 w-9 text-emerald-500" />
+                </div>
+                <div>
+                  <p className="text-base font-semibold text-emerald-600 dark:text-emerald-400">Project Created!</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Closing automatically…</p>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg overflow-hidden">

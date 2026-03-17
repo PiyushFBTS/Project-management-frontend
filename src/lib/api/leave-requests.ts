@@ -1,5 +1,5 @@
 import { api } from './axios-instance';
-import { ApiResponse, LeaveRequest, LeaveReason, PaginationParams, LeaveRequestStatus } from '@/types';
+import { ApiResponse, LeaveRequest, LeaveType, PaginationParams, LeaveRequestStatus } from '@/types';
 
 export const leaveRequestsApi = {
   // Admin endpoints
@@ -45,7 +45,7 @@ export const leaveRequestsApi = {
     api.patch<ApiResponse<LeaveRequest>>(`/employee/leave-requests/${id}/reject`, { remarks }),
 
   getLeaveReasons: () =>
-    api.get<ApiResponse<LeaveReason[]>>('/employee/leave-requests/reasons'),
+    api.get<ApiResponse<LeaveType[]>>('/employee/leave-requests/reasons'),
 
   getColleagues: () =>
     api.get<ApiResponse<{ id: number; empName: string; empCode: string }[]>>('/employee/leave-requests/colleagues'),

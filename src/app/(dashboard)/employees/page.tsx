@@ -30,10 +30,9 @@ const empSchema = z.object({
   empCode: z.string().optional(),
   empName: z.string().min(1, 'Required'),
   email: z.string().email('Invalid email'),
-  phone: z.string().optional(),
+  mobileNumber: z.string().max(20, 'Max 20 characters').optional(),
   password: z.string().optional(),
   consultantType: z.enum(['project_manager', 'functional', 'technical', 'management', 'core_team']),
-  joinDate: z.string().optional(),
   reportsToId: z.string().optional(),
   isHr: z.boolean().optional(),
 });
@@ -61,6 +60,7 @@ export default function EmployeesPage() {
   const [editing, setEditing] = useState<Employee | null>(null);
   const [assignEmp, setAssignEmp] = useState<Employee | null>(null);
   const [assignProjectId, setAssignProjectId] = useState<string>('none');
+  const [formError, setFormError] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['employees', search, isEmployee],
@@ -97,21 +97,23 @@ export default function EmployeesPage() {
         empCode: values.empCode!,
         empName: values.empName,
         email: values.email,
-        phone: values.phone,
+        mobileNumber: values.mobileNumber,
         password: values.password!,
         consultantType: values.consultantType,
-        joinDate: values.joinDate!,
         reportsToId: values.reportsToId && values.reportsToId !== 'none' ? Number(values.reportsToId) : undefined,
         isHr: values.isHr,
       }),
-    onMutate: () => ({ id: toast.loading('Creating employee…') }),
-    onSuccess: (res, _, ctx) => {
+    onMutate: () => setFormError(null),
+    onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['employees'] });
-      toast.success(`"${res.data.data.empName}" added`, { id: ctx?.id });
+      toast.success(`"${res.data.data.empName}" added`);
       setOpen(false);
       reset();
     },
-    onError: (e: any, _, ctx) => toast.error(e?.response?.data?.message ?? 'Failed to create employee', { id: ctx?.id }),
+    onError: (e: any) => {
+      const msg = e?.response?.data?.message;
+      setFormError(Array.isArray(msg) ? msg.join('\n') : (msg ?? 'Failed to create employee'));
+    },
   });
 
   const updateMutation = useMutation({
@@ -119,19 +121,22 @@ export default function EmployeesPage() {
       employeesApi.update(id, {
         empName: values.empName,
         email: values.email,
-        phone: values.phone,
+        mobileNumber: values.mobileNumber,
         consultantType: values.consultantType,
         reportsToId: values.reportsToId && values.reportsToId !== 'none' ? Number(values.reportsToId) : null,
         isHr: values.isHr,
       }),
-    onMutate: () => ({ id: toast.loading('Updating employee…') }),
-    onSuccess: (res, _, ctx) => {
+    onMutate: () => setFormError(null),
+    onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['employees'] });
-      toast.success(`"${res.data.data.empName}" updated`, { id: ctx?.id });
+      toast.success(`"${res.data.data.empName}" updated`);
       setOpen(false);
       setEditing(null);
     },
-    onError: (e: any, _, ctx) => toast.error(e?.response?.data?.message ?? 'Failed to update employee', { id: ctx?.id }),
+    onError: (e: any) => {
+      const msg = e?.response?.data?.message;
+      setFormError(Array.isArray(msg) ? msg.join('\n') : (msg ?? 'Failed to update employee'));
+    },
   });
 
   const deleteMutation = useMutation({
@@ -161,16 +166,18 @@ export default function EmployeesPage() {
 
   const openCreate = () => {
     setEditing(null);
-    reset({ consultantType: 'functional', joinDate: new Date().toISOString().slice(0, 10) });
+    setFormError(null);
+    reset({ consultantType: 'functional' });
     setOpen(true);
   };
 
   const openEdit = (emp: Employee) => {
     setEditing(emp);
+    setFormError(null);
     reset({
       empName: emp.empName,
       email: emp.email,
-      phone: emp.phone ?? '',
+      mobileNumber: emp.mobileNumber ?? '',
       consultantType: emp.consultantType,
       reportsToId: emp.reportsToId?.toString() ?? 'none',
       isHr: emp.isHr ?? false,
@@ -317,56 +324,64 @@ export default function EmployeesPage() {
               </DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
-              {!editing && (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium">Emp Code</label>
-                    <Input {...register('empCode')} />
-                    {errors.empCode && <p className="text-xs text-red-500">{errors.empCode.message}</p>}
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium">Join Date</label>
-                    <Input type="date" {...register('joinDate')} />
-                  </div>
+              {/* Server-side error banner */}
+              {formError && (
+                <div className="rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-3 py-2.5">
+                  <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-0.5">Please fix the following:</p>
+                  {formError.split('\n').map((line, i) => (
+                    <p key={i} className="text-xs text-red-600 dark:text-red-400">• {line}</p>
+                  ))}
                 </div>
               )}
+
+              {!editing && (
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Emp Code</label>
+                  <Input {...register('empCode')} className={errors.empCode ? 'border-red-500 focus-visible:ring-red-500' : ''} />
+                  {errors.empCode && <p className="text-xs text-red-500">{errors.empCode.message}</p>}
+                </div>
+              )}
+
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <label className="text-sm font-medium">Full Name</label>
-                  <Input {...register('empName')} />
+                  <label className="text-sm font-medium">Full Name <span className="text-red-500">*</span></label>
+                  <Input {...register('empName')} className={errors.empName ? 'border-red-500 focus-visible:ring-red-500' : ''} />
                   {errors.empName && <p className="text-xs text-red-500">{errors.empName.message}</p>}
                 </div>
                 <div className="space-y-1">
-                  <label className="text-sm font-medium">Email</label>
-                  <Input type="email" {...register('email')} />
+                  <label className="text-sm font-medium">Email <span className="text-red-500">*</span></label>
+                  <Input type="email" {...register('email')} className={errors.email ? 'border-red-500 focus-visible:ring-red-500' : ''} />
                   {errors.email && <p className="text-xs text-red-500">{errors.email.message}</p>}
                 </div>
               </div>
+
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Phone</label>
-                  <Input {...register('phone')} />
+                  <Input {...register('mobileNumber')} className={errors.mobileNumber ? 'border-red-500 focus-visible:ring-red-500' : ''} />
+                  {errors.mobileNumber && <p className="text-xs text-red-500">{errors.mobileNumber.message}</p>}
                 </div>
                 {!editing && (
                   <div className="space-y-1">
-                    <label className="text-sm font-medium">Password</label>
-                    <Input type="password" {...register('password')} />
+                    <label className="text-sm font-medium">Password <span className="text-red-500">*</span></label>
+                    <Input type="password" {...register('password')} className={errors.password ? 'border-red-500 focus-visible:ring-red-500' : ''} />
                     {errors.password && <p className="text-xs text-red-500">{errors.password.message}</p>}
                   </div>
                 )}
                 <div className="space-y-1">
-                  <label className="text-sm font-medium">Consultant Type</label>
+                  <label className="text-sm font-medium">Consultant Type <span className="text-red-500">*</span></label>
                   <Select
                     value={consultantType}
                     onValueChange={(v) => setValue('consultantType', v as EmpFormValues['consultantType'])}
                   >
-                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className={`w-full ${errors.consultantType ? 'border-red-500' : ''}`}><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {Object.entries(typeLabels).map(([v, l]) => (
                         <SelectItem key={v} value={v}>{l}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {errors.consultantType && <p className="text-xs text-red-500">{errors.consultantType.message}</p>}
                 </div>
                 <div className="space-y-1">
                   <label className="text-sm font-medium">Reports To</label>
@@ -379,8 +394,9 @@ export default function EmployeesPage() {
                       <SelectItem value="none">None</SelectItem>
                       {(data ?? [])
                         .filter((e) => e.isActive && e.id !== editing?.id)
+                        .filter((e, idx, arr) => arr.findIndex((x) => x.id === e.id) === idx)
                         .map((e) => (
-                          <SelectItem key={e.id} value={String(e.id)}>
+                          <SelectItem key={`${(e as any)._type ?? 'employee'}-${e.id}`} value={String(e.id)}>
                             {e.empName} ({e.empCode})
                           </SelectItem>
                         ))}
@@ -388,22 +404,20 @@ export default function EmployeesPage() {
                   </Select>
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="flex items-end space-x-2 pb-1">
-                  <input
-                    type="checkbox"
-                    id="isHr"
-                    checked={watch('isHr') ?? false}
-                    onChange={(e) => setValue('isHr', e.target.checked)}
-                    className="h-4 w-4 rounded border-gray-300"
-                  />
-                  <label htmlFor="isHr" className="text-sm font-medium leading-none">
-                    Is HR
-                  </label>
-                </div>
+
+              <div className="flex items-center gap-2 pb-1">
+                <input
+                  type="checkbox"
+                  id="isHr"
+                  checked={watch('isHr') ?? false}
+                  onChange={(e) => setValue('isHr', e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <label htmlFor="isHr" className="text-sm font-medium leading-none">Is HR</label>
               </div>
+
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => { setOpen(false); setEditing(null); }}>
+                <Button type="button" variant="outline" onClick={() => { setOpen(false); setEditing(null); setFormError(null); }}>
                   Cancel
                 </Button>
                 <Button type="submit" disabled={isPending}>

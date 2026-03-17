@@ -79,6 +79,32 @@ export interface Company {
   updatedAt: string;
 }
 
+// ── Email Logs ────────────────────────────────────────────────────────────
+
+export type EmailLogStatus = 'sent' | 'failed';
+
+export interface EmailLogAttachment {
+  filename: string;
+  path: string;
+  mimetype: string;
+  size: number;
+}
+
+export interface EmailLog {
+  id: number;
+  subject?: string | null;
+  body?: string | null;
+  toEmail: string;
+  fromEmail?: string | null;
+  fromName?: string | null;
+  triggeredBy?: string | null;
+  status: EmailLogStatus;
+  errorMessage?: string | null;
+  companyId?: number | null;
+  attachments?: EmailLogAttachment[] | null;
+  sentAt: string;
+}
+
 // ── Location & Currency ──────────────────────────────────────────────────
 
 export interface LookupCountry {
@@ -178,7 +204,7 @@ export interface Employee {
   empCode: string;
   empName: string;
   email: string;
-  phone?: string;
+  mobileNumber?: string;
   consultantType: ConsultantType;
   assignedProjectId?: number;
   assignedProject?: Project;
@@ -194,19 +220,18 @@ export interface CreateEmployeeDto {
   empCode: string;
   empName: string;
   email: string;
-  phone?: string;
+  mobileNumber?: string;
   password: string;
   consultantType: ConsultantType;
   assignedProjectId?: number;
   reportsToId?: number;
   isHr?: boolean;
-  joinDate: string;
 }
 
 export interface UpdateEmployeeDto {
   empName?: string;
   email?: string;
-  phone?: string;
+  mobileNumber?: string;
   consultantType?: ConsultantType;
   assignedProjectId?: number;
   reportsToId?: number | null;

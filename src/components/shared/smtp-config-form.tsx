@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   Loader2, Send, Save, Mail, Paperclip, X,
-  Server, Lock, Trash2, Plus, Pencil, Inbox,
+  Server, Lock, Trash2, Plus, Pencil, Inbox, CheckCircle2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -73,6 +74,16 @@ export function SmtpConfigForm({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null); // null = creating new
 
+  // Send status dialog
+  const [sendStatus, setSendStatus] = useState<'idle' | 'loading' | 'success'>('idle');
+
+  // Auto-close success dialog after 3 s
+  useEffect(() => {
+    if (sendStatus !== 'success') return;
+    const t = setTimeout(() => setSendStatus('idle'), 3000);
+    return () => clearTimeout(t);
+  }, [sendStatus]);
+
   // Compose email state
   const [selectedSmtpId, setSelectedSmtpId] = useState<string>('');
   const [composeEmail, setComposeEmail] = useState('');
@@ -128,14 +139,16 @@ export function SmtpConfigForm({
   const sendMutation = useMutation({
     mutationFn: (params: { smtpId: number; email: string; subject: string; body: string; files: File[] }) =>
       sendEmail!(params.smtpId, params.email, params.subject, params.body, params.files.length > 0 ? params.files : undefined),
+    onMutate: () => setSendStatus('loading'),
     onSuccess: () => {
-      toast.success('Email sent successfully');
+      setSendStatus('success');
       setComposeEmail('');
       setComposeSubject('');
       setComposeBody('');
       setAttachments([]);
     },
     onError: (e: unknown) => {
+      setSendStatus('idle');
       const err = e as { response?: { data?: { message?: string } } };
       toast.error(err?.response?.data?.message ?? 'Failed to send email');
     },
@@ -494,6 +507,51 @@ export function SmtpConfigForm({
                 {editingId !== null ? 'Update Configuration' : 'Save Configuration'}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send status dialog — Loading / Success */}
+      <Dialog open={sendStatus !== 'idle'} onOpenChange={(open) => { if (!open && sendStatus === 'success') setSendStatus('idle'); }}>
+        <DialogContent className="sm:max-w-sm overflow-hidden" onPointerDownOutside={(e) => { if (sendStatus === 'loading') e.preventDefault(); }}>
+          <VisuallyHidden><DialogTitle>{sendStatus === 'loading' ? 'Sending Email' : 'Email Sent'}</DialogTitle></VisuallyHidden>
+
+          {/* Top accent bar — static blue when loading, animated green progress when success */}
+          {sendStatus === 'loading' ? (
+            <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-sky-400 to-blue-500" />
+          ) : (
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-muted overflow-hidden rounded-t-[inherit]">
+              <div
+                key="progress"
+                className="h-full bg-linear-to-r from-emerald-400 to-teal-500 rounded-r"
+                style={{ animation: 'grow-width 3s linear forwards' }}
+              />
+              <style>{`@keyframes grow-width { from { width: 0% } to { width: 100% } }`}</style>
+            </div>
+          )}
+
+          <div className="flex flex-col items-center gap-4 py-6 text-center">
+            {sendStatus === 'loading' ? (
+              <>
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-sky-500/10">
+                  <Loader2 className="h-8 w-8 animate-spin text-sky-500" />
+                </div>
+                <div>
+                  <p className="text-base font-semibold">Sending Email…</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Please wait while your email is being sent.</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10">
+                  <CheckCircle2 className="h-9 w-9 text-emerald-500" />
+                </div>
+                <div>
+                  <p className="text-base font-semibold text-emerald-600 dark:text-emerald-400">Email Sent!</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Closing automatically…</p>
+                </div>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>

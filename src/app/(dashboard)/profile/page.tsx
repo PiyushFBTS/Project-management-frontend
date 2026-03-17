@@ -176,11 +176,11 @@ export default function ProfilePage() {
                     value={emp.reportsTo ? `${emp.reportsTo.empName} (${emp.reportsTo.empCode})` : 'Not assigned'}
                     iconColor="bg-rose-500/10 text-rose-500"
                   />
-                  {emp.phone && (
+                  {emp.mobileNumber && (
                     <InfoRow
                       icon={Phone}
                       label="Phone"
-                      value={emp.phone}
+                      value={emp.mobileNumber}
                       iconColor="bg-teal-500/10 text-teal-500"
                     />
                   )}

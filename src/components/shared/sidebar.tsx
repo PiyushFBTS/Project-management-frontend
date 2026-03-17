@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import Link from 'next/link';
@@ -5,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, FolderKanban, Tags, Users,
   ClipboardList, BarChart3, ChevronDown, TrendingUp, X,
-  ChevronLeft, ChevronRight, CalendarDays, Building2, LogOut, Settings, ListTodo, Ticket,
+  ChevronLeft, ChevronRight, CalendarDays, Building2, LogOut, Settings, ListTodo, Ticket, Mail,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -52,28 +53,6 @@ const navItems: NavItem[] = [
     borderColor: 'border-l-cyan-400', dotColor: 'bg-cyan-400',
   },
   {
-    label: 'Employees', href: '/employees', icon: Users,
-    iconColor: 'text-emerald-400', iconBg: 'bg-emerald-500/20',
-    activeBg: 'bg-emerald-500/20', hoverBg: 'hover:bg-emerald-500/10',
-    borderColor: 'border-l-emerald-400', dotColor: 'bg-emerald-400',
-  },
-  {
-    label: 'Leave Management', icon: CalendarDays,
-    iconColor: 'text-orange-400', iconBg: 'bg-orange-500/20',
-    activeBg: 'bg-orange-500/20', hoverBg: 'hover:bg-orange-500/10',
-    borderColor: 'border-l-orange-400', dotColor: 'bg-orange-400',
-    children: [
-      { label: 'Leave Types',  href: '/leave-types',  dotColor: 'bg-rose-400' },
-      { label: 'Leave Requests', href: '/leave-requests', dotColor: 'bg-orange-400' },
-    ],
-  },
-  {
-    label: 'Task Sheets', href: '/task-sheets', icon: ClipboardList,
-    iconColor: 'text-violet-400', iconBg: 'bg-violet-500/20',
-    activeBg: 'bg-violet-500/20', hoverBg: 'hover:bg-violet-500/10',
-    borderColor: 'border-l-violet-400', dotColor: 'bg-violet-400',
-  },
-  {
     label: 'My Tasks', href: '/my-tasks', icon: ListTodo,
     iconColor: 'text-teal-400', iconBg: 'bg-teal-500/20',
     activeBg: 'bg-teal-500/20', hoverBg: 'hover:bg-teal-500/10',
@@ -86,15 +65,44 @@ const navItems: NavItem[] = [
     borderColor: 'border-l-purple-400', dotColor: 'bg-purple-400',
   },
   {
+    label: 'Employees', href: '/employees', icon: Users,
+    iconColor: 'text-emerald-400', iconBg: 'bg-emerald-500/20',
+    activeBg: 'bg-emerald-500/20', hoverBg: 'hover:bg-emerald-500/10',
+    borderColor: 'border-l-emerald-400', dotColor: 'bg-emerald-400',
+  },
+  {
+    label: 'Leave Management', icon: CalendarDays,
+    iconColor: 'text-orange-400', iconBg: 'bg-orange-500/20',
+    activeBg: 'bg-orange-500/20', hoverBg: 'hover:bg-orange-500/10',
+    borderColor: 'border-l-orange-400', dotColor: 'bg-orange-400',
+    children: [
+      { label: 'Leave Types', href: '/leave-types', dotColor: 'bg-rose-400' },
+      { label: 'Leave Requests', href: '/leave-requests', dotColor: 'bg-orange-400' },
+    ],
+  },
+  {
+    label: 'Task Sheets', href: '/task-sheets', icon: ClipboardList,
+    iconColor: 'text-violet-400', iconBg: 'bg-violet-500/20',
+    activeBg: 'bg-violet-500/20', hoverBg: 'hover:bg-violet-500/10',
+    borderColor: 'border-l-violet-400', dotColor: 'bg-violet-400',
+  },
+  {
     label: 'Reports', icon: BarChart3,
     iconColor: 'text-amber-400', iconBg: 'bg-amber-500/20',
     activeBg: 'bg-amber-500/20', hoverBg: 'hover:bg-amber-500/10',
     borderColor: 'border-l-amber-400', dotColor: 'bg-amber-400',
     children: [
       { label: 'Employee-Wise', href: '/reports/employee-wise', dotColor: 'bg-indigo-400' },
-      { label: 'Project-Wise',  href: '/reports/project-wise',  dotColor: 'bg-violet-400', hrOrAdminOnly: true },
-      { label: 'Daily Fill',    href: '/reports/daily-fill',    dotColor: 'bg-emerald-400', hrOrAdminOnly: true },
+      { label: 'Project-Wise', href: '/reports/project-wise', dotColor: 'bg-violet-400', hrOrAdminOnly: true },
+      { label: 'Daily Fill', href: '/reports/daily-fill', dotColor: 'bg-emerald-400', hrOrAdminOnly: true },
     ],
+  },
+  {
+    label: 'Email Inbox', href: '/email-inbox', icon: Mail,
+    iconColor: 'text-sky-400', iconBg: 'bg-sky-500/20',
+    activeBg: 'bg-sky-500/20', hoverBg: 'hover:bg-sky-500/10',
+    borderColor: 'border-l-sky-400', dotColor: 'bg-sky-400',
+    adminOnly: true,
   },
   {
     label: 'Settings', href: '/settings', icon: Settings,
@@ -117,6 +125,12 @@ const platformNavItems: NavItem[] = [
     iconColor: 'text-violet-400', iconBg: 'bg-violet-500/20',
     activeBg: 'bg-violet-500/20', hoverBg: 'hover:bg-violet-500/10',
     borderColor: 'border-l-violet-400', dotColor: 'bg-violet-400',
+  },
+  {
+    label: 'Email Inbox', href: '/email-inbox', icon: Mail,
+    iconColor: 'text-sky-400', iconBg: 'bg-sky-500/20',
+    activeBg: 'bg-sky-500/20', hoverBg: 'hover:bg-sky-500/10',
+    borderColor: 'border-l-sky-400', dotColor: 'bg-sky-400',
   },
   {
     label: 'Settings', href: '/settings', icon: Settings,

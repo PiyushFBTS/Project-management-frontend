@@ -6,9 +6,15 @@ import { SmtpConfigForm } from '@/components/shared/smtp-config-form';
 import { smtpApi } from '@/lib/api/smtp';
 
 export default function SettingsPage() {
-  const { selectedCompany, isSuperAdmin } = useCompany();
+  const { isSuperAdmin } = useCompany();
 
-  const isPlatformView = isSuperAdmin && !selectedCompany;
+  // Super admin always manages their own global SMTP here, regardless of selected company.
+  // Company-specific SMTPs are managed from the Companies page (SMTP dialog per company).
+  const headerSubtitle = isSuperAdmin ? 'Platform-level configuration' : 'Company configuration';
+  const smtpTitle = isSuperAdmin ? 'Global SMTP Configuration' : 'SMTP Configuration';
+  const smtpDescription = isSuperAdmin
+    ? 'Configure the default SMTP server for platform-wide emails. Company SMTPs are managed from the Companies page.'
+    : 'Configure the SMTP server for sending emails from your company. If not configured, the platform default will be used.';
 
   return (
     <div className="space-y-6">
@@ -22,7 +28,7 @@ export default function SettingsPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-white">Settings</h1>
-            <p className="text-sm text-white/60">{isPlatformView ? 'Platform-level configuration' : 'Company configuration'}</p>
+            <p className="text-sm text-white/60">{headerSubtitle}</p>
           </div>
         </div>
       </div>
@@ -32,17 +38,12 @@ export default function SettingsPage() {
         <div className="h-1 -mt-6 -mx-6 mb-5 rounded-t-[inherit] bg-linear-to-r from-sky-500 via-blue-500 to-indigo-500" />
         <div className="flex items-center gap-2 mb-2">
           <Mail className="h-5 w-5 text-sky-500" />
-          <h2 className="text-lg font-semibold">
-            {isPlatformView ? 'Global SMTP Configuration' : 'SMTP Configuration'}
-          </h2>
+          <h2 className="text-lg font-semibold">{smtpTitle}</h2>
         </div>
-        <p className="text-sm text-muted-foreground mb-4">
-          {isPlatformView
-            ? 'Configure the default SMTP server used for platform-wide automated emails. Companies without their own SMTP will use this configuration.'
-            : 'Configure the SMTP server for sending emails from your company. If not configured, the platform default will be used.'}
-        </p>
+        <p className="text-sm text-muted-foreground mb-4">{smtpDescription}</p>
 
-        {isPlatformView ? (
+        {isSuperAdmin ? (
+          // Super admin: always global SMTP only — never company configs
           <SmtpConfigForm
             queryKey={['global-smtp']}
             fetchConfigs={() => smtpApi.getGlobalConfigs()}
@@ -53,6 +54,7 @@ export default function SettingsPage() {
             sendEmail={(smtpId, to, subject, body, files) => smtpApi.sendGlobalEmail(smtpId, to, subject, body, files)}
           />
         ) : (
+          // Company admin: their own company's SMTP
           <SmtpConfigForm
             queryKey={['own-smtp']}
             fetchConfigs={() => smtpApi.getOwnConfigs()}
