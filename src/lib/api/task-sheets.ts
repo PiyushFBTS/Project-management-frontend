@@ -13,6 +13,9 @@ export const taskSheetsApi = {
   getToday: () =>
     api.get<ApiResponse<DailyTaskSheet>>('/task-sheets/today'),
 
+  getByDate: (date: string) =>
+    api.get<ApiResponse<DailyTaskSheet>>('/task-sheets/by-date', { params: { date } }),
+
   getHistory: (params?: PaginationParams & { fromDate?: string; toDate?: string }) =>
     api.get<ApiResponse<DailyTaskSheet[]>>('/task-sheets/history', { params }),
 

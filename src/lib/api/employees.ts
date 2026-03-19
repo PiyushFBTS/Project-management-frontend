@@ -1,5 +1,5 @@
 import { api } from './axios-instance';
-import { ApiResponse, Employee, CreateEmployeeDto, UpdateEmployeeDto, PaginationParams, ConsultantType } from '@/types';
+import { ApiResponse, Employee, CreateEmployeeDto, UpdateEmployeeDto, PaginationParams, ConsultantType, UpcomingEvent, TodayEvent } from '@/types';
 
 export const employeesApi = {
   // ── Admin endpoints ──
@@ -21,9 +21,25 @@ export const employeesApi = {
   assignProject: (id: number, projectId: number | null) =>
     api.patch<ApiResponse<Employee>>(`/employees/${id}/assign`, { projectId }),
 
+  // ── Employee self-update ──
+  updateSelf: (dto: { empName?: string; mobileNumber?: string; dateOfBirth?: string }) =>
+    api.patch<ApiResponse<Employee>>('/employee/employees/me', dto),
+
   // ── Employee endpoints (read-only) ──
   employeeGetAll: (params?: PaginationParams & { search?: string; consultantType?: string; isActive?: boolean }) =>
     api.get<ApiResponse<Employee[]>>('/employee/employees', { params }),
 
   employeeGetOne: (id: number) => api.get<ApiResponse<Employee>>(`/employee/employees/${id}`),
+
+  getUpcomingEvents: (days?: number) =>
+    api.get<ApiResponse<UpcomingEvent[]>>('/employees/upcoming-events', { params: { days } }),
+
+  employeeGetUpcomingEvents: (days?: number) =>
+    api.get<ApiResponse<UpcomingEvent[]>>('/employee/employees/upcoming-events', { params: { days } }),
+
+  getTodayEvents: () =>
+    api.get<ApiResponse<TodayEvent[]>>('/employees/today-events'),
+
+  employeeGetTodayEvents: () =>
+    api.get<ApiResponse<TodayEvent[]>>('/employee/employees/today-events'),
 };

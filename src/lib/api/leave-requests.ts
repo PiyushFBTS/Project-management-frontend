@@ -32,6 +32,14 @@ export const leaveRequestsApi = {
   }) =>
     api.get<ApiResponse<LeaveRequest[]>>('/employee/leave-requests/pending-approvals', { params }),
 
+  getTeamLeaves: (params?: PaginationParams & {
+    status?: LeaveRequestStatus;
+    employeeId?: number;
+    dateFrom?: string;
+    dateTo?: string;
+  }) =>
+    api.get<ApiResponse<LeaveRequest[]>>('/employee/leave-requests/team', { params }),
+
   getOneForEmployee: (id: number) =>
     api.get<ApiResponse<LeaveRequest>>(`/employee/leave-requests/${id}`),
 
@@ -45,7 +53,7 @@ export const leaveRequestsApi = {
     api.patch<ApiResponse<LeaveRequest>>(`/employee/leave-requests/${id}/reject`, { remarks }),
 
   getLeaveReasons: () =>
-    api.get<ApiResponse<LeaveType[]>>('/employee/leave-requests/reasons'),
+    api.get<ApiResponse<LeaveType[]>>('/employee/leave-types'),
 
   getColleagues: () =>
     api.get<ApiResponse<{ id: number; empName: string; empCode: string }[]>>('/employee/leave-requests/colleagues'),

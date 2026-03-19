@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { format } from 'date-fns';
-import { Eye, Plus, ClipboardList } from 'lucide-react';
+import { Eye, Plus, ClipboardList, Pencil } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { taskSheetsApi } from '@/lib/api/task-sheets';
 import { employeesApi } from '@/lib/api/employees';
@@ -20,6 +20,14 @@ import {
 
 const today = format(new Date(), 'yyyy-MM-dd');
 const monthStart = format(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'yyyy-MM-dd');
+
+function isEditable(sheetDate: string): boolean {
+  const d = new Date(sheetDate);
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 2);
+  cutoff.setHours(0, 0, 0, 0);
+  return d >= cutoff;
+}
 
 export default function TaskSheetsPage() {
   const { user } = useAuth();
@@ -124,7 +132,6 @@ export default function TaskSheetsPage() {
               <SelectContent>
                 <SelectItem value="all">All</SelectItem>
                 <SelectItem value="true">Submitted</SelectItem>
-                <SelectItem value="false">Draft</SelectItem>
               </SelectContent>
             </Select>
           </>
@@ -142,7 +149,7 @@ export default function TaskSheetsPage() {
               <TableHead>Man-Days</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Submitted At</TableHead>
-              <TableHead className="w-16">View</TableHead>
+              <TableHead className="w-24">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -174,7 +181,7 @@ export default function TaskSheetsPage() {
                     <TableCell>{Number(s.totalHours).toFixed(1)}h</TableCell>
                     <TableCell>{Number(s.manDays).toFixed(2)}</TableCell>
                     <TableCell>
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${s.isSubmitted ? 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30 dark:text-emerald-400' : 'bg-amber-500/15 text-amber-600 ring-amber-500/30'}`}>
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${s.isSubmitted ? 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30 dark:text-emerald-400' : 'bg-slate-500/15 text-slate-500 ring-slate-500/30'}`}>
                         {s.isSubmitted ? 'Submitted' : 'Draft'}
                       </span>
                     </TableCell>
@@ -182,11 +189,20 @@ export default function TaskSheetsPage() {
                       {s.submittedAt ? format(new Date(s.submittedAt), 'MMM d, HH:mm') : '—'}
                     </TableCell>
                     <TableCell>
-                      <Link href={`/task-sheets/${s.id}`}>
-                        <Button variant="ghost" size="icon" className="h-7 w-7">
-                          <Eye className="h-3.5 w-3.5" />
-                        </Button>
-                      </Link>
+                      <div className="flex gap-1">
+                        <Link href={`/task-sheets/${s.id}`}>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" title="View">
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                        </Link>
+                        {isEmployee && isEditable(s.sheetDate) && (
+                          <Link href={`/task-sheets/fill?date=${s.sheetDate?.slice(0, 10)}`}>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-violet-600 hover:text-violet-700 hover:bg-violet-500/10" title="Edit">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          </Link>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

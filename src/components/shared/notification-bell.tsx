@@ -7,7 +7,7 @@ import { formatDistanceToNow } from 'date-fns';
 import {
   Bell, UserPlus, UserX, FolderPlus, FolderEdit, ClipboardCheck,
   CheckCheck, Trash2, X, BellOff, CalendarPlus, CalendarCheck, CalendarX, CalendarOff,
-  ListTodo, ArrowRightLeft, MessageSquare,
+  ListTodo, ArrowRightLeft, MessageSquare, AtSign,
 } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { notificationsApi } from '@/lib/api/notifications';
@@ -40,6 +40,7 @@ const typeConfig: Record<NotificationType, {
   task_assigned:                    { icon: ListTodo,      iconBg: 'bg-teal-100 dark:bg-teal-500/15',       iconColor: 'text-teal-600 dark:text-teal-400'       },
   task_status_changed:              { icon: ArrowRightLeft, iconBg: 'bg-indigo-100 dark:bg-indigo-500/15',  iconColor: 'text-indigo-600 dark:text-indigo-400'   },
   task_commented:                   { icon: MessageSquare, iconBg: 'bg-cyan-100 dark:bg-cyan-500/15',       iconColor: 'text-cyan-600 dark:text-cyan-400'       },
+  task_mention:                     { icon: AtSign,        iconBg: 'bg-violet-100 dark:bg-violet-500/15',  iconColor: 'text-violet-600 dark:text-violet-400'   },
 };
 
 // ── Resolve notification → target route ──────────────────────────────────────
@@ -65,7 +66,8 @@ function getNotificationRoute(notif: Notification, isEmployee: boolean): string 
     case 'task_assigned':
     case 'task_status_changed':
     case 'task_commented':
-      return isEmployee ? '/my-tasks' : (meta?.projectId ? `/projects/${meta.projectId}/planning` : '/my-tasks');
+    case 'task_mention':
+      return isEmployee ? '/my-tasks' : (meta?.projectId ? `/projects/${meta.projectId}/planning` : '/full-tickets');
     default:
       return null;
   }

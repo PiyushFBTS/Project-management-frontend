@@ -24,14 +24,15 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 const statusConfig: Record<LeaveRequestStatus, { label: string; color: string }> = {
-  pending:          { label: 'Pending',           color: 'bg-amber-500/15 text-amber-600 ring-amber-500/30 dark:text-amber-400' },
-  manager_approved: { label: 'Manager Approved',  color: 'bg-blue-500/15 text-blue-600 ring-blue-500/30 dark:text-blue-400' },
-  manager_rejected: { label: 'Manager Rejected',  color: 'bg-red-500/15 text-red-600 ring-red-500/30 dark:text-red-400' },
-  hr_approved:      { label: 'HR Approved',       color: 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30 dark:text-emerald-400' },
-  hr_rejected:      { label: 'HR Rejected',       color: 'bg-red-500/15 text-red-600 ring-red-500/30 dark:text-red-400' },
-  cancelled:        { label: 'Cancelled',         color: 'bg-gray-500/15 text-gray-500 ring-gray-500/30 dark:text-gray-400' },
+  pending:          { label: 'Pending',            color: 'bg-amber-500/15 text-amber-600 ring-amber-500/30 dark:text-amber-400' },
+  manager_approved: { label: 'RM Approved',        color: 'bg-blue-500/15 text-blue-600 ring-blue-500/30 dark:text-blue-400' },
+  manager_rejected: { label: 'RM Rejected',        color: 'bg-red-500/15 text-red-600 ring-red-500/30 dark:text-red-400' },
+  hr_approved:      { label: 'HR Approved',        color: 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30 dark:text-emerald-400' },
+  hr_rejected:      { label: 'HR Rejected',        color: 'bg-red-500/15 text-red-600 ring-red-500/30 dark:text-red-400' },
+  cancelled:        { label: 'Cancelled',          color: 'bg-gray-500/15 text-gray-500 ring-gray-500/30 dark:text-gray-400' },
 };
 
 function StatusBadge({ status }: { status: LeaveRequestStatus }) {
@@ -42,6 +43,8 @@ function StatusBadge({ status }: { status: LeaveRequestStatus }) {
     </span>
   );
 }
+
+type Tab = 'my-leaves' | 'pending-approvals' | 'team-leaves';
 
 export default function LeaveRequestsPage() {
   return (
@@ -62,7 +65,8 @@ function LeaveRequestsContent() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [selected, setSelected] = useState<LeaveRequest | null>(null);
-  const [tab, setTab] = useState<'my-leaves' | 'pending-approvals'>('my-leaves');
+  const [tab, setTab] = useState<Tab>('my-leaves');
+  const [teamEmployeeId, setTeamEmployeeId] = useState<string>('');
   const [actionRemarks, setActionRemarks] = useState('');
   const [acting, setActing] = useState(false);
 
@@ -80,7 +84,6 @@ function LeaveRequestsContent() {
   useEffect(() => {
     if (searchParams.get('apply') === 'true' && isEmployee) {
       setApplyOpen(true);
-      // Clean URL
       window.history.replaceState(null, '', '/leave-requests');
     }
   }, [searchParams, isEmployee]);
@@ -92,11 +95,11 @@ function LeaveRequestsContent() {
     enabled: isEmployee,
   });
 
-  // Fetch colleagues for watcher selection
+  // Fetch colleagues for watcher selection + team employee filter
   const { data: colleagues } = useQuery({
     queryKey: ['colleagues-dropdown'],
     queryFn: () => leaveRequestsApi.getColleagues().then((r) => r.data.data),
-    enabled: isEmployee && applyOpen,
+    enabled: isEmployee && (applyOpen || tab === 'team-leaves'),
   });
 
   const submitLeaveMutation = useMutation({
@@ -175,7 +178,7 @@ function LeaveRequestsContent() {
     enabled: isEmployee && tab === 'my-leaves',
   });
 
-  // Employee: pending approvals (manager/HR)
+  // Employee: pending approvals (RM/HR)
   const { data: pendingData, isLoading: pendingLoading } = useQuery({
     queryKey: ['pending-approvals', statusFilter, dateFrom, dateTo],
     queryFn: () =>
@@ -192,6 +195,24 @@ function LeaveRequestsContent() {
     enabled: isEmployee && tab === 'pending-approvals',
   });
 
+  // Employee: team leaves
+  const { data: teamData, isLoading: teamLoading } = useQuery({
+    queryKey: ['team-leave-requests', statusFilter, teamEmployeeId, dateFrom, dateTo],
+    queryFn: () =>
+      leaveRequestsApi
+        .getTeamLeaves({
+          status: statusFilter !== 'all' ? (statusFilter as LeaveRequestStatus) : undefined,
+          employeeId: teamEmployeeId ? Number(teamEmployeeId) : undefined,
+          dateFrom: dateFrom || undefined,
+          dateTo: dateTo || undefined,
+          limit: 100,
+          sort: 'createdAt',
+          order: 'desc',
+        })
+        .then((r) => r.data.data),
+    enabled: isEmployee && tab === 'team-leaves',
+  });
+
   // Detail
   const { data: detail, isLoading: detailLoading } = useQuery({
     queryKey: ['leave-request-detail', selected?.id, isEmployee],
@@ -203,13 +224,23 @@ function LeaveRequestsContent() {
     enabled: !!selected,
   });
 
-  const data = isEmployee ? (tab === 'my-leaves' ? myLeaves : pendingData) : adminData;
-  const isLoading = isEmployee ? (tab === 'my-leaves' ? myLeavesLoading : pendingLoading) : adminLoading;
+  const data = isEmployee
+    ? tab === 'my-leaves' ? myLeaves
+    : tab === 'pending-approvals' ? pendingData
+    : teamData
+    : adminData;
+
+  const isLoading = isEmployee
+    ? tab === 'my-leaves' ? myLeavesLoading
+    : tab === 'pending-approvals' ? pendingLoading
+    : teamLoading
+    : adminLoading;
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['leave-requests'] });
     queryClient.invalidateQueries({ queryKey: ['my-leave-requests'] });
     queryClient.invalidateQueries({ queryKey: ['pending-approvals'] });
+    queryClient.invalidateQueries({ queryKey: ['team-leave-requests'] });
     queryClient.invalidateQueries({ queryKey: ['leave-request-detail'] });
   };
 
@@ -261,13 +292,24 @@ function LeaveRequestsContent() {
   const canActOnDetail = (() => {
     if (!isEmployee || !detail) return { canApprove: false, canCancel: false };
     const empId = (user as { id: number })?.id;
-    const canCancel = detail.employeeId === empId && detail.status === 'pending';
-    const canApprove = tab === 'pending-approvals' && (
-      (detail.status === 'pending' && detail.managerId === empId) ||
-      (detail.status === 'manager_approved' && (user as { isHr?: boolean })?.isHr)
-    );
+    const isHr = (user as { isHr?: boolean })?.isHr ?? false;
+
+    const CANCELLABLE_STATUSES: LeaveRequestStatus[] = ['pending', 'manager_approved'];
+    const canCancel = detail.employeeId === empId && CANCELLABLE_STATUSES.includes(detail.status);
+
+    // RM can approve/reject pending requests
+    const isRmAction = detail.managerId === empId && detail.status === 'pending';
+    // HR can approve/reject at any stage
+    const HR_ACTIONABLE: LeaveRequestStatus[] = ['pending', 'manager_approved'];
+    const isHrAction = isHr && HR_ACTIONABLE.includes(detail.status);
+
+    const canApprove = isRmAction || isHrAction;
+
     return { canApprove, canCancel };
   })();
+
+  // Show employee column when not on my-leaves tab
+  const showEmployeeCol = !isEmployee || tab !== 'my-leaves';
 
   return (
     <div className="space-y-4">
@@ -301,26 +343,19 @@ function LeaveRequestsContent() {
       {/* Employee tabs */}
       {isEmployee && (
         <div className="flex rounded-lg border border-border bg-muted/50 p-1 w-fit">
-          <button
-            onClick={() => setTab('my-leaves')}
-            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
-              tab === 'my-leaves'
-                ? 'bg-white dark:bg-card shadow-sm text-foreground'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            My Leaves
-          </button>
-          <button
-            onClick={() => setTab('pending-approvals')}
-            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
-              tab === 'pending-approvals'
-                ? 'bg-white dark:bg-card shadow-sm text-foreground'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            Pending Approvals
-          </button>
+          {(['my-leaves', 'pending-approvals', 'team-leaves'] as Tab[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => { setTab(t); if (t !== 'team-leaves') setTeamEmployeeId(''); }}
+              className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
+                tab === t
+                  ? 'bg-white dark:bg-card shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {t === 'my-leaves' ? 'My Leaves' : t === 'pending-approvals' ? 'Pending Approvals' : 'Team Leave'}
+            </button>
+          ))}
         </div>
       )}
 
@@ -335,7 +370,20 @@ function LeaveRequestsContent() {
             />
           </div>
         )}
-        <div className="w-40">
+        {isEmployee && tab === 'team-leaves' && (
+          <div className="w-56">
+            <SearchableSelect
+              placeholder="Filter by employee"
+              value={teamEmployeeId}
+              onValueChange={setTeamEmployeeId}
+              options={(colleagues ?? []).map((c) => ({
+                value: String(c.id),
+                label: `${c.empName} (${c.empCode})`,
+              }))}
+            />
+          </div>
+        )}
+        <div className="w-44">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
@@ -359,13 +407,13 @@ function LeaveRequestsContent() {
         <Table>
           <TableHeader>
             <TableRow>
-              {!isEmployee && <TableHead>Employee</TableHead>}
-              {isEmployee && tab === 'pending-approvals' && <TableHead>Employee</TableHead>}
+              {showEmployeeCol && <TableHead>Employee</TableHead>}
               <TableHead>Reason</TableHead>
               <TableHead>From</TableHead>
               <TableHead>To</TableHead>
               <TableHead>Days</TableHead>
               <TableHead>Status</TableHead>
+
               <TableHead>Manager</TableHead>
               <TableHead>HR</TableHead>
               <TableHead className="w-16">View</TableHead>
@@ -375,14 +423,14 @@ function LeaveRequestsContent() {
             {isLoading
               ? [...Array(5)].map((_, i) => (
                   <TableRow key={i}>
-                    {[...Array(isEmployee && tab === 'my-leaves' ? 8 : 9)].map((__, j) => (
+                    {[...Array(showEmployeeCol ? 10 : 9)].map((__, j) => (
                       <TableCell key={j}><Skeleton className="h-5 w-16" /></TableCell>
                     ))}
                   </TableRow>
                 ))
               : (data ?? []).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={isEmployee && tab === 'my-leaves' ? 8 : 9} className="h-32">
+                    <TableCell colSpan={showEmployeeCol ? 10 : 9} className="h-32">
                       <div className="flex flex-col items-center justify-center text-center">
                         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-orange-500/10 mb-3">
                           <CalendarDays className="h-6 w-6 text-orange-500" />
@@ -395,7 +443,7 @@ function LeaveRequestsContent() {
                 )
               : (data ?? []).map((lr) => (
                   <TableRow key={lr.id} className="cursor-pointer hover:bg-accent/50" onClick={() => setSelected(lr)}>
-                    {(!isEmployee || tab === 'pending-approvals') && (
+                    {showEmployeeCol && (
                       <TableCell className="font-medium text-sm">
                         {lr.employee?.empName ?? `#${lr.employeeId}`}
                         <span className="block text-xs text-muted-foreground">{lr.employee?.empCode}</span>
@@ -449,10 +497,10 @@ function LeaveRequestsContent() {
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">Leave Type <span className="text-destructive">*</span></Label>
                 <Select value={applyForm.leaveReasonId} onValueChange={(v) => setApplyForm((p) => ({ ...p, leaveReasonId: v }))}>
-                  <SelectTrigger  className="w-full">
+                  <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select a reason" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent position="popper">
                     {(leaveReasons ?? []).map((r) => (
                       <SelectItem key={r.id} value={String(r.id)}>{r.reasonName}</SelectItem>
                     ))}
@@ -625,29 +673,31 @@ function LeaveRequestsContent() {
               <div className="border-t pt-3 space-y-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Approval Timeline</p>
 
-                {/* Manager decision */}
+                {/* Level 1: Reporting Manager */}
                 <div className="flex items-start gap-3">
                   <div className={`mt-0.5 h-2.5 w-2.5 rounded-full shrink-0 ${
-                    detail.status === 'pending' ? 'bg-amber-400' :
-                    detail.status === 'manager_rejected' ? 'bg-red-500' : 'bg-emerald-500'
+                    detail.status === 'manager_rejected' ? 'bg-red-500' :
+                    detail.managerActionAt ? 'bg-emerald-500' : 'bg-amber-400'
                   }`} />
                   <div>
-                    <p className="text-xs font-medium">Manager: {detail.manager?.empName ?? '-'}</p>
+                    <p className="text-xs font-medium">Reporting Manager: {detail.manager?.empName ?? '-'}</p>
                     {detail.managerActionAt ? (
                       <>
                         <p className="text-xs text-muted-foreground">
-                          {detail.status === 'manager_rejected' ? 'Rejected' : 'Approved'} on {format(new Date(detail.managerActionAt), 'dd MMM yyyy, HH:mm')}
+                          {detail.status === 'manager_rejected' ? 'Rejected' : 'Approved'} on {format(new Date(detail.managerActionAt!), 'dd MMM yyyy, HH:mm')}
                         </p>
                         {detail.managerRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.managerRemarks}&quot;</p>}
                       </>
                     ) : (
-                      <p className="text-xs text-muted-foreground">Pending action</p>
+                      <p className="text-xs text-muted-foreground">
+                        {detail.hrActionAt ? 'Bypassed by HR' : 'Pending action'}
+                      </p>
                     )}
                   </div>
                 </div>
 
-                {/* HR decision */}
-                {(detail.status === 'manager_approved' || detail.status === 'hr_approved' || detail.status === 'hr_rejected') && (
+                {/* Level 2: HR */}
+                {((['manager_approved', 'hr_approved', 'hr_rejected'] as LeaveRequestStatus[]).includes(detail.status) || !!detail.hrActionAt) && (
                   <div className="flex items-start gap-3">
                     <div className={`mt-0.5 h-2.5 w-2.5 rounded-full shrink-0 ${
                       detail.status === 'manager_approved' ? 'bg-amber-400' :
@@ -684,7 +734,7 @@ function LeaveRequestsContent() {
                 </div>
               )}
 
-              {/* Employee actions */}
+              {/* Actions */}
               {isEmployee && (canActOnDetail.canApprove || canActOnDetail.canCancel) && (
                 <div className="border-t pt-3 space-y-3">
                   {canActOnDetail.canApprove && (

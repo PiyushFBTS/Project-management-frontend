@@ -24,6 +24,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -39,6 +40,7 @@ const schema = z.object({
   startDate: z.string().min(1, 'Required'),
   endDate: z.string().optional(),
   description: z.string().optional(),
+  projectManagerId: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -54,6 +56,7 @@ export default function ProjectsPage() {
   const router = useRouter();
   const { user } = useAuth();
   const isEmployee = user?._type === 'employee';
+  const isHr = isEmployee && !!(user as { isHr?: boolean })?.isHr;
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Project | null>(null);
@@ -67,11 +70,17 @@ export default function ProjectsPage() {
   }, [createStatus]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['projects', search, isEmployee],
+    queryKey: ['projects', search, isEmployee, isHr],
     queryFn: () =>
       isEmployee
         ? projectsApi.employeeGetAll().then((r) => r.data.data)
         : projectsApi.getAll({ search, limit: 100 }).then((r) => r.data.data),
+  });
+
+  const { data: managers } = useQuery({
+    queryKey: ['project-managers'],
+    queryFn: () => projectsApi.getManagers().then((r) => r.data.data),
+    enabled: !isEmployee,
   });
 
   const form = useForm<FormValues>({ resolver: zodResolver(schema) });
@@ -115,7 +124,7 @@ export default function ProjectsPage() {
 
   const openCreate = () => {
     setEditing(null);
-    form.reset({ projectCode: '', projectName: '', projectType: 'project', clientName: '', status: 'active', startDate: '', endDate: '', description: '' });
+    form.reset({ projectCode: '', projectName: '', projectType: 'project', clientName: '', status: 'active', startDate: '', endDate: '', description: '', projectManagerId: '' });
     setOpen(true);
   };
 
@@ -130,16 +139,21 @@ export default function ProjectsPage() {
       startDate: p.startDate?.slice(0, 10) ?? '',
       endDate: p.endDate?.slice(0, 10) ?? '',
       description: p.description ?? '',
+      projectManagerId: p.projectManagerId ? String(p.projectManagerId) : '',
     });
     setOpen(true);
   };
 
   const onSubmit = (values: FormValues) => {
+    const pmId = values.projectManagerId && values.projectManagerId !== 'none'
+      ? Number(values.projectManagerId)
+      : null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dto: any = { ...values, projectManagerId: pmId };
     if (editing) {
-      console.log("values",values)
-      updateMutation.mutate({ id: editing.id, dto: values });
+      updateMutation.mutate({ id: editing.id, dto });
     } else {
-      createMutation.mutate(values as CreateProjectDto);
+      createMutation.mutate(dto);
     }
   };
 
@@ -190,6 +204,7 @@ export default function ProjectsPage() {
               <TableHead>Name</TableHead>
               <TableHead>Type</TableHead>
               <TableHead>Client</TableHead>
+              <TableHead>Manager</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Start Date</TableHead>
               <TableHead className="w-20">{isEmployee ? '' : 'Actions'}</TableHead>
@@ -212,6 +227,9 @@ export default function ProjectsPage() {
                       <Badge variant="outline" className="capitalize">{p.projectType}</Badge>
                     </TableCell>
                     <TableCell className="text-slate-600">{p.clientName}</TableCell>
+                    <TableCell className="text-slate-600 text-sm">
+                      {p.projectManager ? p.projectManager.empName : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
                     <TableCell>
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${statusColors[p.status]}`}>
                         {p.status}
@@ -357,6 +375,26 @@ export default function ProjectsPage() {
                 <FormItem>
                   <FormLabel>Client Name</FormLabel>
                   <FormControl><Input {...field} /></FormControl>
+                  <FormMessage />
+                </FormItem>
+              )} />
+              <FormField control={form.control} name="projectManagerId" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Project Manager</FormLabel>
+                  <FormControl>
+                    <SearchableSelect
+                      value={field.value ?? ''}
+                      onValueChange={field.onChange}
+                      placeholder="Select project manager (optional)"
+                      options={[
+                        { value: 'none', label: 'None' },
+                        ...(managers ?? []).map((m) => ({
+                          value: String(m.id),
+                          label: `${m.empName} (${m.empCode})`,
+                        })),
+                      ]}
+                    />
+                  </FormControl>
                   <FormMessage />
                 </FormItem>
               )} />

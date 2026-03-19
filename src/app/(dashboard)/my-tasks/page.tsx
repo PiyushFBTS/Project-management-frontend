@@ -17,10 +17,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import { MentionTextarea, MentionEmployee, renderMentions, buildMentionContent } from '@/components/ui/mention-textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -28,6 +28,25 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function formatCommentTime(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'UTC' });
+}
 
 // ── Color maps ───────────────────────────────────────────────────────────────
 
@@ -74,12 +93,9 @@ export default function MyTasksPage() {
   const [detailTask, setDetailTask] = useState<ProjectTask | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [commentText, setCommentText] = useState('');
+  const [taggedMentions, setTaggedMentions] = useState<MentionEmployee[]>([]);
   const [reassignTo, setReassignTo] = useState<string>('');
 
-  // Close → assign to admin dialog
-  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
-  const [closeTaskId, setCloseTaskId] = useState<number | null>(null);
-  const [selectedAdminId, setSelectedAdminId] = useState<string>('');
 
   // History dialog
   const [historyTaskId, setHistoryTaskId] = useState<number | null>(null);
@@ -106,47 +122,22 @@ export default function MyTasksPage() {
 
   const tasks = tasksData ?? [];
 
-  // ── Company admins for close assignment ─────────────────────────────────
-  const { data: companyAdmins } = useQuery({
-    queryKey: ['company-admins-mytasks'],
-    queryFn: () => myTasksApi.getAdmins().then((r) => {
-      const d = r.data;
-      if (Array.isArray(d?.data)) return d.data;
-      if (Array.isArray((d as any)?.data?.data)) return (d as any).data.data;
-      return d as any;
-    }),
-  });
-
   // ── Inline status update ─────────────────────────────────────────────────
 
   const updateStatusMut = useMutation({
-    mutationFn: ({ taskId, status, assignToAdminId }: { taskId: number; status: ProjectTaskStatus; assignToAdminId?: number }) =>
-      myTasksApi.updateStatus(taskId, status, assignToAdminId),
+    mutationFn: ({ taskId, status }: { taskId: number; status: ProjectTaskStatus }) =>
+      myTasksApi.updateStatus(taskId, status),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['my-tasks'] });
       qc.invalidateQueries({ queryKey: ['my-task-detail', detailTask?.id] });
       qc.invalidateQueries({ queryKey: ['task-history'] });
       toast.success('Status updated');
-      setCloseDialogOpen(false);
-      setCloseTaskId(null);
-      setSelectedAdminId('');
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to update status'),
   });
 
   const handleStatusChange = (taskId: number, newStatus: string) => {
-    if (newStatus === 'closed') {
-      const admins = companyAdmins ?? [];
-      if (admins.length === 1) {
-        updateStatusMut.mutate({ taskId, status: 'closed' as ProjectTaskStatus, assignToAdminId: admins[0].id });
-      } else {
-        setCloseTaskId(taskId);
-        setSelectedAdminId('');
-        setCloseDialogOpen(true);
-      }
-    } else {
-      updateStatusMut.mutate({ taskId, status: newStatus as ProjectTaskStatus });
-    }
+    updateStatusMut.mutate({ taskId, status: newStatus as ProjectTaskStatus });
   };
 
   // ── Task detail ──────────────────────────────────────────────────────────
@@ -162,6 +153,7 @@ export default function MyTasksPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['my-task-detail', detailTask?.id] });
       setCommentText('');
+      setTaggedMentions([]);
       toast.success('Comment added');
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
@@ -198,6 +190,7 @@ export default function MyTasksPage() {
     setDetailTask(t);
     setDetailOpen(true);
     setCommentText('');
+    setTaggedMentions([]);
     setReassignTo(t.assigneeId ? String(t.assigneeId) : '');
   };
 
@@ -251,7 +244,7 @@ export default function MyTasksPage() {
         <div className="relative w-full sm:w-64">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search by ticket ID..."
+            placeholder="Search by ticket ID or title..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-9 pl-9 pr-8"
@@ -604,10 +597,12 @@ export default function MyTasksPage() {
                           <span className="text-xs font-medium text-foreground">{(c as any).authorName ?? c.authorType}</span>
                           <Badge variant="outline" className="text-[10px] capitalize">{c.authorType}</Badge>
                           <span className="text-xs text-muted-foreground">
-                            {new Date(c.createdAt).toLocaleString()}
+                            {formatCommentTime(c.createdAt)}
+                            {' · '}
+                            {timeAgo(c.createdAt)}
                           </span>
                         </div>
-                        <p className="text-foreground">{c.content}</p>
+                        <p className="text-foreground">{renderMentions(c.content)}</p>
                       </div>
                     ))}
                   </div>
@@ -616,68 +611,28 @@ export default function MyTasksPage() {
 
               {/* Fixed comment input at bottom */}
               <div className="border-t pt-3 flex gap-2 shrink-0">
-                <Textarea
+                <MentionTextarea
                   value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  placeholder="Add a comment..."
+                  onChange={setCommentText}
+                  onMentionAdded={(emp) => setTaggedMentions((prev) => [...prev, emp])}
+                  employees={(companyEmployees ?? []).filter((e: any) => e._type !== 'admin').map((e) => ({ id: e.id, empName: e.empName }))}
+                  placeholder="Add a comment… type @ to mention someone"
                   rows={2}
-                  className="flex-1"
                 />
                 <Button
                   size="sm"
                   className="self-end"
                   disabled={!commentText.trim() || addCommentMut.isPending}
-                  onClick={() => addCommentMut.mutate(commentText.trim())}
+                  onClick={() => {
+                    const content = buildMentionContent(commentText, taggedMentions).trim();
+                    addCommentMut.mutate(content);
+                  }}
                 >
                   {addCommentMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send'}
                 </Button>
               </div>
             </>
           ) : null}
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Close → Assign to Admin Dialog ─────────────────────────────── */}
-      <Dialog open={closeDialogOpen} onOpenChange={(open) => { if (!open) { setCloseDialogOpen(false); setCloseTaskId(null); setSelectedAdminId(''); } }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Assign Closed Ticket to Admin</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground mb-3">
-            Select which admin this ticket should be assigned to after closing.
-          </p>
-          <Select value={selectedAdminId || undefined} onValueChange={setSelectedAdminId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select an admin..." />
-            </SelectTrigger>
-            <SelectContent>
-              {(companyAdmins ?? []).map((admin: { id: number; name: string; email: string }) => (
-                <SelectItem key={admin.id} value={String(admin.id)}>
-                  {admin.name} ({admin.email})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => { setCloseDialogOpen(false); setCloseTaskId(null); setSelectedAdminId(''); }}>
-              Cancel
-            </Button>
-            <Button
-              disabled={!selectedAdminId || updateStatusMut.isPending}
-              onClick={() => {
-                if (closeTaskId && selectedAdminId) {
-                  updateStatusMut.mutate({
-                    taskId: closeTaskId,
-                    status: 'closed' as ProjectTaskStatus,
-                    assignToAdminId: Number(selectedAdminId),
-                  });
-                }
-              }}
-            >
-              {updateStatusMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Close Ticket
-            </Button>
-          </div>
         </DialogContent>
       </Dialog>
 
@@ -714,7 +669,7 @@ export default function MyTasksPage() {
                           {h.action.replace(/_/g, ' ')}
                         </span>
                         <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                          {new Date(h.createdAt).toLocaleString()}
+                          {new Date(h.createdAt).toLocaleString('en-IN', { timeZone: 'UTC' })}
                         </span>
                       </div>
                       <p className="text-sm text-muted-foreground">{h.details}</p>

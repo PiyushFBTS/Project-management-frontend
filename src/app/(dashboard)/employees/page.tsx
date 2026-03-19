@@ -35,6 +35,8 @@ const empSchema = z.object({
   consultantType: z.enum(['project_manager', 'functional', 'technical', 'management', 'core_team']),
   reportsToId: z.string().optional(),
   isHr: z.boolean().optional(),
+  dateOfBirth: z.string().optional(),
+  joiningDate: z.string().optional(),
 });
 
 type EmpFormValues = z.infer<typeof empSchema>;
@@ -102,6 +104,8 @@ export default function EmployeesPage() {
         consultantType: values.consultantType,
         reportsToId: values.reportsToId && values.reportsToId !== 'none' ? Number(values.reportsToId) : undefined,
         isHr: values.isHr,
+        dateOfBirth: values.dateOfBirth || undefined,
+        joiningDate: values.joiningDate || undefined,
       }),
     onMutate: () => setFormError(null),
     onSuccess: (res) => {
@@ -125,6 +129,8 @@ export default function EmployeesPage() {
         consultantType: values.consultantType,
         reportsToId: values.reportsToId && values.reportsToId !== 'none' ? Number(values.reportsToId) : null,
         isHr: values.isHr,
+        dateOfBirth: values.dateOfBirth || null,
+        joiningDate: values.joiningDate || null,
       }),
     onMutate: () => setFormError(null),
     onSuccess: (res) => {
@@ -181,6 +187,8 @@ export default function EmployeesPage() {
       consultantType: emp.consultantType,
       reportsToId: emp.reportsToId?.toString() ?? 'none',
       isHr: emp.isHr ?? false,
+      dateOfBirth: emp.dateOfBirth ?? '',
+      joiningDate: emp.joiningDate ?? '',
     });
     setOpen(true);
   };
@@ -414,6 +422,17 @@ export default function EmployeesPage() {
                   className="h-4 w-4 rounded border-gray-300"
                 />
                 <label htmlFor="isHr" className="text-sm font-medium leading-none">Is HR</label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Date of Birth</label>
+                  <Input type="date" {...register('dateOfBirth')} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-sm font-medium">Joining Date</label>
+                  <Input type="date" {...register('joiningDate')} />
+                </div>
               </div>
 
               <DialogFooter>

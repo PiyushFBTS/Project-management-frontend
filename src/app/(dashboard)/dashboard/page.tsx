@@ -10,6 +10,7 @@ import {
   Users, FolderKanban, CalendarCheck, TrendingUp,
   ClipboardList, Clock, FileCheck, BarChart3, ArrowRight,
   CheckCircle2, XCircle, ListTodo, PlayCircle, Eye, CircleCheckBig, Ticket,
+  Cake, CalendarHeart,
 } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { useCompany } from '@/providers/company-provider';
@@ -24,6 +25,8 @@ import { Button } from '@/components/ui/button';
 import { dashboardApi } from '@/lib/api/dashboard';
 import { myTasksApi } from '@/lib/api/project-planning';
 import { companiesApi, PlatformDashboard as PlatformDashboardData } from '@/lib/api/companies';
+import { employeesApi } from '@/lib/api/employees';
+import { TodayEvent } from '@/types';
 
 const thisMonth = format(new Date(), 'yyyy-MM');
 const thisMonthLabel = format(new Date(), 'MMMM yyyy');
@@ -51,6 +54,151 @@ function KpiCard({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Today's Events Widget (Birthdays & Anniversaries)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function getInitials(name: string) {
+  return name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+}
+
+const AVATAR_GRADIENTS = [
+  'from-pink-500 to-rose-500',
+  'from-violet-500 to-purple-500',
+  'from-indigo-500 to-blue-500',
+  'from-emerald-500 to-teal-500',
+  'from-amber-500 to-orange-500',
+  'from-rose-500 to-red-500',
+  'from-teal-500 to-cyan-500',
+  'from-blue-500 to-indigo-500',
+];
+
+function EventPersonCard({ event }: { event: TodayEvent }) {
+  const gradient = AVATAR_GRADIENTS[event.id % AVATAR_GRADIENTS.length];
+  const href = event._type === 'employee' ? `/employees/${event.id}` : '#';
+  return (
+    <Link href={href}>
+      <div className="group flex flex-col items-center gap-1.5 cursor-pointer">
+        <div className={`relative flex h-12 w-12 items-center justify-center rounded-full bg-linear-to-br ${gradient} text-white text-sm font-bold ring-2 ring-background shadow-md group-hover:ring-indigo-400 group-hover:scale-110 transition-all`}>
+          {getInitials(event.name)}
+        </div>
+        <p className="text-[11px] font-medium text-center leading-tight max-w-[60px] truncate text-foreground group-hover:text-indigo-500 transition-colors">
+          {event.name.split(' ')[0]}
+        </p>
+      </div>
+    </Link>
+  );
+}
+
+function EventsChart({
+  events, emptyMsg, accentColor, Icon,
+}: {
+  events: TodayEvent[];
+  emptyMsg: string;
+  accentColor: string;
+  Icon: React.ElementType;
+}) {
+  if (events.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-6 gap-2">
+        <div className={`flex h-10 w-10 items-center justify-center rounded-full ${accentColor}/10`}>
+          <Icon className={`h-5 w-5 ${accentColor}`} />
+        </div>
+        <p className="text-xs text-muted-foreground">{emptyMsg}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-wrap gap-3 pt-1">
+      {events.map((e) => <EventPersonCard key={e.id} event={e} />)}
+    </div>
+  );
+}
+
+function TodayEventsWidget({ isEmployee }: { isEmployee?: boolean }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['today-events'],
+    queryFn: () =>
+      (isEmployee ? employeesApi.employeeGetTodayEvents() : employeesApi.getTodayEvents())
+        .then((r) => r.data.data),
+  });
+
+  const birthdays = (data ?? []).filter((e) => e.type === 'birthday');
+  const anniversaries = (data ?? []).filter((e) => e.type === 'anniversary');
+
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      {/* Birthdays */}
+      <Card className="shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+            <Cake className="h-4 w-4 text-pink-500" />
+            Today&apos;s Birthdays
+            {!isLoading && (
+              <span className="ml-1 rounded-full bg-pink-100 dark:bg-pink-500/20 px-1.5 py-0.5 text-[10px] font-bold text-pink-600 dark:text-pink-400">
+                {birthdays.length}
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex gap-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="flex flex-col items-center gap-1.5">
+                  <Skeleton className="h-12 w-12 rounded-full" />
+                  <Skeleton className="h-3 w-10 rounded" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EventsChart
+              events={birthdays}
+              emptyMsg="No birthdays today"
+              accentColor="text-pink-500"
+              Icon={Cake}
+            />
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Anniversaries */}
+      <Card className="shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+            <CalendarHeart className="h-4 w-4 text-rose-500" />
+            Today&apos;s Work Anniversaries
+            {!isLoading && (
+              <span className="ml-1 rounded-full bg-rose-100 dark:bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                {anniversaries.length}
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex gap-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="flex flex-col items-center gap-1.5">
+                  <Skeleton className="h-12 w-12 rounded-full" />
+                  <Skeleton className="h-3 w-10 rounded" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EventsChart
+              events={anniversaries}
+              emptyMsg="No work anniversaries today"
+              accentColor="text-rose-500"
+              Icon={CalendarHeart}
+            />
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -319,6 +467,9 @@ function EmployeeDashboard() {
         </CardContent>
       </Card>
 
+      {/* Today's Birthdays & Anniversaries */}
+      <TodayEventsWidget isEmployee />
+
       {/* Quick Actions */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Link href="/task-sheets/fill" className="group">
@@ -543,6 +694,9 @@ function AdminDashboard() {
           </CardContent>
         </Card>
       </div> */}
+
+      {/* Today's Birthdays & Anniversaries */}
+      <TodayEventsWidget />
 
       {/* Charts row 2 */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">

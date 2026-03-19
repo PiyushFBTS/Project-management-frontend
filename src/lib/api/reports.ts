@@ -1,5 +1,5 @@
 import { api } from './axios-instance';
-import { ApiResponse, EmployeeWiseReport, ProjectWiseReport, DailyFillReport } from '@/types';
+import { ApiResponse, EmployeeWiseReport, ProjectWiseReport, DailyFillReport, LastFilledRow } from '@/types';
 
 export const reportsApi = {
   getEmployeeWise: (fromDate: string, toDate: string, consultantType?: string) =>
@@ -25,6 +25,9 @@ export const reportsApi = {
       responseType: 'blob',
     }),
 
+  getLastFilled: () =>
+    api.get<ApiResponse<LastFilledRow[]>>('/admin/reports/last-filled'),
+
   // ── Employee endpoints ──
   employeeGetEmployeeWise: (fromDate: string, toDate: string, consultantType?: string) =>
     api.get<ApiResponse<EmployeeWiseReport[]>>('/employee/reports/employee-wise', {
@@ -36,4 +39,7 @@ export const reportsApi = {
 
   employeeGetDailyFill: (date: string) =>
     api.get<ApiResponse<DailyFillReport>>('/employee/reports/daily-fill', { params: { date } }),
+
+  employeeGetLastFilled: () =>
+    api.get<ApiResponse<LastFilledRow[]>>('/employee/reports/last-filled'),
 };

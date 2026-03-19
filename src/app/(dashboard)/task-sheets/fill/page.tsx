@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { format } from 'date-fns';
 import {
   ArrowLeft, Plus, Trash2, Send, Clock, CalendarDays, Pencil,
@@ -63,18 +63,28 @@ function buildTimesFromHours(hours: number, entries: TaskEntry[]): { fromTime: s
 
 export default function FillTaskSheetPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const isEmployee = user?._type === 'employee';
+
+  const dateParam = searchParams.get('date'); // e.g. "2026-03-17"
+  const today = new Date().toISOString().split('T')[0];
+  const sheetDate = dateParam || today;
+  const isToday = sheetDate === today;
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TaskEntry | null>(null);
   const [form, setForm] = useState(emptyForm);
 
-  // Today's sheet (auto-created by backend)
+  // Sheet for the selected date (auto-created by backend)
   const { data: sheet, isLoading: sheetLoading, refetch } = useQuery({
-    queryKey: ['today-task-sheet'],
-    queryFn: () => taskSheetsApi.getToday().then((r) => r.data.data),
+    queryKey: ['task-sheet-by-date', sheetDate],
+    queryFn: () =>
+      (isToday
+        ? taskSheetsApi.getToday()
+        : taskSheetsApi.getByDate(sheetDate)
+      ).then((r) => r.data.data),
     enabled: isEmployee,
   });
 
@@ -251,7 +261,7 @@ export default function FillTaskSheetPage() {
   return (
     <div className="space-y-4">
       {/* Gradient Header */}
-      <div className="relative overflow-hidden rounded-2xl shadow-lg">
+      {/* <div className="relative overflow-hidden rounded-2xl shadow-lg">
         <div className="absolute inset-0 bg-linear-to-r from-violet-600 via-purple-600 to-indigo-600" />
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djZoLTZWMzRoNnptMC0zMHY2aC02VjRoNnptMCAzMHY2aC02di02aDZ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30" />
         <div className="relative px-6 py-5 flex items-center gap-3">
@@ -269,7 +279,7 @@ export default function FillTaskSheetPage() {
             {sheet.isSubmitted ? 'Submitted' : 'Draft'}
           </span>
         </div>
-      </div>
+      </div> */}
 
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4">
@@ -309,7 +319,7 @@ export default function FillTaskSheetPage() {
       </div>
 
       {/* Action buttons */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 justify-end">
         <Button size="sm" onClick={openAddForm} className="bg-linear-to-r from-violet-500 to-purple-600 text-white hover:opacity-90 shadow-sm shadow-violet-500/25 border-0">
           <Plus className="mr-1.5 h-4 w-4" />
           Add Entry
@@ -372,29 +382,27 @@ export default function FillTaskSheetPage() {
                       {entry.status?.replace('_', ' ')}
                     </Badge>
                   </TableCell>
-                  {!sheet.isSubmitted && (
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                          onClick={() => openEditForm(entry)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          disabled={deleteMutation.isPending}
-                          onClick={() => deleteMutation.mutate(entry.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                        onClick={() => openEditForm(entry)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        disabled={deleteMutation.isPending}
+                        onClick={() => deleteMutation.mutate(entry.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                       </div>
                     </TableCell>
-                  )}
                 </TableRow>
               ))
             )}

@@ -157,6 +157,8 @@ export interface Project {
   startDate: string;
   endDate?: string;
   description?: string;
+  projectManagerId?: number;
+  projectManager?: { id: number; empName: string; empCode: string };
   createdAt: string;
   updatedAt: string;
 }
@@ -170,6 +172,7 @@ export interface CreateProjectDto {
   startDate: string;
   endDate?: string;
   description?: string;
+  projectManagerId?: number;
 }
 
 export type UpdateProjectDto = Partial<CreateProjectDto>;
@@ -212,8 +215,31 @@ export interface Employee {
   reportsTo?: { id: number; empName: string; empCode: string } | null;
   isHr: boolean;
   isActive: boolean;
-  joinDate: string;
+  dateOfBirth?: string | null;
+  joiningDate?: string | null;
   createdAt: string;
+}
+
+export interface UpcomingEvent {
+  id: number;
+  name: string;
+  type: 'birthday' | 'anniversary';
+  date: string;
+  daysUntil: number;
+  _type: 'employee' | 'admin';
+}
+
+export interface TodayEvent {
+  id: number;
+  name: string;
+  empCode?: string;
+  email: string;
+  phone?: string;
+  type: 'birthday' | 'anniversary';
+  _type: 'employee' | 'admin';
+  dateOfBirth?: string | null;
+  joiningDate?: string | null;
+  reportsTo?: { id: number; name: string } | null;
 }
 
 export interface CreateEmployeeDto {
@@ -226,6 +252,8 @@ export interface CreateEmployeeDto {
   assignedProjectId?: number;
   reportsToId?: number;
   isHr?: boolean;
+  dateOfBirth?: string;
+  joiningDate?: string;
 }
 
 export interface UpdateEmployeeDto {
@@ -237,6 +265,8 @@ export interface UpdateEmployeeDto {
   reportsToId?: number | null;
   isHr?: boolean;
   isActive?: boolean;
+  dateOfBirth?: string | null;
+  joiningDate?: string | null;
 }
 
 // ── Daily Task Sheets ─────────────────────────────────────────────────────
@@ -386,7 +416,10 @@ export type NotificationType =
   | 'leave_request_cancelled'
   | 'task_assigned'
   | 'task_status_changed'
-  | 'task_commented';
+  | 'task_commented'
+  | 'task_mention'
+  | 'birthday'
+  | 'work_anniversary';
 
 export interface Notification {
   id: number;
@@ -454,6 +487,18 @@ export interface DailyFillRow {
   total_hours: number;
   sheet_id?: number;
   entry_count: number;
+}
+
+export interface LastFilledRow {
+  id: number;
+  emp_code: string;
+  emp_name: string;
+  consultant_type: string;
+  assigned_project: string | null;
+  last_filled_date: string | null;
+  last_filled_hours: number | null;
+  last_submitted_at: string | null;
+  days_since_last_fill: number | null;
 }
 
 // ── Project Planning ──────────────────────────────────────────────────

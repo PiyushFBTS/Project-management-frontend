@@ -16,6 +16,9 @@ export const projectsApi = {
 
   getEmployees: (id: number) => api.get<ApiResponse<Employee[]>>(`/projects/${id}/employees`),
 
+  getManagers: () =>
+    api.get<ApiResponse<{ id: number; empName: string; empCode: string }[]>>('/projects/managers/list'),
+
   // Employee: only projects where employee has assigned tickets
   employeeGetAll: () =>
     api.get<ApiResponse<Project[]>>('/employee/projects'),

@@ -6,8 +6,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   Loader2, MessageSquare, Calendar, Clock, User, Target, Search, X,
-  FolderKanban, UserRoundPlus, Ticket, History,
+  FolderKanban, UserRoundPlus, Ticket, History, ArrowUpDown, ArrowUp, ArrowDown, Download, AlertTriangle,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { projectTicketsApi, adminTicketsApi } from '@/lib/api/project-planning';
 import { employeesApi } from '@/lib/api/employees';
 import { useAuth } from '@/providers/auth-provider';
@@ -18,10 +19,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import { MentionTextarea, MentionEmployee, renderMentions, buildMentionContent } from '@/components/ui/mention-textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -29,6 +30,25 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function formatCommentTime(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'UTC' });
+}
 
 // ── Color maps ───────────────────────────────────────────────────────────────
 
@@ -56,7 +76,7 @@ const priorityLabels: Record<string, string> = {
 
 export default function FullTicketsPage() {
   const qc = useQueryClient();
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const isAdmin = user?._type === 'admin';
 
   // Pick the correct API based on user role
@@ -66,9 +86,15 @@ export default function FullTicketsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [projectFilter, setProjectFilter] = useState<string>('all');
+  const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
+  const [dueDateFilter, setDueDateFilter] = useState<string>('all');
 
   // Search
   const [search, setSearch] = useState('');
+
+  // Sort
+  const [sortBy, setSortBy] = useState<'dueDate' | 'ticketNumber'>('dueDate');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   // Projects dropdown — admin sees all, employee sees accessible only
   const { data: projectsList } = useQuery({
@@ -80,29 +106,22 @@ export default function FullTicketsPage() {
   const [detailTask, setDetailTask] = useState<ProjectTask | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [commentText, setCommentText] = useState('');
+  const [taggedMentions, setTaggedMentions] = useState<MentionEmployee[]>([]);
   const [reassignTo, setReassignTo] = useState<string>('');
 
-  // Close → assign to admin dialog
-  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
-  const [closeTaskId, setCloseTaskId] = useState<number | null>(null);
-  const [selectedAdminId, setSelectedAdminId] = useState<string>('');
 
   // History dialog
   const [historyTaskId, setHistoryTaskId] = useState<number | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  // ── Query ────────────────────────────────────────────────────────────────
+  // ── Single source-of-truth query (all tickets, no filters) ──────────────
+  // KPI counts AND table rows are both derived from this one array client-side.
 
-  const { data: tasksData, isLoading } = useQuery({
-    queryKey: ['project-tickets', search, statusFilter, priorityFilter, projectFilter],
+  const { data: allTickets = [], isLoading } = useQuery({
+    queryKey: ['project-tickets-all', isAdmin],
+    enabled: !authLoading,
     queryFn: async (): Promise<ProjectTask[]> => {
-      const r = await ticketsApi.getAll({
-        limit: 100,
-        ...(search ? { search } : {}),
-        ...(statusFilter !== 'all' ? { status: statusFilter as ProjectTaskStatus } : {}),
-        ...(priorityFilter !== 'all' ? { priority: priorityFilter as TaskPriority } : {}),
-        ...(projectFilter !== 'all' ? { projectId: Number(projectFilter) } : {}),
-      });
+      const r = await ticketsApi.getAll({ limit: 500 });
       const body = r.data;
       if (Array.isArray(body?.data)) return body.data;
       if (Array.isArray((body?.data as any)?.data)) return (body.data as any).data;
@@ -110,51 +129,104 @@ export default function FullTicketsPage() {
     },
   });
 
-  const tasks = tasksData ?? [];
+  // Helper: apply all filters except status (used for KPI counts)
+  const applyNonStatusFilters = (t: ProjectTask) => {
+    if (priorityFilter !== 'all' && t.priority !== priorityFilter) return false;
+    if (projectFilter !== 'all' && String(t.projectId ?? t.project?.id) !== projectFilter) return false;
+    if (assigneeFilter !== 'all' && String(t.assigneeId ?? '') !== assigneeFilter) return false;
+    if (dueDateFilter === 'overdue') {
+      if (!t.dueDate || new Date(t.dueDate) >= new Date() || t.status === 'done' || t.status === 'closed') return false;
+    } else if (dueDateFilter === 'due_today') {
+      const today = new Date().toISOString().slice(0, 10);
+      if (!t.dueDate || t.dueDate.slice(0, 10) !== today) return false;
+    } else if (dueDateFilter === 'no_due_date') {
+      if (t.dueDate) return false;
+    }
+    if (search) {
+      const q = search.toLowerCase();
+      if (!(t.ticketNumber ?? '').toLowerCase().includes(q) && !t.title.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  };
 
-  // ── Company admins for close assignment ─────────────────────────────────
-  const { data: companyAdmins } = useQuery({
-    queryKey: ['company-admins', isAdmin],
-    queryFn: () => ticketsApi.getAdmins().then((r) => {
-      const d = r.data;
-      if (Array.isArray(d?.data)) return d.data;
-      if (Array.isArray((d as any)?.data?.data)) return (d as any).data.data;
-      return d as any;
-    }),
+  // KPI counts — based on current search/project/priority filters (status excluded so all buckets remain visible)
+  const statsAll = allTickets.filter(applyNonStatusFilters);
+
+  // Table rows — full filter including status
+  const filteredTasks = allTickets.filter((t) => {
+    if (statusFilter !== 'all' && t.status !== statusFilter) return false;
+    return applyNonStatusFilters(t);
   });
+
+  // Sort
+  const toggleSort = (col: 'dueDate' | 'ticketNumber') => {
+    if (sortBy === col) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortBy(col); setSortDir('desc'); }
+  };
+
+  const tasks = [...filteredTasks].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    if (sortBy === 'dueDate') {
+      const da = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+      const db = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+      return (da - db) * dir;
+    }
+    // ticketNumber sort (e.g. "TICK-001")
+    return (a.ticketNumber ?? '').localeCompare(b.ticketNumber ?? '', undefined, { numeric: true }) * dir;
+  });
+
+  // ── Export to Excel ──────────────────────────────────────────────────────
+  const exportToExcel = () => {
+    const rows = tasks.map((t) => ({
+      'Ticket ID': t.ticketNumber ?? '—',
+      'Title': t.title,
+      'Project': t.project?.projectName ?? '—',
+      'Assignee': t.assignee?.empName ?? 'Unassigned',
+      'Priority': priorityLabels[t.priority] ?? t.priority,
+      'Status': statusLabels[t.status] ?? t.status,
+      'Due Date': t.dueDate ? new Date(t.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—',
+      'Created At': new Date(t.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }),
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    // Auto-size columns
+    ws['!cols'] = Object.keys(rows[0] ?? {}).map((key) => ({
+      wch: Math.max(key.length, ...rows.map((r) => String((r as any)[key] ?? '').length)) + 2,
+    }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Tickets');
+    XLSX.writeFile(wb, `tickets_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
 
   // ── Inline status update ─────────────────────────────────────────────────
 
   const updateStatusMut = useMutation({
     mutationFn: ({ taskId, status, assignToAdminId }: { taskId: number; status: ProjectTaskStatus; assignToAdminId?: number }) =>
       ticketsApi.updateStatus(taskId, status, assignToAdminId),
+    onMutate: async ({ taskId, status }) => {
+      await qc.cancelQueries({ queryKey: ['project-tickets-all', isAdmin] });
+      const prev = qc.getQueryData<ProjectTask[]>(['project-tickets-all', isAdmin]);
+      if (prev) {
+        qc.setQueryData<ProjectTask[]>(
+          ['project-tickets-all', isAdmin],
+          prev.map((t) => t.id === taskId ? { ...t, status } : t),
+        );
+      }
+      return { prev };
+    },
+    onError: (e: any, _vars, ctx: any) => {
+      if (ctx?.prev) qc.setQueryData(['project-tickets-all', isAdmin], ctx.prev);
+      toast.error(e?.response?.data?.message ?? 'Failed to update status');
+    },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['project-tickets'] });
+      qc.invalidateQueries({ queryKey: ['project-tickets-all', isAdmin] });
       qc.invalidateQueries({ queryKey: ['project-ticket-detail', detailTask?.id] });
       qc.invalidateQueries({ queryKey: ['task-history'] });
       toast.success('Status updated');
-      setCloseDialogOpen(false);
-      setCloseTaskId(null);
-      setSelectedAdminId('');
     },
-    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to update status'),
   });
 
   const handleStatusChange = (taskId: number, newStatus: string) => {
-    if (newStatus === 'closed') {
-      const admins = companyAdmins ?? [];
-      if (admins.length === 1) {
-        // Only one admin — auto-assign
-        updateStatusMut.mutate({ taskId, status: 'closed' as ProjectTaskStatus, assignToAdminId: admins[0].id });
-      } else {
-        // Multiple admins — open selection dialog
-        setCloseTaskId(taskId);
-        setSelectedAdminId('');
-        setCloseDialogOpen(true);
-      }
-    } else {
-      updateStatusMut.mutate({ taskId, status: newStatus as ProjectTaskStatus });
-    }
+    updateStatusMut.mutate({ taskId, status: newStatus as ProjectTaskStatus });
   };
 
   // ── Task detail ──────────────────────────────────────────────────────────
@@ -170,6 +242,7 @@ export default function FullTicketsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['project-ticket-detail', detailTask?.id] });
       setCommentText('');
+      setTaggedMentions([]);
       toast.success('Comment added');
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
@@ -197,10 +270,11 @@ export default function FullTicketsPage() {
     mutationFn: ({ taskId, assigneeId }: { taskId: number; assigneeId: number }) =>
       ticketsApi.reassign(taskId, assigneeId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['project-tickets'] });
+      qc.invalidateQueries({ queryKey: ['project-tickets-all', isAdmin] });
       qc.invalidateQueries({ queryKey: ['project-ticket-detail', detailTask?.id] });
       qc.invalidateQueries({ queryKey: ['task-history'] });
       toast.success('Task reassigned successfully');
+      setReassignTo('');
       setDetailOpen(false);
       setDetailTask(null);
     },
@@ -211,13 +285,14 @@ export default function FullTicketsPage() {
     setDetailTask(t);
     setDetailOpen(true);
     setCommentText('');
+    setTaggedMentions([]);
     setReassignTo(t.assigneeId ? String(t.assigneeId) : '');
   };
 
   return (
     <div className="space-y-4">
       {/* Gradient Header */}
-      <div className="relative overflow-hidden rounded-2xl shadow-lg">
+      {/* <div className="relative overflow-hidden rounded-2xl shadow-lg">
         <div className="absolute inset-0 bg-linear-to-r from-violet-600 via-purple-600 to-indigo-600" />
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djZoLTZWMzRoNnptMC0zMHY2aC02VjRoNnptMCAzMHY2aC02di02aDZ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30" />
         <div className="relative px-6 py-5 flex items-center gap-3">
@@ -229,38 +304,38 @@ export default function FullTicketsPage() {
             <p className="text-sm text-white/60">All tickets from your projects</p>
           </div>
         </div>
-      </div>
+      </div> */}
 
       {/* KPI Stats */}
-      {!isLoading && tasks.length > 0 && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            { label: 'To Do', count: tasks.filter(t => t.status === 'todo').length, gradient: 'bg-gradient-to-br from-slate-500 to-slate-600', icon: Ticket },
-            { label: 'In Progress', count: tasks.filter(t => t.status === 'in_progress').length, gradient: 'bg-gradient-to-br from-blue-500 to-indigo-600', icon: Clock },
-            { label: 'In Review', count: tasks.filter(t => t.status === 'in_review').length, gradient: 'bg-gradient-to-br from-amber-500 to-orange-600', icon: MessageSquare },
-            { label: 'Done', count: tasks.filter(t => t.status === 'done').length, gradient: 'bg-gradient-to-br from-emerald-500 to-teal-600', icon: Target },
-          ].map(({ label, count, gradient, icon: Icon }) => (
-            <div key={label} className={`relative overflow-hidden rounded-xl border-0 ${gradient} p-4`}>
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-white/70">{label}</p>
-                  <p className="mt-1 text-2xl font-bold text-white">{count}</p>
-                </div>
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/20 backdrop-blur-sm">
-                  <Icon className="h-4 w-4 text-white" />
-                </div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+        {[
+          { label: 'To Do', count: statsAll.filter(t => t.status === 'todo').length, gradient: 'bg-gradient-to-br from-slate-500 to-slate-600', icon: Ticket },
+          { label: 'In Progress', count: statsAll.filter(t => t.status === 'in_progress').length, gradient: 'bg-gradient-to-br from-blue-500 to-indigo-600', icon: Clock },
+          { label: 'In Review', count: statsAll.filter(t => t.status === 'in_review').length, gradient: 'bg-gradient-to-br from-amber-500 to-orange-600', icon: MessageSquare },
+          { label: 'Done', count: statsAll.filter(t => t.status === 'done').length, gradient: 'bg-gradient-to-br from-emerald-500 to-teal-600', icon: Target },
+          { label: 'Closed', count: statsAll.filter(t => t.status === 'closed').length, gradient: 'bg-gradient-to-br from-purple-500 to-purple-700', icon: X },
+          { label: 'Overdue', count: statsAll.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'done' && t.status !== 'closed').length, gradient: 'bg-gradient-to-br from-red-500 to-rose-700', icon: AlertTriangle },
+        ].map(({ label, count, gradient, icon: Icon }) => (
+          <div key={label} className={`relative overflow-hidden rounded-xl border-0 ${gradient} p-4`}>
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-white/70">{label}</p>
+                <p className="mt-1 text-2xl font-bold text-white">{count}</p>
+              </div>
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/20 backdrop-blur-sm">
+                <Icon className="h-4 w-4 text-white" />
               </div>
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        ))}
+      </div>
 
       {/* Search + Filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
         <div className="relative w-full sm:w-64">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search by ticket ID..."
+            placeholder="Search by ticket ID or title..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-9 pl-9 pr-8"
@@ -309,7 +384,41 @@ export default function FullTicketsPage() {
               ))}
             </SelectContent>
           </Select>
+          <SearchableSelect
+            value={assigneeFilter}
+            onValueChange={setAssigneeFilter}
+            options={[
+              { value: 'all', label: 'All Employees' },
+              ...(companyEmployees ?? [])
+                .filter((emp: any) => emp._type !== 'admin')
+                .filter((e, i, arr) => arr.findIndex((x) => x.id === e.id) === i)
+                .map((emp) => ({ value: String(emp.id), label: emp.empName })),
+            ]}
+            placeholder="All Employees"
+            className="w-full sm:w-48"
+          />
+          <Select value={dueDateFilter} onValueChange={setDueDateFilter}>
+            <SelectTrigger className="w-full sm:w-36">
+              <SelectValue placeholder="Due Date" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Due Dates</SelectItem>
+              <SelectItem value="overdue">Overdue</SelectItem>
+              <SelectItem value="due_today">Due Today</SelectItem>
+              <SelectItem value="no_due_date">No Due Date</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="ml-auto shrink-0"
+          disabled={tasks.length === 0}
+          onClick={exportToExcel}
+        >
+          <Download className="h-4 w-4 mr-1.5" />
+          Export Excel
+        </Button>
       </div>
 
       {/* Empty / Loading state */}
@@ -325,7 +434,7 @@ export default function FullTicketsPage() {
                 <TableRow>
                   <TableHead>Ticket</TableHead><TableHead>Title</TableHead><TableHead>Project</TableHead>
                   <TableHead>Assignee</TableHead><TableHead>Priority</TableHead><TableHead>Status</TableHead>
-                  <TableHead className="w-36">Quick Status</TableHead>
+                  <TableHead>Due Date</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -371,35 +480,16 @@ export default function FullTicketsPage() {
                 </p>
                 <p className="text-xs text-muted-foreground truncate mb-3">
                   <User className="inline h-3 w-3 mr-1 -mt-0.5" />
-                  {t.status === 'closed' && t.assignedAdmin?.name ? `Admin: ${t.assignedAdmin.name}` : t.assignee?.empName ?? 'Unassigned'}
-                  {t.dueDate && (
-                    <span className="ml-3">
-                      <Calendar className="inline h-3 w-3 mr-1 -mt-0.5" />
-                      {t.dueDate}
-                    </span>
-                  )}
+                  {t.assignee?.empName ?? 'Unassigned'}
                 </p>
                 <div className="flex items-center justify-between gap-2">
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusColors[t.status]}`}>
                     {statusLabels[t.status]}
                   </span>
-                  <div onClick={(e) => e.stopPropagation()}>
-                    <Select
-                      value={t.status}
-                      onValueChange={(val) => handleStatusChange(t.id, val)}
-                    >
-                      <SelectTrigger className="h-7 text-xs w-28">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="todo">To Do</SelectItem>
-                        <SelectItem value="in_progress">In Progress</SelectItem>
-                        <SelectItem value="in_review">In Review</SelectItem>
-                        <SelectItem value="done">Done</SelectItem>
-                        <SelectItem value="closed">Closed</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    <Calendar className="inline h-3 w-3 mr-1 -mt-0.5" />
+                    {t.dueDate ? new Date(t.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'No due date'}
+                  </span>
                 </div>
               </div>
             ))}
@@ -411,13 +501,23 @@ export default function FullTicketsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Ticket</TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('ticketNumber')}>
+                    <span className="inline-flex items-center gap-1">
+                      Ticket
+                      {sortBy === 'ticketNumber' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />}
+                    </span>
+                  </TableHead>
                   <TableHead>Title</TableHead>
                   <TableHead>Project</TableHead>
                   <TableHead>Assignee</TableHead>
                   <TableHead>Priority</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="w-36">Quick Status</TableHead>
+                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('dueDate')}>
+                    <span className="inline-flex items-center gap-1">
+                      Due Date
+                      {sortBy === 'dueDate' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />}
+                    </span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -429,7 +529,7 @@ export default function FullTicketsPage() {
                       {t.project?.projectName ?? '—'}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {t.status === 'closed' && t.assignedAdmin?.name ? `Admin: ${t.assignedAdmin.name}` : t.assignee?.empName ?? 'Unassigned'}
+                      {t.assignee?.empName ?? 'Unassigned'}
                     </TableCell>
                     <TableCell>
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${priorityColors[t.priority]}`}>
@@ -441,22 +541,8 @@ export default function FullTicketsPage() {
                         {statusLabels[t.status]}
                       </span>
                     </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Select
-                        value={t.status}
-                        onValueChange={(val) => handleStatusChange(t.id, val)}
-                      >
-                        <SelectTrigger className="h-7 text-xs w-28">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="todo">To Do</SelectItem>
-                          <SelectItem value="in_progress">In Progress</SelectItem>
-                          <SelectItem value="in_review">In Review</SelectItem>
-                          <SelectItem value="done">Done</SelectItem>
-                          <SelectItem value="closed">Closed</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                      {t.dueDate ? new Date(t.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -468,218 +554,202 @@ export default function FullTicketsPage() {
 
       {/* ── Task Detail Dialog ─────────────────────────────────────────────── */}
       <Dialog open={detailOpen} onOpenChange={(v) => { setDetailOpen(v); if (!v) setDetailTask(null); }}>
-        <DialogContent className="max-w-[95vw] sm:max-w-xl flex flex-col max-h-[85vh] sm:max-h-[80vh] overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-violet-500 via-purple-500 to-indigo-500" />
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Ticket className="h-4 w-4 text-violet-500" />
-              Ticket Detail
-            </DialogTitle>
-          </DialogHeader>
+        <DialogContent className="max-w-[95vw] sm:max-w-2xl flex flex-col max-h-[90vh] sm:max-h-[85vh] overflow-hidden gap-0 p-0">
+          <DialogTitle className="sr-only">Ticket Detail</DialogTitle>
+          {/* ── Gradient header ─────────────────────────────────────────── */}
+          <div className="bg-linear-to-r from-violet-600 via-purple-600 to-indigo-600 px-5 py-4 text-white rounded-t-lg">
+            {detailLoading || !taskDetail ? (
+              <Skeleton className="h-6 w-3/4 bg-white/20" />
+            ) : (
+              <>
+                <div className="flex items-center gap-2 mb-1">
+                  {taskDetail.ticketNumber && (
+                    <span className="text-xs font-mono font-bold bg-white/20 backdrop-blur px-2 py-0.5 rounded">{taskDetail.ticketNumber}</span>
+                  )}
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold bg-white/20 backdrop-blur`}>
+                    {statusLabels[taskDetail.status]}
+                  </span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold bg-white/20 backdrop-blur`}>
+                    {priorityLabels[taskDetail.priority]}
+                  </span>
+                </div>
+                <h3 className="text-lg font-bold leading-snug">{taskDetail.title}</h3>
+              </>
+            )}
+          </div>
+
           {detailLoading ? (
-            <div className="space-y-3">
+            <div className="space-y-3 p-5">
               <Skeleton className="h-6 w-3/4" />
               <Skeleton className="h-20 w-full" />
             </div>
           ) : taskDetail ? (
             <>
-              {/* Scrollable content */}
-              <div className="space-y-4 flex-1 overflow-y-auto min-h-0 pr-1">
-                <div>
-                  <div className="flex items-center gap-2">
-                    {taskDetail.ticketNumber && (
-                      <span className="text-xs font-mono font-semibold text-violet-600 dark:text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded">{taskDetail.ticketNumber}</span>
-                    )}
-                    <h3 className="text-lg font-semibold">{taskDetail.title}</h3>
-                  </div>
-                  {taskDetail.description && (
-                    <p className="mt-1 text-sm text-muted-foreground">{taskDetail.description}</p>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[taskDetail.status]}`}>
-                    {statusLabels[taskDetail.status]}
-                  </span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${priorityColors[taskDetail.priority]}`}>
-                    {priorityLabels[taskDetail.priority]}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <FolderKanban className="h-3.5 w-3.5" />
-                    {taskDetail.project?.projectName ?? '—'}
-                  </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <User className="h-3.5 w-3.5" />
-                    {taskDetail.status === 'closed' && taskDetail.assignedAdmin?.name ? `Admin: ${taskDetail.assignedAdmin.name}` : taskDetail.assignee?.empName ?? 'Unassigned'}
-                  </div>
-                  {taskDetail.dueDate && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Calendar className="h-3.5 w-3.5" />
-                      {taskDetail.dueDate}
+              {/* ── Scrollable body ──────────────────────────────────────── */}
+              <div className="flex-1 overflow-y-auto min-h-0 px-5 py-4 space-y-5">
+                {/* Description */}
+                {taskDetail.description && (
+                  <p className="text-sm text-muted-foreground leading-relaxed">{taskDetail.description}</p>
+                )}
+
+                {/* Info cards row */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  <div className="rounded-lg border bg-violet-500/5 p-2.5">
+                    <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-violet-600 dark:text-violet-400 mb-1">
+                      <FolderKanban className="h-3 w-3" /> Project
                     </div>
-                  )}
+                    <p className="text-sm font-medium truncate">{taskDetail.project?.projectName ?? '—'}</p>
+                  </div>
+                  <div className="rounded-lg border bg-blue-500/5 p-2.5">
+                    <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-blue-600 dark:text-blue-400 mb-1">
+                      <User className="h-3 w-3" /> Assignee
+                    </div>
+                    <p className="text-sm font-medium truncate">{taskDetail.assignee?.empName ?? 'Unassigned'}</p>
+                  </div>
+                  <div className="rounded-lg border bg-amber-500/5 p-2.5">
+                    <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-amber-600 dark:text-amber-400 mb-1">
+                      <Calendar className="h-3 w-3" /> Due Date
+                    </div>
+                    <p className="text-sm font-medium">{taskDetail.dueDate ? new Date(taskDetail.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</p>
+                  </div>
                   {taskDetail.estimatedHours && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Clock className="h-3.5 w-3.5" />
-                      {taskDetail.estimatedHours}h estimated
+                    <div className="rounded-lg border bg-emerald-500/5 p-2.5">
+                      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-emerald-600 dark:text-emerald-400 mb-1">
+                        <Clock className="h-3 w-3" /> Estimated
+                      </div>
+                      <p className="text-sm font-medium">{taskDetail.estimatedHours}h</p>
                     </div>
                   )}
                   {taskDetail.phase && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Target className="h-3.5 w-3.5" />
-                      {taskDetail.phase.name}
+                    <div className="rounded-lg border bg-pink-500/5 p-2.5">
+                      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-pink-600 dark:text-pink-400 mb-1">
+                        <Target className="h-3 w-3" /> Phase
+                      </div>
+                      <p className="text-sm font-medium truncate">{taskDetail.phase.name}</p>
                     </div>
                   )}
                 </div>
 
-                {/* Status update */}
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-medium">Update Status:</span>
-                  <Select
-                    value={taskDetail.status}
-                    onValueChange={(val) => {
-                      handleStatusChange(taskDetail.id, val);
-                    }}
-                  >
-                    <SelectTrigger className="w-36">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todo">To Do</SelectItem>
-                      <SelectItem value="in_progress">In Progress</SelectItem>
-                      <SelectItem value="in_review">In Review</SelectItem>
-                      <SelectItem value="done">Done</SelectItem>
-                      <SelectItem value="closed">Closed</SelectItem>
-                    </SelectContent>
-                  </Select>
+                {/* Actions row */}
+                <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
+                  {/* Status update */}
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground w-24 shrink-0">Status</span>
+                    <Select
+                      value={taskDetail.status}
+                      onValueChange={(val) => handleStatusChange(taskDetail.id, val)}
+                    >
+                      <SelectTrigger className="h-8 text-xs w-36">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todo">To Do</SelectItem>
+                        <SelectItem value="in_progress">In Progress</SelectItem>
+                        <SelectItem value="in_review">In Review</SelectItem>
+                        <SelectItem value="done">Done</SelectItem>
+                        <SelectItem value="closed">Closed</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Reassign */}
+                  <div className={`flex flex-col gap-2 sm:flex-row sm:items-center ${taskDetail.status === 'closed' ? 'opacity-50 pointer-events-none' : ''}`}>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground w-24 shrink-0 flex items-center gap-1">
+                      <UserRoundPlus className="h-3 w-3" /> Reassign
+                    </span>
+                    <div className="flex flex-1 gap-2">
+                      <SearchableSelect
+                        value={reassignTo}
+                        onValueChange={setReassignTo}
+                        options={(companyEmployees ?? [])
+                          .filter((emp: any) => emp._type !== 'admin')
+                          .map((emp) => ({ value: String(emp.id), label: emp.empName }))}
+                        placeholder="Select employee..."
+                        disabled={taskDetail.status === 'closed'}
+                        className="flex-1"
+                      />
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={!reassignTo || reassignMut.isPending || taskDetail.status === 'closed'}
+                        onClick={() => reassignMut.mutate({ taskId: taskDetail.id, assigneeId: Number(reassignTo) })}
+                      >
+                        {reassignMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Reassign'}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* History */}
+                  <div className="flex">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-violet-600 dark:text-violet-400 hover:bg-violet-500/10"
+                      onClick={() => { setHistoryTaskId(taskDetail.id); setHistoryOpen(true); }}
+                    >
+                      <History className="h-3.5 w-3.5 mr-1.5" />
+                      View History
+                    </Button>
+                  </div>
                 </div>
 
-                {/* Reassign */}
-                <div className={`flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 ${taskDetail.status === 'closed' ? 'opacity-50 pointer-events-none' : ''}`}>
-                  <span className="text-sm font-medium flex items-center gap-1.5">
-                    <UserRoundPlus className="h-3.5 w-3.5" />
-                    Reassign To:
-                    {taskDetail.status === 'closed' && <span className="text-xs text-muted-foreground ml-1">(Closed)</span>}
-                  </span>
-                  <SearchableSelect
-                    value={reassignTo}
-                    onValueChange={setReassignTo}
-                    options={(companyEmployees ?? [])
-                      .filter((emp: any) => emp._type !== 'admin')
-                      .map((emp) => ({ value: String(emp.id), label: emp.empName }))}
-                    placeholder="Select employee..."
-                    disabled={taskDetail.status === 'closed'}
-                    className="w-full sm:w-52"
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={!reassignTo || reassignMut.isPending || taskDetail.status === 'closed'}
-                    onClick={() => reassignMut.mutate({ taskId: taskDetail.id, assigneeId: Number(reassignTo) })}
-                  >
-                    {reassignMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Reassign'}
-                  </Button>
-                </div>
-
-                {/* History button */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-fit"
-                  onClick={() => { setHistoryTaskId(taskDetail.id); setHistoryOpen(true); }}
-                >
-                  <History className="h-4 w-4 mr-1.5" />
-                  View History
-                </Button>
-
-                {/* Comments list */}
-                <div className="border-t pt-3">
-                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
-                    <MessageSquare className="h-4 w-4" />
+                {/* ── Comments ─────────────────────────────────────────────── */}
+                <div>
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                    <MessageSquare className="h-3.5 w-3.5" />
                     Comments ({taskDetail.comments?.length ?? 0})
                   </h4>
-                  <div className="space-y-2">
-                    {(taskDetail.comments ?? []).map((c: ProjectTaskComment) => (
-                      <div key={c.id} className="rounded-md border p-2.5 text-sm">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-medium text-foreground">{(c as any).authorName ?? c.authorType}</span>
-                          <Badge variant="outline" className="text-[10px] capitalize">{c.authorType}</Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(c.createdAt).toLocaleString()}
-                          </span>
+                  {(taskDetail.comments ?? []).length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-4">No comments yet. Start the conversation below.</p>
+                  ) : (
+                    <div className="space-y-2.5">
+                      {(taskDetail.comments ?? []).map((c: ProjectTaskComment) => (
+                        <div key={c.id} className="rounded-lg border bg-card p-3 text-sm shadow-sm">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <div className="h-6 w-6 rounded-full bg-linear-to-br from-violet-500 to-indigo-500 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
+                              {((c as any).authorName ?? c.authorType).charAt(0).toUpperCase()}
+                            </div>
+                            <span className="text-xs font-semibold text-foreground">{(c as any).authorName ?? c.authorType}</span>
+                            <Badge variant="outline" className="text-[10px] capitalize">{c.authorType}</Badge>
+                            <span className="text-[10px] text-muted-foreground ml-auto">
+                              {formatCommentTime(c.createdAt)}
+                              {' · '}
+                              {timeAgo(c.createdAt)}
+                            </span>
+                          </div>
+                          <p className="text-foreground leading-relaxed pl-8">{renderMentions(c.content)}</p>
                         </div>
-                        <p className="text-foreground">{c.content}</p>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Fixed comment input at bottom */}
-              <div className="border-t pt-3 flex gap-2 shrink-0">
-                <Textarea
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  placeholder="Add a comment..."
-                  rows={2}
-                  className="flex-1"
-                />
-                <Button
-                  size="sm"
-                  className="self-end"
-                  disabled={!commentText.trim() || addCommentMut.isPending}
-                  onClick={() => addCommentMut.mutate(commentText.trim())}
-                >
-                  {addCommentMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send'}
-                </Button>
+              {/* ── Footer: comment input ────────────────────────────────── */}
+              <div className="border-t bg-muted/20 px-5 py-3 shrink-0">
+                <div className="flex flex-col gap-2">
+                  <MentionTextarea
+                    value={commentText}
+                    onChange={setCommentText}
+                    onMentionAdded={(emp) => setTaggedMentions((prev) => [...prev, emp])}
+                    employees={(companyEmployees ?? []).filter((e: any) => e._type !== 'admin').map((e) => ({ id: e.id, empName: e.empName }))}
+                    placeholder="Add a comment… type @ to mention someone"
+                    rows={2}
+                  />
+                  <Button
+                    className="w-full bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white"
+                    disabled={!commentText.trim() || addCommentMut.isPending}
+                    onClick={() => {
+                      const content = buildMentionContent(commentText, taggedMentions).trim();
+                      addCommentMut.mutate(content);
+                    }}
+                  >
+                    {addCommentMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send Comment'}
+                  </Button>
+                </div>
               </div>
             </>
           ) : null}
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Close → Assign to Admin Dialog ─────────────────────────────── */}
-      <Dialog open={closeDialogOpen} onOpenChange={(open) => { if (!open) { setCloseDialogOpen(false); setCloseTaskId(null); setSelectedAdminId(''); } }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Assign Closed Ticket to Admin</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground mb-3">
-            Select which admin this ticket should be assigned to after closing.
-          </p>
-          <Select value={selectedAdminId || undefined} onValueChange={setSelectedAdminId}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select an admin..." />
-            </SelectTrigger>
-            <SelectContent>
-              {(companyAdmins ?? []).map((admin: { id: number; name: string; email: string }) => (
-                <SelectItem key={admin.id} value={String(admin.id)}>
-                  {admin.name} ({admin.email})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => { setCloseDialogOpen(false); setCloseTaskId(null); setSelectedAdminId(''); }}>
-              Cancel
-            </Button>
-            <Button
-              disabled={!selectedAdminId || updateStatusMut.isPending}
-              onClick={() => {
-                if (closeTaskId && selectedAdminId) {
-                  updateStatusMut.mutate({
-                    taskId: closeTaskId,
-                    status: 'closed' as ProjectTaskStatus,
-                    assignToAdminId: Number(selectedAdminId),
-                  });
-                }
-              }}
-            >
-              {updateStatusMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Close Ticket
-            </Button>
-          </div>
         </DialogContent>
       </Dialog>
 
@@ -716,7 +786,7 @@ export default function FullTicketsPage() {
                           {h.action.replace(/_/g, ' ')}
                         </span>
                         <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                          {new Date(h.createdAt).toLocaleString()}
+                          {new Date(h.createdAt).toLocaleString('en-IN', { timeZone: 'UTC' })}
                         </span>
                       </div>
                       <p className="text-sm text-muted-foreground">{h.details}</p>
