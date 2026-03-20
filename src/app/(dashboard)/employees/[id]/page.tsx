@@ -1,6 +1,6 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ArrowLeft, Mail, Phone } from 'lucide-react';
@@ -49,18 +49,24 @@ function DetailRow({ label, value, highlight }: { label: string; value?: string 
 
 export default function EmployeeDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { user } = useAuth();
   const isEmployee = user?._type === 'employee';
   const isAdmin = user?._type !== 'employee';
+  const targetType = searchParams.get('type') ?? 'employee'; // 'admin' or 'employee'
 
   const { data: emp, isLoading } = useQuery({
-    queryKey: ['employee-detail', id],
-    queryFn: () =>
-      (isEmployee
+    queryKey: ['employee-detail', id, targetType],
+    queryFn: () => {
+      if (targetType === 'admin' && isAdmin) {
+        return employeesApi.getAdmin(Number(id)).then((r) => r.data.data);
+      }
+      return (isEmployee
         ? employeesApi.employeeGetOne(Number(id))
         : employeesApi.getOne(Number(id))
-      ).then((r) => r.data.data),
+      ).then((r) => r.data.data);
+    },
     enabled: !!id,
   });
 

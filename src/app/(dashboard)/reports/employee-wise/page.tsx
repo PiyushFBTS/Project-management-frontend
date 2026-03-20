@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Download, Search, BarChart3 } from 'lucide-react';
+import Link from 'next/link';
+import { Download, Search, BarChart3, Ticket, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { reportsApi } from '@/lib/api/reports';
 import { downloadBlob } from '@/lib/utils/download';
@@ -12,11 +13,25 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
+  Dialog, DialogContent, DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+
+const statusColors: Record<string, string> = {
+  todo: 'bg-slate-500/15 text-slate-600',
+  in_progress: 'bg-blue-500/15 text-blue-600',
+  in_review: 'bg-amber-500/15 text-amber-600',
+  done: 'bg-emerald-500/15 text-emerald-600',
+  closed: 'bg-purple-500/15 text-purple-600',
+};
+const statusLabels: Record<string, string> = {
+  todo: 'To Do', in_progress: 'In Progress', in_review: 'In Review', done: 'Done', closed: 'Closed',
+};
 
 const monthStart = format(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'yyyy-MM-dd');
 const today = format(new Date(), 'yyyy-MM-dd');
@@ -42,6 +57,11 @@ export default function EmployeeWiseReportPage() {
   const [autoFetch, setAutoFetch] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
+  // Ticket list dialog
+  const [ticketEmpId, setTicketEmpId] = useState<number | null>(null);
+  const [ticketEmpName, setTicketEmpName] = useState('');
+  const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
+
   const { data, isLoading } = useQuery({
     queryKey: ['report-emp-wise', fromDate, toDate, consultantType, isEmployee],
     queryFn: () =>
@@ -50,6 +70,12 @@ export default function EmployeeWiseReportPage() {
         : reportsApi.getEmployeeWise(fromDate, toDate, consultantType || undefined)
       ).then((r) => r.data.data),
     enabled: autoFetch,
+  });
+
+  const { data: empTickets, isLoading: ticketsLoading } = useQuery({
+    queryKey: ['employee-contributed-tickets', ticketEmpId],
+    queryFn: () => reportsApi.getEmployeeTickets(ticketEmpId!).then((r: any) => r.data?.data ?? r.data),
+    enabled: !!ticketEmpId && ticketDialogOpen,
   });
 
   const handleExport = async () => {
@@ -134,8 +160,8 @@ export default function EmployeeWiseReportPage() {
                 <TableHead>Project</TableHead>
                 <TableHead className="text-right">Days Filled</TableHead>
                 <TableHead className="text-right">Total Hours</TableHead>
-                <TableHead className="text-right">Man-Days</TableHead>
                 <TableHead className="text-right">Avg Hrs/Day</TableHead>
+                <TableHead className="text-right">Ticket Count</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -145,22 +171,78 @@ export default function EmployeeWiseReportPage() {
                       {[...Array(8)].map((__, j) => <TableCell key={j}><Skeleton className="h-5 w-16" /></TableCell>)}
                     </TableRow>
                   ))
-                : (data ?? []).map((row) => (
+                : (data ?? []).map((row: any) => (
                     <TableRow key={row.id}>
                       <TableCell className="font-mono text-xs">{row.emp_code}</TableCell>
-                      <TableCell className="font-medium">{row.emp_name}</TableCell>
+                      <TableCell className="font-medium">
+                        <Link href={`/employees/${row.id}?type=employee`} className="text-violet-600 dark:text-violet-400 hover:underline">
+                          {row.emp_name}
+                        </Link>
+                      </TableCell>
                       <TableCell className="text-xs">{typeLabels[row.consultant_type] ?? row.consultant_type}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{row.assigned_project ?? '—'}</TableCell>
                       <TableCell className="text-right">{row.days_filled}</TableCell>
                       <TableCell className="text-right">{Number(row.total_hours).toFixed(1)}</TableCell>
-                      <TableCell className="text-right font-medium">{Number(row.total_man_days).toFixed(2)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{Number(row.avg_hours_per_day).toFixed(2)}</TableCell>
+                      <TableCell className="text-right">
+                        <button
+                          className="font-medium text-violet-600 dark:text-violet-400 hover:underline cursor-pointer"
+                          onClick={() => { setTicketEmpId(row.id); setTicketEmpName(row.emp_name); setTicketDialogOpen(true); }}
+                        >
+                          {Number(row.ticket_count ?? 0).toFixed(2)}
+                        </button>
+                      </TableCell>
                     </TableRow>
                   ))}
             </TableBody>
           </Table>
         </div>
       )}
+
+      {/* ── Ticket List Dialog ──────────────────────────────────────── */}
+      <Dialog open={ticketDialogOpen} onOpenChange={(open) => { if (!open) { setTicketDialogOpen(false); setTicketEmpId(null); } }}>
+        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col gap-0 p-0">
+          <div className="bg-linear-to-r from-violet-600 to-indigo-600 px-5 py-4 text-white rounded-t-lg">
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Ticket className="h-4 w-4" />
+              Contributed Tickets
+            </DialogTitle>
+            <p className="text-sm text-white/70 mt-0.5">{ticketEmpName}</p>
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0 p-4">
+            {ticketsLoading ? (
+              <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+            ) : !empTickets || (empTickets as any[]).length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No contributed tickets found.</p>
+            ) : (
+              <div className="space-y-2">
+                {(empTickets as any[]).map((t: any) => (
+                  <div key={t.id} className="rounded-lg border p-3 hover:bg-accent/30 transition-colors">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-xs font-mono font-semibold text-violet-600 dark:text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded shrink-0">
+                          {t.ticket_number ?? `#${t.id}`}
+                        </span>
+                        <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium shrink-0 ${statusColors[t.status] ?? ''}`}>
+                          {statusLabels[t.status] ?? t.status}
+                        </span>
+                      </div>
+                      <span className="text-xs font-semibold text-violet-600 dark:text-violet-400 shrink-0">
+                        Share: {t.weighted_share}
+                      </span>
+                    </div>
+                    <p className="text-sm font-medium truncate">{t.title}</p>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                      <span>{t.project_name ?? '—'}</span>
+                      <span>{t.contributor_count} contributor{t.contributor_count > 1 ? 's' : ''}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -12,9 +12,10 @@ import {
   Plus, Pencil, Trash2, Loader2, ChevronDown, ChevronRight,
   MessageSquare, Calendar, Clock, User, Target, Zap, History,
 } from 'lucide-react';
-import { projectPlanningApi } from '@/lib/api/project-planning';
+import { projectPlanningApi, employeePlanningApi } from '@/lib/api/project-planning';
 import { projectsApi } from '@/lib/api/projects';
 import { employeesApi } from '@/lib/api/employees';
+import { useAuth } from '@/providers/auth-provider';
 import {
   ProjectPhase, ProjectTask, ProjectTaskComment, ProjectTaskHistory,
   CreatePhaseDto, CreateTaskDto, UpdateTaskDto,
@@ -101,6 +102,11 @@ export default function ProjectPlanningPage() {
   const params = useParams();
   const projectId = Number(params.id);
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?._type === 'admin';
+
+  // Pick the correct API based on user role
+  const planApi = isAdmin ? projectPlanningApi : employeePlanningApi;
 
   // Dialogs
   const [phaseOpen, setPhaseOpen] = useState(false);
@@ -127,24 +133,30 @@ export default function ProjectPlanningPage() {
   // ── Queries ──────────────────────────────────────────────────────────────
 
   const { data: project } = useQuery({
-    queryKey: ['project', projectId],
-    queryFn: () => projectsApi.getOne(projectId).then((r) => r.data.data),
+    queryKey: ['project', projectId, isAdmin],
+    queryFn: async () => {
+      if (isAdmin) return projectsApi.getOne(projectId).then((r) => r.data.data);
+      // Employee: get from the project list
+      const r = await projectsApi.employeeGetAll();
+      const list = r.data.data as any[];
+      return (Array.isArray(list) ? list : []).find((p: any) => p.id === projectId) ?? null;
+    },
   });
 
   const { data: summary } = useQuery({
     queryKey: ['planning-summary', projectId],
-    queryFn: () => projectPlanningApi.getSummary(projectId).then((r) => r.data.data),
+    queryFn: () => planApi.getSummary(projectId).then((r) => r.data.data),
   });
 
   const { data: phases, isLoading: phasesLoading } = useQuery({
     queryKey: ['planning-phases', projectId],
-    queryFn: () => projectPlanningApi.getPhases(projectId).then((r) => r.data.data),
+    queryFn: () => planApi.getPhases(projectId).then((r) => r.data.data),
   });
 
   const { data: tasksData, isLoading: tasksLoading, error: tasksError } = useQuery({
     queryKey: ['planning-tasks', projectId, statusFilter, priorityFilter],
     queryFn: async () => {
-      const r = await projectPlanningApi.getTasks(projectId, {
+      const r = await planApi.getTasks(projectId, {
         limit: 100,
         ...(statusFilter !== 'all' ? { status: statusFilter as ProjectTaskStatus } : {}),
         ...(priorityFilter !== 'all' ? { priority: priorityFilter as TaskPriority } : {}),
@@ -155,9 +167,10 @@ export default function ProjectPlanningPage() {
   });
 
   const { data: employees, error: employeesError } = useQuery({
-    queryKey: ['all-employees'],
+    queryKey: ['all-employees', isAdmin],
     queryFn: async () => {
-      const r = await employeesApi.getAll({ isActive: true, limit: 100 });
+      const fn = isAdmin ? employeesApi.getAll : employeesApi.employeeGetAll;
+      const r = await fn({ isActive: true, limit: 100 });
       const d: any = r.data?.data;
       const list = (Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : []) as any[];
       return list.filter((e) => e._type !== 'admin') as Employee[];
@@ -186,7 +199,7 @@ export default function ProjectPlanningPage() {
   const phaseForm = useForm<PhaseForm>({ resolver: zodResolver(phaseSchema) });
 
   const createPhaseMut = useMutation({
-    mutationFn: (dto: CreatePhaseDto) => projectPlanningApi.createPhase(projectId, dto),
+    mutationFn: (dto: CreatePhaseDto) => planApi.createPhase(projectId, dto),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['planning-phases', projectId] });
       qc.invalidateQueries({ queryKey: ['planning-summary', projectId] });
@@ -199,7 +212,7 @@ export default function ProjectPlanningPage() {
 
   const updatePhaseMut = useMutation({
     mutationFn: ({ id, dto }: { id: number; dto: Partial<CreatePhaseDto> }) =>
-      projectPlanningApi.updatePhase(projectId, id, dto),
+      planApi.updatePhase(projectId, id, dto),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['planning-phases', projectId] });
       qc.invalidateQueries({ queryKey: ['planning-summary', projectId] });
@@ -211,7 +224,7 @@ export default function ProjectPlanningPage() {
   });
 
   const deletePhaseMut = useMutation({
-    mutationFn: (phaseId: number) => projectPlanningApi.deletePhase(projectId, phaseId),
+    mutationFn: (phaseId: number) => planApi.deletePhase(projectId, phaseId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['planning-phases', projectId] });
       qc.invalidateQueries({ queryKey: ['planning-tasks', projectId] });
@@ -232,7 +245,7 @@ export default function ProjectPlanningPage() {
   const quickSetupMut = useMutation({
     mutationFn: async () => {
       for (const phase of defaultPhases) {
-        await projectPlanningApi.createPhase(projectId, { ...phase, status: 'not_started' });
+        await planApi.createPhase(projectId, { ...phase, status: 'not_started' });
       }
     },
     onSuccess: () => {
@@ -275,7 +288,7 @@ export default function ProjectPlanningPage() {
   const taskForm = useForm<TaskForm>({ resolver: zodResolver(taskSchema) });
 
   const createTaskMut = useMutation({
-    mutationFn: (dto: CreateTaskDto) => projectPlanningApi.createTask(projectId, dto),
+    mutationFn: (dto: CreateTaskDto) => planApi.createTask(projectId, dto),
     onSuccess: async () => {
       await qc.refetchQueries({ queryKey: ['planning-tasks', projectId] });
       await qc.refetchQueries({ queryKey: ['planning-summary', projectId] });
@@ -289,7 +302,7 @@ export default function ProjectPlanningPage() {
 
   const updateTaskMut = useMutation({
     mutationFn: ({ id, dto }: { id: number; dto: UpdateTaskDto }) =>
-      projectPlanningApi.updateTask(projectId, id, dto),
+      planApi.updateTask(projectId, id, dto),
     onSuccess: async () => {
       await qc.refetchQueries({ queryKey: ['planning-tasks', projectId] });
       await qc.refetchQueries({ queryKey: ['planning-summary', projectId] });
@@ -302,7 +315,7 @@ export default function ProjectPlanningPage() {
   });
 
   const deleteTaskMut = useMutation({
-    mutationFn: (taskId: number) => projectPlanningApi.deleteTask(projectId, taskId),
+    mutationFn: (taskId: number) => planApi.deleteTask(projectId, taskId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['planning-tasks', projectId] });
       qc.invalidateQueries({ queryKey: ['planning-summary', projectId] });
@@ -364,13 +377,13 @@ export default function ProjectPlanningPage() {
 
   const { data: taskDetail, isLoading: detailLoading } = useQuery({
     queryKey: ['task-detail', detailTask?.id],
-    queryFn: () => projectPlanningApi.getTask(projectId, detailTask!.id).then((r) => r.data.data),
+    queryFn: () => planApi.getTask(projectId, detailTask!.id).then((r) => r.data.data),
     enabled: !!detailTask,
   });
 
   const addCommentMut = useMutation({
     mutationFn: (content: string) =>
-      projectPlanningApi.addComment(projectId, detailTask!.id, { content }),
+      planApi.addComment(projectId, detailTask!.id, { content }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['task-detail', detailTask?.id] });
       setCommentText('');
@@ -382,7 +395,7 @@ export default function ProjectPlanningPage() {
   // ── Task history ────────────────────────────────────────────────────
   const { data: historyData, isLoading: historyLoading } = useQuery({
     queryKey: ['task-history', historyTaskId],
-    queryFn: () => projectPlanningApi.getHistory(projectId, historyTaskId!).then((r) => r.data.data),
+    queryFn: () => planApi.getHistory(projectId, historyTaskId!).then((r) => r.data.data),
     enabled: !!historyTaskId && historyOpen,
   });
 

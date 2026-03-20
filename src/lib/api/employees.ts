@@ -8,6 +8,8 @@ export const employeesApi = {
 
   getOne: (id: number) => api.get<ApiResponse<Employee>>(`/employees/${id}`),
 
+  getAdmin: (id: number) => api.get<ApiResponse<Employee>>(`/employees/admin/${id}`),
+
   getByType: (type: ConsultantType) =>
     api.get<ApiResponse<Employee[]>>(`/employees/by-type/${type}`),
 

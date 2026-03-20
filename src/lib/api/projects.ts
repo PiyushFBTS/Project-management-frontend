@@ -22,4 +22,39 @@ export const projectsApi = {
   // Employee: only projects where employee has assigned tickets
   employeeGetAll: () =>
     api.get<ApiResponse<Project[]>>('/employee/projects'),
+
+  employeeGetOne: (id: number) =>
+    api.get<ApiResponse<Project>>(`/employee/projects/${id}`),
+
+  // Documents (admin)
+  getDocuments: (projectId: number) =>
+    api.get(`/projects/${projectId}/documents`),
+
+  uploadDocument: (projectId: number, file: File, category: string) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('category', category);
+    return api.post(`/projects/${projectId}/documents`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  deleteDocument: (projectId: number, docId: number) =>
+    api.delete(`/projects/${projectId}/documents/${docId}`),
+
+  // Documents (employee)
+  employeeGetDocuments: (projectId: number) =>
+    api.get(`/employee/projects/${projectId}/documents`),
+
+  employeeUploadDocument: (projectId: number, file: File, category: string) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('category', category);
+    return api.post(`/employee/projects/${projectId}/documents`, fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  employeeDeleteDocument: (projectId: number, docId: number) =>
+    api.delete(`/employee/projects/${projectId}/documents/${docId}`),
 };

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
+import Link from 'next/link';
 import { Search, CheckCircle2, XCircle, BarChart3, Users as UsersIcon } from 'lucide-react';
 import { reportsApi } from '@/lib/api/reports';
 import { useAuth } from '@/providers/auth-provider';
@@ -153,7 +154,11 @@ export default function DailyFillReportPage() {
                   : (data?.rows ?? []).map((row) => (
                       <TableRow key={row.id} className={row.is_filled ? '' : 'bg-red-50/50'}>
                         <TableCell className="font-mono text-xs">{row.emp_code}</TableCell>
-                        <TableCell className="font-medium">{row.emp_name}</TableCell>
+                        <TableCell className="font-medium">
+                          <Link href={`/employees/${row.id}?type=employee`} className="text-violet-600 dark:text-violet-400 hover:underline">
+                            {row.emp_name}
+                          </Link>
+                        </TableCell>
                         <TableCell className="text-xs text-slate-600">
                           {typeLabels[row.consultant_type] ?? row.consultant_type}
                         </TableCell>

@@ -1,6 +1,9 @@
+/* eslint-disable react-hooks/rules-of-hooks */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
 import { CalendarClock, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { reportsApi } from '@/lib/api/reports';
 import { useAuth } from '@/providers/auth-provider';
@@ -24,10 +27,6 @@ function formatDate(dateStr: string | null): string {
   return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
-function formatDateTime(dateStr: string | null): string {
-  if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'UTC' });
-}
 
 export default function LastFilledReportPage() {
   const { user, isLoading: authLoading } = useAuth();
@@ -115,21 +114,19 @@ export default function LastFilledReportPage() {
               <TableHead>Type</TableHead>
               <TableHead>Project</TableHead>
               <TableHead>Last Filled Date</TableHead>
-              <TableHead>Last Submitted At</TableHead>
-              <TableHead className="text-right">Hours</TableHead>
               <TableHead className="text-right">Days Ago</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading
-              ? [...Array(8)].map((_, i) => (
+              ? [...Array(6)].map((_, i) => (
                 <TableRow key={i}>
-                  {[...Array(8)].map((__, j) => <TableCell key={j}><Skeleton className="h-5 w-16" /></TableCell>)}
+                  {[...Array(6)].map((__, j) => <TableCell key={j}><Skeleton className="h-5 w-16" /></TableCell>)}
                 </TableRow>
               ))
               : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-32 text-center">
+                  <TableCell colSpan={6} className="h-32 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <CalendarClock className="h-8 w-8 text-muted-foreground/40" />
                       <p className="text-sm text-muted-foreground">No employee data found</p>
@@ -146,7 +143,11 @@ export default function LastFilledReportPage() {
                   return (
                     <TableRow key={row.id} className={notFilledThisMonth ? 'bg-red-50/50 dark:bg-red-950/10' : isOverdue ? 'bg-amber-50/50 dark:bg-amber-950/10' : ''}>
                       <TableCell className="font-mono text-xs">{row.emp_code}</TableCell>
-                      <TableCell className="font-medium">{row.emp_name}</TableCell>
+                      <TableCell className="font-medium">
+                        <Link href={`/employees/${row.id}?type=employee`} className="text-violet-600 dark:text-violet-400 hover:underline">
+                          {row.emp_name}
+                        </Link>
+                      </TableCell>
                       <TableCell className="text-xs text-slate-600 dark:text-slate-400">
                         {typeLabels[row.consultant_type] ?? row.consultant_type}
                       </TableCell>
@@ -157,12 +158,6 @@ export default function LastFilledReportPage() {
                         ) : (
                           <span className="text-sm">{formatDate(row.last_filled_date)}</span>
                         )}
-                      </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {formatDateTime(row.last_submitted_at)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {row.last_filled_hours !== null ? `${Number(row.last_filled_hours).toFixed(1)}h` : '—'}
                       </TableCell>
                       <TableCell className="text-right">
                         {notFilledThisMonth ? (

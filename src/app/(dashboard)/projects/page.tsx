@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, Loader2, ClipboardList, FolderKanban, Search as SearchIcon, CheckCircle2 } from 'lucide-react';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
-import { format } from 'date-fns';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { projectsApi } from '@/lib/api/projects';
 import { useAuth } from '@/providers/auth-provider';
@@ -205,16 +205,14 @@ export default function ProjectsPage() {
               <TableHead>Type</TableHead>
               <TableHead>Client</TableHead>
               <TableHead>Manager</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Start Date</TableHead>
-              <TableHead className="w-20">{isEmployee ? '' : 'Actions'}</TableHead>
+              <TableHead className="w-20">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading
               ? [...Array(5)].map((_, i) => (
                   <TableRow key={i}>
-                    {[...Array(7)].map((__, j) => (
+                    {[...Array(6)].map((__, j) => (
                       <TableCell key={j}><Skeleton className="h-5 w-24" /></TableCell>
                     ))}
                   </TableRow>
@@ -222,7 +220,11 @@ export default function ProjectsPage() {
               : (data ?? []).map((p) => (
                   <TableRow key={p.id}>
                     <TableCell className="font-mono text-xs">{p.projectCode}</TableCell>
-                    <TableCell className="font-medium">{p.projectName}</TableCell>
+                    <TableCell className="font-medium">
+                      <Link href={`/projects/${p.id}`} className="text-violet-600 dark:text-violet-400 hover:underline">
+                        {p.projectName}
+                      </Link>
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="capitalize">{p.projectType}</Badge>
                     </TableCell>
@@ -230,12 +232,6 @@ export default function ProjectsPage() {
                     <TableCell className="text-slate-600 text-sm">
                       {p.projectManager ? p.projectManager.empName : <span className="text-muted-foreground">—</span>}
                     </TableCell>
-                    <TableCell>
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${statusColors[p.status]}`}>
-                        {p.status}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-slate-600">{p.startDate?.slice(0, 10)}</TableCell>
                     <TableCell>
                       <div className="flex gap-1">
                         <Button

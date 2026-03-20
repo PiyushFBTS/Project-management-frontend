@@ -25,6 +25,9 @@ export const reportsApi = {
       responseType: 'blob',
     }),
 
+  getEmployeeTickets: (employeeId: number) =>
+    api.get(`/admin/reports/employee/${employeeId}/tickets`),
+
   getLastFilled: () =>
     api.get<ApiResponse<LastFilledRow[]>>('/admin/reports/last-filled'),
 

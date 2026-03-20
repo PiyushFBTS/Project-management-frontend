@@ -70,6 +70,56 @@ export const projectPlanningApi = {
     api.post<ApiResponse<ProjectTaskComment>>(`/projects/${projectId}/planning/tasks/${taskId}/comments`, dto),
 };
 
+// ── Employee: Project Planning ───────────────────────────────────────────────
+
+export const employeePlanningApi = {
+  getSummary: (projectId: number) =>
+    api.get<ApiResponse<ProjectSummary>>(`/employee/projects/${projectId}/planning/summary`),
+
+  getPhases: (projectId: number) =>
+    api.get<ApiResponse<ProjectPhase[]>>(`/employee/projects/${projectId}/planning/phases`),
+
+  createPhase: (projectId: number, dto: CreatePhaseDto) =>
+    api.post<ApiResponse<ProjectPhase>>(`/employee/projects/${projectId}/planning/phases`, dto),
+
+  updatePhase: (projectId: number, phaseId: number, dto: UpdatePhaseDto) =>
+    api.patch<ApiResponse<ProjectPhase>>(`/employee/projects/${projectId}/planning/phases/${phaseId}`, dto),
+
+  deletePhase: (projectId: number, phaseId: number) =>
+    api.delete<ApiResponse<null>>(`/employee/projects/${projectId}/planning/phases/${phaseId}`),
+
+  reorderPhases: (projectId: number, phaseIds: number[]) =>
+    api.put<ApiResponse<null>>(`/employee/projects/${projectId}/planning/phases/reorder`, { phaseIds }),
+
+  getTasks: (projectId: number, params?: {
+    page?: number;
+    limit?: number;
+    status?: ProjectTaskStatus;
+    priority?: TaskPriority;
+    assigneeId?: number;
+    phaseId?: number;
+  }) =>
+    api.get<ApiResponse<ProjectTask[]>>(`/employee/projects/${projectId}/planning/tasks`, { params }),
+
+  createTask: (projectId: number, dto: CreateTaskDto) =>
+    api.post<ApiResponse<ProjectTask>>(`/employee/projects/${projectId}/planning/tasks`, dto),
+
+  getTask: (projectId: number, taskId: number) =>
+    api.get<ApiResponse<ProjectTask>>(`/employee/projects/${projectId}/planning/tasks/${taskId}`),
+
+  updateTask: (projectId: number, taskId: number, dto: UpdateTaskDto) =>
+    api.patch<ApiResponse<ProjectTask>>(`/employee/projects/${projectId}/planning/tasks/${taskId}`, dto),
+
+  deleteTask: (projectId: number, taskId: number) =>
+    api.delete<ApiResponse<null>>(`/employee/projects/${projectId}/planning/tasks/${taskId}`),
+
+  getHistory: (projectId: number, taskId: number) =>
+    api.get<ApiResponse<ProjectTaskHistory[]>>(`/employee/projects/${projectId}/planning/tasks/${taskId}/history`),
+
+  addComment: (projectId: number, taskId: number, dto: CreateCommentDto) =>
+    api.post<ApiResponse<ProjectTaskComment>>(`/employee/projects/${projectId}/planning/tasks/${taskId}/comments`, dto),
+};
+
 // ── Employee: My Tasks ───────────────────────────────────────────────────────
 
 export const myTasksApi = {
@@ -152,6 +202,15 @@ export const adminTicketsApi = {
 
   addComment: (taskId: number, dto: CreateCommentDto) =>
     api.post<ApiResponse<ProjectTaskComment>>(`/admin/all-tickets/${taskId}/comments`, dto),
+
+  getSuggestedContributors: (taskId: number) =>
+    api.get(`/admin/all-tickets/${taskId}/contributors/suggested`),
+
+  getContributors: (taskId: number) =>
+    api.get(`/admin/all-tickets/${taskId}/contributors`),
+
+  setContributors: (taskId: number, employeeIds: number[]) =>
+    api.post(`/admin/all-tickets/${taskId}/contributors`, { employeeIds }),
 };
 
 // ── Employee: All Project Tickets ───────────────────────────────────────────
@@ -187,4 +246,13 @@ export const projectTicketsApi = {
 
   addComment: (taskId: number, dto: CreateCommentDto) =>
     api.post<ApiResponse<ProjectTaskComment>>(`/employee/project-tickets/${taskId}/comments`, dto),
+
+  getSuggestedContributors: (taskId: number) =>
+    api.get(`/employee/project-tickets/${taskId}/contributors/suggested`),
+
+  getContributors: (taskId: number) =>
+    api.get(`/employee/project-tickets/${taskId}/contributors`),
+
+  setContributors: (taskId: number, employeeIds: number[]) =>
+    api.post(`/employee/project-tickets/${taskId}/contributors`, { employeeIds }),
 };

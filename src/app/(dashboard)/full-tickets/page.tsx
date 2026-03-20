@@ -114,6 +114,15 @@ export default function FullTicketsPage() {
   const [historyTaskId, setHistoryTaskId] = useState<number | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
 
+  // Contributors dialog (shown when closing a ticket)
+  const [contributorsOpen, setContributorsOpen] = useState(false);
+  const [closingTaskId, setClosingTaskId] = useState<number | null>(null);
+  const [selectedContributors, setSelectedContributors] = useState<number[]>([]);
+
+  // View Contributors dialog (for closed tickets)
+  const [contributorsViewOpen, setContributorsViewOpen] = useState(false);
+  const [contributorsViewTaskId, setContributorsViewTaskId] = useState<number | null>(null);
+
   // ── Single source-of-truth query (all tickets, no filters) ──────────────
   // KPI counts AND table rows are both derived from this one array client-side.
 
@@ -226,7 +235,43 @@ export default function FullTicketsPage() {
   });
 
   const handleStatusChange = (taskId: number, newStatus: string) => {
+    if (newStatus === 'closed') {
+      // Open contributors dialog before closing
+      setClosingTaskId(taskId);
+      setSelectedContributors([]);
+      setContributorsOpen(true);
+      return;
+    }
     updateStatusMut.mutate({ taskId, status: newStatus as ProjectTaskStatus });
+  };
+
+  // ── Contributors (shown when closing a ticket) ───────────────────────────
+
+  const toggleContributor = (empId: number) => {
+    setSelectedContributors((prev) =>
+      prev.includes(empId) ? prev.filter((id) => id !== empId) : [...prev, empId],
+    );
+  };
+
+  const confirmCloseWithContributors = async () => {
+    if (!closingTaskId) return;
+    const taskId = closingTaskId;
+    const contribs = [...selectedContributors];
+    setContributorsOpen(false);
+    setClosingTaskId(null);
+
+    // Save contributors first, then close the ticket
+    if (contribs.length > 0) {
+      try {
+        const res = await ticketsApi.setContributors(taskId, contribs);
+        console.log('Contributors saved:', res.data);
+      } catch (err: any) {
+        console.error('Failed to save contributors:', err?.response?.data ?? err);
+        toast.error(err?.response?.data?.message ?? 'Failed to save contributors');
+      }
+    }
+
+    updateStatusMut.mutate({ taskId, status: 'closed' as ProjectTaskStatus });
   };
 
   // ── Task detail ──────────────────────────────────────────────────────────
@@ -235,6 +280,13 @@ export default function FullTicketsPage() {
     queryKey: ['project-ticket-detail', detailTask?.id],
     queryFn: () => ticketsApi.getOne(detailTask!.id).then((r) => r.data.data),
     enabled: !!detailTask,
+  });
+
+  // Contributors for the view dialog
+  const { data: viewContributors, isLoading: viewContribLoading } = useQuery({
+    queryKey: ['ticket-contributors', contributorsViewTaskId],
+    queryFn: () => ticketsApi.getContributors(contributorsViewTaskId!).then((r: any) => r.data?.data ?? r.data),
+    enabled: !!contributorsViewTaskId && contributorsViewOpen,
   });
 
   const addCommentMut = useMutation({
@@ -254,6 +306,7 @@ export default function FullTicketsPage() {
     queryFn: () => ticketsApi.getHistory(historyTaskId!).then((r) => r.data.data),
     enabled: !!historyTaskId && historyOpen,
   });
+  console.log("historyData",historyData)
 
   // ── Employees list for reassign ─────────────────────────────────────
   const { data: companyEmployees } = useQuery({
@@ -264,7 +317,35 @@ export default function FullTicketsPage() {
     },
   });
   console.log("companyEmployees",companyEmployees);
-  
+
+  // Fetch history for the ticket being closed (to filter contributors)
+  const { data: closingHistory } = useQuery({
+    queryKey: ['task-history', closingTaskId],
+    queryFn: () => ticketsApi.getHistory(closingTaskId!).then((r) => r.data.data),
+    enabled: !!closingTaskId && contributorsOpen,
+  });
+
+  // Only show employees whose names appear in the ticket's assign/reassign history
+  const contributorEmployeeList = (() => {
+    const allEmps = (companyEmployees ?? [])
+      .filter((e: any) => e._type !== 'admin')
+      .filter((e, i, arr) => arr.findIndex((x) => x.id === e.id) === i);
+
+    if (!closingHistory || !Array.isArray(closingHistory)) return allEmps;
+
+    // Collect all names from assigned/reassigned history entries
+    const historyNames = new Set<string>();
+    for (const h of closingHistory) {
+      if (h.action === 'assigned' || h.action === 'reassigned') {
+        if (h.oldValue && h.oldValue !== 'Unassigned') historyNames.add(h.oldValue);
+        if (h.newValue && h.newValue !== 'Unassigned') historyNames.add(h.newValue);
+      }
+    }
+
+    if (historyNames.size === 0) return allEmps;
+
+    return allEmps.filter((e) => historyNames.has(e.empName));
+  })();
 
   const reassignMut = useMutation({
     mutationFn: ({ taskId, assigneeId }: { taskId: number; assigneeId: number }) =>
@@ -409,6 +490,17 @@ export default function FullTicketsPage() {
             </SelectContent>
           </Select>
         </div>
+        {(statusFilter !== 'all' || priorityFilter !== 'all' || projectFilter !== 'all' || assigneeFilter !== 'all' || dueDateFilter !== 'all' || search) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="shrink-0 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+            onClick={() => { setStatusFilter('all'); setPriorityFilter('all'); setProjectFilter('all'); setAssigneeFilter('all'); setDueDateFilter('all'); setSearch(''); }}
+          >
+            <X className="h-3.5 w-3.5 mr-1" />
+            Clear Filters
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"
@@ -693,6 +785,19 @@ export default function FullTicketsPage() {
                   </div>
                 </div>
 
+                {/* ── View Contributors button (closed tickets) ────────── */}
+                {taskDetail.status === 'closed' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
+                    onClick={() => { setContributorsViewTaskId(taskDetail.id); setContributorsViewOpen(true); }}
+                  >
+                    <User className="h-3.5 w-3.5 mr-1.5" />
+                    View Contributors
+                  </Button>
+                )}
+
                 {/* ── Comments ─────────────────────────────────────────────── */}
                 <div>
                   <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
@@ -794,6 +899,90 @@ export default function FullTicketsPage() {
                         by <span className="font-medium text-foreground">{h.performedByName}</span>
                         <span className="ml-1 capitalize">({h.performedByType})</span>
                       </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Contributors Dialog (on close) ─────────────────────────────── */}
+      <Dialog open={contributorsOpen} onOpenChange={(open) => { if (!open) { setContributorsOpen(false); setClosingTaskId(null); } }}>
+        <DialogContent className="max-w-md max-h-[80vh] flex flex-col">
+          <DialogTitle className="flex items-center gap-2">
+            <User className="h-5 w-5 text-violet-500" />
+            Employees Who Worked on This Ticket
+          </DialogTitle>
+          <p className="text-xs text-muted-foreground -mt-1">Select the employees who actually contributed to this ticket before closing it.</p>
+
+          <div className="flex-1 overflow-y-auto min-h-0 space-y-1.5 py-2">
+            {contributorEmployeeList.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No employees found.</p>
+            ) : (
+              contributorEmployeeList.map((emp) => (
+                <label
+                  key={`contrib-${emp.id}`}
+                  className="flex items-center gap-3 rounded-lg border p-3 cursor-pointer hover:bg-accent/50 transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                    checked={selectedContributors.includes(emp.id)}
+                    onChange={() => toggleContributor(emp.id)}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{emp.empName}</p>
+                    <p className="text-xs text-muted-foreground">{emp.empCode}</p>
+                  </div>
+                </label>
+              ))
+            )}
+          </div>
+
+          <div className="flex gap-2 pt-2 border-t shrink-0">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => { setContributorsOpen(false); setClosingTaskId(null); }}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="flex-1 bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white"
+              disabled={updateStatusMut.isPending}
+              onClick={confirmCloseWithContributors}
+            >
+              {updateStatusMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
+              Close Ticket
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── View Contributors Dialog ───────────────────────────────── */}
+      <Dialog open={contributorsViewOpen} onOpenChange={(open) => { if (!open) { setContributorsViewOpen(false); setContributorsViewTaskId(null); } }}>
+        <DialogContent className="max-w-sm max-h-[70vh] flex flex-col">
+          <DialogTitle className="flex items-center gap-2">
+            <User className="h-5 w-5 text-indigo-500" />
+            Contributors
+          </DialogTitle>
+          <div className="flex-1 overflow-y-auto min-h-0 py-2">
+            {viewContribLoading ? (
+              <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+            ) : (viewContributors ?? []).length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No contributors recorded for this ticket.</p>
+            ) : (
+              <div className="space-y-2">
+                {(viewContributors ?? []).map((c: any) => (
+                  <div key={`view-contrib-${c.employeeId ?? c.id}`} className="flex items-center gap-3 rounded-lg border p-3">
+                    <div className="h-8 w-8 rounded-full bg-linear-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-sm font-bold text-white shrink-0">
+                      {(c.employee?.empName ?? '?').charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">{c.employee?.empName ?? `#${c.employeeId}`}</p>
+                      {c.employee?.empCode && <p className="text-xs text-muted-foreground">{c.employee.empCode}</p>}
                     </div>
                   </div>
                 ))}

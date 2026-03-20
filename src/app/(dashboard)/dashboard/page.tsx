@@ -78,7 +78,7 @@ const AVATAR_GRADIENTS = [
 
 function EventPersonCard({ event }: { event: TodayEvent }) {
   const gradient = AVATAR_GRADIENTS[event.id % AVATAR_GRADIENTS.length];
-  const href = event._type === 'employee' ? `/employees/${event.id}` : '#';
+  const href = event._type === 'employee' ? `/employees/${event.id}?type=employee` : '#';
   return (
     <Link href={href}>
       <div className="group flex flex-col items-center gap-1.5 cursor-pointer">

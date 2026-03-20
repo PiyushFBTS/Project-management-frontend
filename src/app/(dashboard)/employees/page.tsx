@@ -7,6 +7,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
+import Link from 'next/link';
 import { Plus, Pencil, Trash2, Loader2, FolderInput, Users, Search as SearchIcon } from 'lucide-react';
 import { employeesApi } from '@/lib/api/employees';
 import { projectsApi } from '@/lib/api/projects';
@@ -251,10 +252,6 @@ export default function EmployeesPage() {
               <TableHead>Code</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Project</TableHead>
-              <TableHead>Reports To</TableHead>
-              <TableHead>HR</TableHead>
               <TableHead>Active</TableHead>
               {isAdmin && <TableHead className="w-28">Actions</TableHead>}
             </TableRow>
@@ -263,7 +260,7 @@ export default function EmployeesPage() {
             {isLoading
               ? [...Array(5)].map((_, i) => (
                 <TableRow key={i}>
-                  {[...Array(isAdmin ? 9 : 8)].map((__, j) => (
+                  {[...Array(isAdmin ? 5 : 4)].map((__, j) => (
                     <TableCell key={j}><Skeleton className="h-5 w-20" /></TableCell>
                   ))}
                 </TableRow>
@@ -271,26 +268,12 @@ export default function EmployeesPage() {
               : (data ?? []).map((emp) => (
                 <TableRow key={`${(emp as any)._type === 'admin' ? 'admin' : 'emp'}-${emp.id}`}>
                   <TableCell className="font-mono text-xs">{emp.empCode}</TableCell>
-                  <TableCell className="font-medium">{emp.empName}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link href={`/employees/${emp.id}?type=${(emp as any)._type === 'admin' ? 'admin' : 'employee'}`} className="text-violet-600 dark:text-violet-400 hover:underline">
+                      {emp.empName}
+                    </Link>
+                  </TableCell>
                   <TableCell className="text-muted-foreground text-xs">{emp.email}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-xs">
-                      {typeLabels[emp.consultantType] ?? emp.consultantType}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-xs">
-                    {emp.assignedProject?.projectName ?? <span className="text-muted-foreground/60">—</span>}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-xs">
-                    {emp.reportsTo?.empName ?? <span className="text-muted-foreground/60">—</span>}
-                  </TableCell>
-                  <TableCell>
-                    {emp.isHr && (
-                      <Badge variant="outline" className="text-xs bg-violet-500/15 text-violet-600 ring-violet-500/30 border-0">
-                        HR
-                      </Badge>
-                    )}
-                  </TableCell>
                   <TableCell>
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${emp.isActive ? 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30 dark:text-emerald-400' : 'bg-rose-500/15 text-rose-500 ring-rose-500/30'}`}>
                       {emp.isActive ? 'Active' : 'Inactive'}
