@@ -3,71 +3,41 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, Loader2, ClipboardList, FolderKanban, Search as SearchIcon, CheckCircle2 } from 'lucide-react';
-import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { Plus, Pencil, Trash2, ClipboardList, FolderKanban, Search as SearchIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { projectsApi } from '@/lib/api/projects';
 import { useAuth } from '@/providers/auth-provider';
-import { Project, CreateProjectDto } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import { SearchableSelect } from '@/components/ui/searchable-select';
-import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Textarea } from '@/components/ui/textarea';
-
-const schema = z.object({
-  projectCode: z.string().min(1, 'Required'),
-  projectName: z.string().min(1, 'Required'),
-  projectType: z.enum(['project', 'support', 'development', 'consulting', 'migration', 'maintenance']),
-  clientName: z.string().min(1, 'Required'),
-  status: z.enum(['active', 'inactive', 'completed']).optional(),
-  startDate: z.string().min(1, 'Required'),
-  endDate: z.string().optional(),
-  description: z.string().optional(),
-  projectManagerId: z.string().optional(),
-});
-
-type FormValues = z.infer<typeof schema>;
-
-const statusColors: Record<string, string> = {
-  active: 'bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/30 dark:text-emerald-400',
-  inactive: 'bg-slate-500/15 text-slate-500 ring-1 ring-slate-500/30',
-  completed: 'bg-blue-500/15 text-blue-600 ring-1 ring-blue-500/30 dark:text-blue-400',
-};
 
 export default function ProjectsPage() {
   const qc = useQueryClient();
   const router = useRouter();
   const { user } = useAuth();
   const isEmployee = user?._type === 'employee';
+  const isClient = user?._type === 'client';
   const isHr = isEmployee && !!(user as { isHr?: boolean })?.isHr;
   const [search, setSearch] = useState('');
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<Project | null>(null);
-  const [createStatus, setCreateStatus] = useState<'idle' | 'loading' | 'success'>('idle');
 
-  // Auto-close success dialog after 3 s
+  // Client: fetch their single project and redirect to detail page
+  const { data: clientProject } = useQuery({
+    queryKey: ['client-project'],
+    queryFn: () => projectsApi.clientGetProject().then((r) => r.data?.data ?? r.data),
+    enabled: isClient,
+  });
+
   useEffect(() => {
-    if (createStatus !== 'success') return;
-    const t = setTimeout(() => setCreateStatus('idle'), 3000);
-    return () => clearTimeout(t);
-  }, [createStatus]);
+    if (isClient && clientProject?.id) {
+      router.replace(`/projects/${clientProject.id}`);
+    }
+  }, [isClient, clientProject, router]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['projects', search, isEmployee, isHr],
@@ -75,41 +45,7 @@ export default function ProjectsPage() {
       isEmployee
         ? projectsApi.employeeGetAll().then((r) => r.data.data)
         : projectsApi.getAll({ search, limit: 100 }).then((r) => r.data.data),
-  });
-
-  const { data: managers } = useQuery({
-    queryKey: ['project-managers'],
-    queryFn: () => projectsApi.getManagers().then((r) => r.data.data),
-    enabled: !isEmployee,
-  });
-
-  const form = useForm<FormValues>({ resolver: zodResolver(schema) });
-
-  const createMutation = useMutation({
-    mutationFn: (dto: CreateProjectDto) => projectsApi.create(dto),
-    onMutate: () => setCreateStatus('loading'),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['projects'] });
-      setOpen(false);
-      form.reset();
-      setCreateStatus('success');
-    },
-    onError: (e: any) => {
-      setCreateStatus('idle');
-      toast.error(e?.response?.data?.message ?? 'Failed to create project');
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, dto }: { id: number; dto: Partial<CreateProjectDto> }) => projectsApi.update(id, dto),
-    onMutate: () => ({ id: toast.loading('Updating project…') }),
-    onSuccess: (res, _, ctx) => {
-      qc.invalidateQueries({ queryKey: ['projects'] });
-      toast.success(`"${res.data.data.projectName}" updated`, { id: ctx?.id });
-      setOpen(false);
-      setEditing(null);
-    },
-    onError: (e: any, _, ctx) => toast.error(e?.response?.data?.message ?? 'Failed to update project', { id: ctx?.id }),
+    enabled: !isClient,
   });
 
   const deleteMutation = useMutation({
@@ -121,43 +57,6 @@ export default function ProjectsPage() {
     },
     onError: (e: any, _, ctx) => toast.error(e?.response?.data?.message ?? 'Failed to remove project', { id: ctx?.id }),
   });
-
-  const openCreate = () => {
-    setEditing(null);
-    form.reset({ projectCode: '', projectName: '', projectType: 'project', clientName: '', status: 'active', startDate: '', endDate: '', description: '', projectManagerId: '' });
-    setOpen(true);
-  };
-
-  const openEdit = (p: Project) => {
-    setEditing(p);
-    form.reset({
-      projectCode: p.projectCode ?? '',
-      projectName: p.projectName ?? '',
-      projectType: p.projectType,
-      clientName: p.clientName ?? '',
-      status: p.status,
-      startDate: p.startDate?.slice(0, 10) ?? '',
-      endDate: p.endDate?.slice(0, 10) ?? '',
-      description: p.description ?? '',
-      projectManagerId: p.projectManagerId ? String(p.projectManagerId) : '',
-    });
-    setOpen(true);
-  };
-
-  const onSubmit = (values: FormValues) => {
-    const pmId = values.projectManagerId && values.projectManagerId !== 'none'
-      ? Number(values.projectManagerId)
-      : null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const dto: any = { ...values, projectManagerId: pmId };
-    if (editing) {
-      updateMutation.mutate({ id: editing.id, dto });
-    } else {
-      createMutation.mutate(dto);
-    }
-  };
-
-  const isPending = createMutation.isPending || updateMutation.isPending;
 
   return (
     <div className="space-y-4">
@@ -176,7 +75,11 @@ export default function ProjectsPage() {
             </div>
           </div>
           {!isEmployee && (
-            <Button size="sm" onClick={openCreate} className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg">
+            <Button
+              size="sm"
+              onClick={() => router.push('/projects/new')}
+              className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg"
+            >
               <Plus className="mr-1.5 h-4 w-4" /> New Project
             </Button>
           )}
@@ -243,7 +146,7 @@ export default function ProjectsPage() {
                         </Button>
                         {!isEmployee && (
                           <>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(p)}>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => router.push(`/projects/${p.id}`)}>
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
                             <Button
@@ -261,173 +164,6 @@ export default function ProjectsPage() {
           </TableBody>
         </Table>
       </div>
-
-      {/* Create status dialog — Loading / Success */}
-      <Dialog open={createStatus !== 'idle'} onOpenChange={(o) => { if (!o && createStatus === 'success') setCreateStatus('idle'); }}>
-        <DialogContent className="sm:max-w-sm overflow-hidden" onPointerDownOutside={(e) => { if (createStatus === 'loading') e.preventDefault(); }}>
-          <VisuallyHidden><DialogTitle>{createStatus === 'loading' ? 'Creating Project' : 'Project Created'}</DialogTitle></VisuallyHidden>
-
-          {/* Top accent bar */}
-          {createStatus === 'loading' ? (
-            <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-indigo-400 to-violet-500" />
-          ) : (
-            <div className="absolute top-0 left-0 right-0 h-1.5 bg-muted overflow-hidden rounded-t-[inherit]">
-              <div
-                key="progress"
-                className="h-full bg-linear-to-r from-emerald-400 to-teal-500 rounded-r"
-                style={{ animation: 'grow-width 3s linear forwards' }}
-              />
-              <style>{`@keyframes grow-width { from { width: 0% } to { width: 100% } }`}</style>
-            </div>
-          )}
-
-          <div className="flex flex-col items-center gap-4 py-6 text-center">
-            {createStatus === 'loading' ? (
-              <>
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-indigo-500/10">
-                  <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-                </div>
-                <div>
-                  <p className="text-base font-semibold">Creating Project…</p>
-                  <p className="mt-1 text-sm text-muted-foreground">Please wait while your project is being created.</p>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10">
-                  <CheckCircle2 className="h-9 w-9 text-emerald-500" />
-                </div>
-                <div>
-                  <p className="text-base font-semibold text-emerald-600 dark:text-emerald-400">Project Created!</p>
-                  <p className="mt-1 text-sm text-muted-foreground">Closing automatically…</p>
-                </div>
-              </>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-indigo-500 via-violet-500 to-fuchsia-500" />
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FolderKanban className="h-4 w-4 text-indigo-500" />
-              {editing ? 'Edit Project' : 'New Project'}
-            </DialogTitle>
-          </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <FormField control={form.control} name="projectCode" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Project Code</FormLabel>
-                    <FormControl><Input {...field} disabled={!!editing} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="projectName" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Project Name</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <FormField control={form.control} name="projectType" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Type</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl><SelectTrigger  className="w-full"><SelectValue /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        <SelectItem value="project">Project</SelectItem>
-                        <SelectItem value="support">Support</SelectItem>
-                        <SelectItem value="development">Development</SelectItem>
-                        <SelectItem value="consulting">Consulting</SelectItem>
-                        <SelectItem value="migration">Migration</SelectItem>
-                        <SelectItem value="maintenance">Maintenance</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="status" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl><SelectTrigger  className="w-full"><SelectValue /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="inactive">Inactive</SelectItem>
-                        <SelectItem value="completed">Completed</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </div>
-              <FormField control={form.control} name="clientName" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Client Name</FormLabel>
-                  <FormControl><Input {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <FormField control={form.control} name="projectManagerId" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Project Manager</FormLabel>
-                  <FormControl>
-                    <SearchableSelect
-                      value={field.value ?? ''}
-                      onValueChange={field.onChange}
-                      placeholder="Select project manager (optional)"
-                      options={[
-                        { value: 'none', label: 'None' },
-                        ...(managers ?? []).map((m) => ({
-                          value: String(m.id),
-                          label: `${m.empName} (${m.empCode})`,
-                        })),
-                      ]}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <div className="grid grid-cols-2 gap-3">
-                <FormField control={form.control} name="startDate" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Start Date</FormLabel>
-                    <FormControl><Input type="date" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="endDate" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>End Date</FormLabel>
-                    <FormControl><Input type="date" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </div>
-              <FormField control={form.control} name="description" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Description</FormLabel>
-                  <FormControl><Textarea rows={2} {...field} /></FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-                <Button type="submit" disabled={isPending}>
-                  {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {editing ? 'Update' : 'Create'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -5,7 +5,7 @@ import Cookies from 'js-cookie';
 const REFRESH_KEY = 'app_refresh';
 const TYPE_KEY = 'app_login_type';
 
-export type LoginType = 'admin' | 'employee';
+export type LoginType = 'admin' | 'employee' | 'client';
 
 let memoryToken: string | null = null;
 

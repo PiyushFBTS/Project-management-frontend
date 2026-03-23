@@ -22,4 +22,13 @@ export const authApi = {
     ),
 
   getEmployeeProfile: () => api.get<ApiResponse<Employee>>('/auth/employee/profile'),
+
+  // Client
+  loginClient: (email: string, password: string) =>
+    api.post<ApiResponse<{ accessToken: string; refreshToken: string; user: any }>>(
+      '/auth/client/login',
+      { email, password },
+    ),
+
+  getClientProfile: () => api.get<ApiResponse<any>>('/auth/client/profile'),
 };

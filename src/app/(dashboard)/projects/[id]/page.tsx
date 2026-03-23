@@ -7,10 +7,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   ArrowLeft, FolderKanban, Calendar, User, ClipboardList, Clock, FileText, Pencil, Loader2, X, Check,
-  Upload, Trash2, Download, File,
+  Upload, Trash2, Download, File, UserPlus, Users,
 } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { projectsApi } from '@/lib/api/projects';
-import { employeesApi } from '@/lib/api/employees';
 import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,7 +32,7 @@ const statusColors: Record<string, string> = {
 };
 
 const statusOptions = ['active', 'completed', 'on_hold', 'cancelled'];
-const typeOptions = ['service', 'product', 'internal', 'rd'];
+const typeOptions = ['project', 'support', 'development', 'consulting', 'migration', 'maintenance'];
 
 function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '—';
@@ -42,8 +45,10 @@ export default function ProjectDetailPage() {
   const qc = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?._type === 'admin';
-  const isHr = user?._type === 'employee' && !!(user as any)?.isHr;
-  const canAccessDocs = isAdmin || isHr;
+  const isClient = user?._type === 'client';
+  const isEmployee = user?._type === 'employee';
+  const isHr = isEmployee && !!(user as any)?.isHr;
+  // canEditDocs computed after project loads (below)
 
   const [editMode, setEditMode] = useState(false);
   const [form, setForm] = useState<Record<string, any>>({});
@@ -51,13 +56,16 @@ export default function ProjectDetailPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: project, isLoading } = useQuery({
-    queryKey: ['project-detail', id, isAdmin],
-    queryFn: () =>
-      (isAdmin
-        ? projectsApi.getOne(Number(id))
-        : projectsApi.employeeGetOne(Number(id))
-      ).then((r) => r.data.data),
+    queryKey: ['project-detail', id, user?._type],
+    queryFn: () => {
+      if (isAdmin) return projectsApi.getOne(Number(id)).then((r) => r.data.data);
+      if (isClient) return projectsApi.clientGetProject().then((r) => r.data?.data ?? r.data);
+      return projectsApi.employeeGetOne(Number(id)).then((r) => r.data.data);
+    },
   });
+
+  const isPm = isEmployee && !!project && project.projectManagerId === (user as any)?.id;
+  const canEditDocs = isAdmin || isHr || isPm;
 
   // Managers list for the dropdown (admin only)
   const { data: managers } = useQuery({
@@ -77,15 +85,15 @@ export default function ProjectDetailPage() {
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to update'),
   });
 
-  // ── Documents ──
+  // ── Documents (visible to all roles) ──
   const { data: documents, isLoading: docsLoading } = useQuery({
     queryKey: ['project-documents', id],
-    queryFn: () =>
-      (isAdmin
-        ? projectsApi.getDocuments(Number(id))
-        : projectsApi.employeeGetDocuments(Number(id))
-      ).then((r: any) => r.data?.data ?? r.data),
-    enabled: !!project && canAccessDocs,
+    queryFn: () => {
+      if (isAdmin) return projectsApi.getDocuments(Number(id)).then((r: any) => r.data?.data ?? r.data);
+      if (isClient) return projectsApi.clientGetDocuments(Number(id)).then((r: any) => r.data?.data ?? r.data);
+      return projectsApi.employeeGetDocuments(Number(id)).then((r: any) => r.data?.data ?? r.data);
+    },
+    enabled: !!project,
   });
 
   const uploadMut = useMutation({
@@ -113,6 +121,36 @@ export default function ProjectDetailPage() {
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Delete failed'),
   });
 
+  // ── Client Users ──
+  const [clientDialogOpen, setClientDialogOpen] = useState(false);
+  const [clientForm, setClientForm] = useState({ fullName: '', email: '', password: '', mobileNumber: '' });
+
+  const { data: clients, isLoading: clientsLoading } = useQuery({
+    queryKey: ['project-clients', id],
+    queryFn: () => projectsApi.getClients(Number(id)).then((r: any) => r.data?.data ?? r.data),
+    enabled: !!project && isAdmin,
+  });
+
+  const createClientMut = useMutation({
+    mutationFn: () => projectsApi.createClient(Number(id), clientForm),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project-clients', id] });
+      toast.success('Client added');
+      setClientDialogOpen(false);
+      setClientForm({ fullName: '', email: '', password: '', mobileNumber: '' });
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to add client'),
+  });
+
+  const deleteClientMut = useMutation({
+    mutationFn: (clientId: number) => projectsApi.deleteClient(Number(id), clientId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project-clients', id] });
+      toast.success('Client removed');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to remove'),
+  });
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) uploadMut.mutate(file);
@@ -120,6 +158,8 @@ export default function ProjectDetailPage() {
   };
 
   const startEdit = () => {
+    console.log("project",project);
+    
     if (!project) return;
     setForm({
       projectName: project.projectName,
@@ -173,31 +213,23 @@ export default function ProjectDetailPage() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-0.5">
-            <span className="text-xs font-mono font-semibold text-violet-600 dark:text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded">
-              {project.projectCode}
-            </span>
-            {!editMode ? (
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${statusColors[project.status] ?? ''}`}>
-                {project.status}
-              </span>
-            ) : (
-              <Select value={form.status} onValueChange={(v) => setForm((p) => ({ ...p, status: v }))}>
-                <SelectTrigger className="h-6 w-28 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {statusOptions.map((s) => <SelectItem key={s} value={s} className="capitalize">{s.replace('_', ' ')}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
           {!editMode ? (
-            <h1 className="text-xl font-bold">{project.projectName}</h1>
+            <>
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-xs font-mono font-semibold text-violet-600 dark:text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded">
+                  {project.projectCode}
+                </span>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${statusColors[project.status] ?? ''}`}>
+                  {project.status}
+                </span>
+              </div>
+              <h1 className="text-xl font-bold">{project.projectName}</h1>
+            </>
           ) : (
-            <Input
-              value={form.projectName}
-              onChange={(e) => setForm((p) => ({ ...p, projectName: e.target.value }))}
-              className="text-xl font-bold h-9"
-            />
+            <>
+              <h1 className="text-xl font-bold">Edit Project</h1>
+              <p className="text-sm text-muted-foreground">Update the project details below</p>
+            </>
           )}
         </div>
         <div className="flex gap-2">
@@ -236,6 +268,41 @@ export default function ProjectDetailPage() {
 
       {/* Info Cards */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+        {/* Project Code — only shown in edit mode as card, in view mode it's in header */}
+        {editMode && (
+          <div className="rounded-xl border bg-card p-4">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-pink-600 dark:text-pink-400 mb-1.5">
+              <FolderKanban className="h-3 w-3" /> Project Code
+            </div>
+            <p className="text-sm font-medium font-mono text-muted-foreground">{project.projectCode}</p>
+          </div>
+        )}
+
+        {/* Project Name */}
+        {editMode ? (
+          <div className="rounded-xl border bg-card p-4">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-cyan-600 dark:text-cyan-400 mb-1.5">
+              <FileText className="h-3 w-3" /> Project Name
+            </div>
+            <Input value={form.projectName} onChange={(e) => setForm((p) => ({ ...p, projectName: e.target.value }))} className="h-8 text-sm" />
+          </div>
+        ) : null}
+
+        {/* Status */}
+        {editMode ? (
+          <div className="rounded-xl border bg-card p-4">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-orange-600 dark:text-orange-400 mb-1.5">
+              <Clock className="h-3 w-3" /> Status
+            </div>
+            <Select value={form.status} onValueChange={(v) => setForm((p) => ({ ...p, status: v }))}>
+              <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {statusOptions.map((s) => <SelectItem key={s} value={s} className="capitalize">{s.replace('_', ' ')}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+
         <div className="rounded-xl border bg-card p-4">
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-violet-600 dark:text-violet-400 mb-1.5">
             <FolderKanban className="h-3 w-3" /> Type
@@ -304,12 +371,14 @@ export default function ProjectDetailPage() {
           )}
         </div>
 
-        <div className="rounded-xl border bg-card p-4">
-          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-indigo-600 dark:text-indigo-400 mb-1.5">
-            <Clock className="h-3 w-3" /> Created
+        {!editMode && (
+          <div className="rounded-xl border bg-card p-4">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-indigo-600 dark:text-indigo-400 mb-1.5">
+              <Clock className="h-3 w-3" /> Created
+            </div>
+            <p className="text-sm font-medium">{formatDate(project.createdAt)}</p>
           </div>
-          <p className="text-sm font-medium">{formatDate(project.createdAt)}</p>
-        </div>
+        )}
       </div>
 
       {/* Description */}
@@ -329,39 +398,41 @@ export default function ProjectDetailPage() {
         )}
       </div>
 
-      {/* ── Documents (admin + HR only) ────────────────────────────── */}
-      {canAccessDocs && <div className="rounded-xl border bg-card p-4">
+      {/* ── Documents (visible to all, editable by admin/HR/PM) ────── */}
+      <div className="rounded-xl border bg-card p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
             <File className="h-3 w-3" /> Documents
           </div>
-          <div className="flex items-center gap-2">
-            <Select value={uploadCategory} onValueChange={setUploadCategory}>
-              <SelectTrigger className="h-7 text-xs w-32"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="project_plan">Project Plan</SelectItem>
-                <SelectItem value="frd">FRD</SelectItem>
-                <SelectItem value="commercial">Commercial</SelectItem>
-                <SelectItem value="other">Other</SelectItem>
-              </SelectContent>
-            </Select>
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.txt,.csv"
-              onChange={handleFileSelect}
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={uploadMut.isPending}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {uploadMut.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
-              Upload
-            </Button>
-          </div>
+          {canEditDocs && (
+            <div className="flex items-center gap-2">
+              <Select value={uploadCategory} onValueChange={setUploadCategory}>
+                <SelectTrigger className="h-7 text-xs w-32"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="project_plan">Project Plan</SelectItem>
+                  <SelectItem value="frd">FRD</SelectItem>
+                  <SelectItem value="commercial">Commercial</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.txt,.csv"
+                onChange={handleFileSelect}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={uploadMut.isPending}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {uploadMut.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
+                Upload
+              </Button>
+            </div>
+          )}
         </div>
 
         {docsLoading ? (
@@ -392,22 +463,109 @@ export default function ProjectDetailPage() {
                       <Download className="h-3.5 w-3.5" />
                     </Button>
                   </a>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-red-500 hover:text-red-600"
-                    title="Delete"
-                    disabled={deleteMut.isPending}
-                    onClick={() => { if (confirm(`Delete "${doc.originalName}"?`)) deleteMut.mutate(doc.id); }}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  {canEditDocs && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-red-500 hover:text-red-600"
+                      title="Delete"
+                      disabled={deleteMut.isPending}
+                      onClick={() => { if (confirm(`Delete "${doc.originalName}"?`)) deleteMut.mutate(doc.id); }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
           </div>
         )}
-      </div>}
+      </div>
+
+      {/* ── Client Users (admin only) ──────────────────────────────── */}
+      {isAdmin && (
+        <div className="rounded-xl border bg-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+              <Users className="h-3 w-3" /> Client Users
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setClientDialogOpen(true)}>
+              <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Add Client
+            </Button>
+          </div>
+
+          {clientsLoading ? (
+            <div className="space-y-2">
+              {[...Array(2)].map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
+            </div>
+          ) : !(clients as any[])?.length ? (
+            <p className="text-xs text-muted-foreground text-center py-6">No client users added yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {(clients as any[]).map((c: any) => (
+                <div key={c.id} className="flex items-center gap-3 rounded-lg border p-3">
+                  <div className="h-9 w-9 rounded-full bg-linear-to-br from-blue-500 to-cyan-500 flex items-center justify-center text-sm font-bold text-white shrink-0">
+                    {c.fullName?.charAt(0).toUpperCase() ?? '?'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{c.fullName}</p>
+                    <p className="text-xs text-muted-foreground">{c.email}</p>
+                  </div>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${c.isActive ? 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30' : 'bg-red-500/15 text-red-500 ring-red-500/30'}`}>
+                    {c.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                  <Button
+                    variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600 shrink-0"
+                    disabled={deleteClientMut.isPending}
+                    onClick={() => { if (confirm(`Remove client "${c.fullName}"?`)) deleteClientMut.mutate(c.id); }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Add Client Dialog ──────────────────────────────────────── */}
+      <Dialog open={clientDialogOpen} onOpenChange={setClientDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-4 w-4 text-blue-500" /> Add Client User
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-sm">Full Name *</Label>
+              <Input value={clientForm.fullName} onChange={(e) => setClientForm((p) => ({ ...p, fullName: e.target.value }))} placeholder="John Doe" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-sm">Email *</Label>
+              <Input type="email" value={clientForm.email} onChange={(e) => setClientForm((p) => ({ ...p, email: e.target.value }))} placeholder="john@client.com" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-sm">Password *</Label>
+              <Input type="password" value={clientForm.password} onChange={(e) => setClientForm((p) => ({ ...p, password: e.target.value }))} placeholder="Min 6 characters" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-sm">Phone</Label>
+              <Input value={clientForm.mobileNumber} onChange={(e) => setClientForm((p) => ({ ...p, mobileNumber: e.target.value }))} placeholder="+91 9876543210" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClientDialogOpen(false)}>Cancel</Button>
+            <Button
+              disabled={!clientForm.fullName || !clientForm.email || !clientForm.password || createClientMut.isPending}
+              onClick={() => createClientMut.mutate()}
+            >
+              {createClientMut.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+              Add Client
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

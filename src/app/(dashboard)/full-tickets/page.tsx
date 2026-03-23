@@ -1,19 +1,21 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   Loader2, MessageSquare, Calendar, Clock, User, Target, Search, X,
   FolderKanban, UserRoundPlus, Ticket, History, ArrowUpDown, ArrowUp, ArrowDown, Download, AlertTriangle,
+  Paperclip, FileText, Image as ImageIcon, Trash2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { projectTicketsApi, adminTicketsApi } from '@/lib/api/project-planning';
+import { projectTicketsApi, adminTicketsApi, clientTicketsApi } from '@/lib/api/project-planning';
 import { employeesApi } from '@/lib/api/employees';
+import { projectsApi } from '@/lib/api/projects';
 import { useAuth } from '@/providers/auth-provider';
 import {
-  ProjectTask, ProjectTaskComment, ProjectTaskHistory, ProjectTaskStatus, TaskPriority,
+  ProjectTask, ProjectTaskComment, ProjectTaskHistory, ProjectTaskStatus,
 } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -78,9 +80,10 @@ export default function FullTicketsPage() {
   const qc = useQueryClient();
   const { user, isLoading: authLoading } = useAuth();
   const isAdmin = user?._type === 'admin';
+  const isClient = user?._type === 'client';
 
   // Pick the correct API based on user role
-  const ticketsApi = isAdmin ? adminTicketsApi : projectTicketsApi;
+  const ticketsApi = isAdmin ? adminTicketsApi : isClient ? clientTicketsApi : projectTicketsApi;
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -96,16 +99,19 @@ export default function FullTicketsPage() {
   const [sortBy, setSortBy] = useState<'dueDate' | 'ticketNumber'>('dueDate');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
-  // Projects dropdown — admin sees all, employee sees accessible only
-  const { data: projectsList } = useQuery({
+  // Projects dropdown — admin sees all, employee sees accessible only, client has one project
+  const { data: projectsListRaw } = useQuery({
     queryKey: ['accessible-projects', isAdmin],
     queryFn: () => ticketsApi.getProjects().then((r) => r.data.data),
+    enabled: !isClient,
   });
+  const projectsList = Array.isArray(projectsListRaw) ? projectsListRaw : [];
 
   // Detail dialog
   const [detailTask, setDetailTask] = useState<ProjectTask | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [commentText, setCommentText] = useState('');
+  const attachInputRef = useRef<HTMLInputElement>(null);
   const [taggedMentions, setTaggedMentions] = useState<MentionEmployee[]>([]);
   const [reassignTo, setReassignTo] = useState<string>('');
 
@@ -190,7 +196,7 @@ export default function FullTicketsPage() {
       'Ticket ID': t.ticketNumber ?? '—',
       'Title': t.title,
       'Project': t.project?.projectName ?? '—',
-      'Assignee': t.assignee?.empName ?? 'Unassigned',
+      'Assignee': t.assignee?.empName ?? (t as any).assignedAdmin?.name ?? (t as any).assignedClient?.fullName ?? 'Unassigned',
       'Priority': priorityLabels[t.priority] ?? t.priority,
       'Status': statusLabels[t.status] ?? t.status,
       'Due Date': t.dueDate ? new Date(t.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—',
@@ -289,6 +295,31 @@ export default function FullTicketsPage() {
     enabled: !!contributorsViewTaskId && contributorsViewOpen,
   });
 
+  // Attachments
+  const { data: attachments } = useQuery({
+    queryKey: ['task-attachments', detailTask?.id],
+    queryFn: () => ticketsApi.getAttachments!(detailTask!.id).then((r: any) => r.data?.data ?? r.data ?? []),
+    enabled: !!detailTask && detailOpen && !!ticketsApi.getAttachments,
+  });
+
+  const uploadAttachmentMut = useMutation({
+    mutationFn: (file: File) => ticketsApi.uploadAttachment!(detailTask!.id, file),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task-attachments', detailTask?.id] });
+      toast.success('File uploaded');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Upload failed'),
+  });
+
+  const deleteAttachmentMut = useMutation({
+    mutationFn: (attId: number) => ticketsApi.deleteAttachment!(detailTask!.id, attId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task-attachments', detailTask?.id] });
+      toast.success('Attachment deleted');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Delete failed'),
+  });
+
   const addCommentMut = useMutation({
     mutationFn: (content: string) => ticketsApi.addComment(detailTask!.id, { content }),
     onSuccess: () => {
@@ -306,17 +337,25 @@ export default function FullTicketsPage() {
     queryFn: () => ticketsApi.getHistory(historyTaskId!).then((r) => r.data.data),
     enabled: !!historyTaskId && historyOpen,
   });
-  console.log("historyData",historyData)
+  console.log("historyData", historyData)
 
   // ── Employees list for reassign ─────────────────────────────────────
-  const { data: companyEmployees } = useQuery({
-    queryKey: ['company-employees-list', isAdmin],
-    queryFn: () => {
+  const { data: companyEmployeesRaw } = useQuery({
+    queryKey: ['company-employees-list', isAdmin, isClient],
+    queryFn: async (): Promise<any[]> => {
+      if (isClient) {
+        const r = await clientTicketsApi.getEmployees();
+        const d: any = r.data;
+        return Array.isArray(d?.data) ? d.data : Array.isArray(d) ? d : [];
+      }
       const fn = isAdmin ? employeesApi.getAll : employeesApi.employeeGetAll;
-      return fn({ limit: 100, isActive: true }).then((r) => r.data.data);
+      const r = await fn({ limit: 100, isActive: true });
+      const d: any = r.data;
+      return Array.isArray(d?.data) ? d.data : Array.isArray(d) ? d : [];
     },
+    enabled: !authLoading,
   });
-  console.log("companyEmployees",companyEmployees);
+  const companyEmployees = Array.isArray(companyEmployeesRaw) ? companyEmployeesRaw : [];
 
   // Fetch history for the ticket being closed (to filter contributors)
   const { data: closingHistory } = useQuery({
@@ -347,9 +386,68 @@ export default function FullTicketsPage() {
     return allEmps.filter((e) => historyNames.has(e.empName));
   })();
 
+  // Fetch project clients for reassign dropdown (admin & employee — not client)
+  // We load clients per-project when detail dialog opens
+  const projectIdForClients = detailTask?.projectId ?? (detailTask as any)?.project?.id;
+  const { data: projectClientsRaw } = useQuery({
+    queryKey: ['project-clients-for-reassign', projectIdForClients],
+    queryFn: async (): Promise<any[]> => {
+      try {
+        const r = isAdmin
+          ? await projectsApi.getClients(projectIdForClients!)
+          : await projectsApi.employeeGetClients(projectIdForClients!);
+        const d: any = r.data;
+        return Array.isArray(d?.data) ? d.data : Array.isArray(d) ? d : [];
+      } catch {
+        return [];
+      }
+    },
+    enabled: !!projectIdForClients && !isClient && detailOpen,
+  });
+  const projectClients = Array.isArray(projectClientsRaw) ? projectClientsRaw : [];
+
+  // Build reassign options: employees + admins + clients
+  const reassignOptions = (() => {
+    const all = companyEmployees ?? [];
+    const deduped = all.filter((e, i, arr) => arr.findIndex((x) => x.id === e.id && (x as any)._type === (e as any)._type) === i);
+
+    const empOpts = deduped
+      .filter((e: any) => !e._type || e._type === 'employee')
+      .map((emp) => ({ value: `emp-${emp.id}`, label: emp.empName }));
+
+    const adminOpts = deduped
+      .filter((e: any) => e._type === 'admin')
+      .map((a) => ({ value: `admin-${a.id}`, label: `${a.empName} (Admin)` }));
+
+    const clientFromList = deduped
+      .filter((e: any) => e._type === 'client')
+      .map((c) => ({ value: `client-${c.id}`, label: `${c.empName} (Client)` }));
+
+    if (isClient) return [...empOpts, ...adminOpts, ...clientFromList];
+
+    const clientOpts = ((projectClients ?? []) as any[])
+      .filter((c: any) => c.isActive)
+      .map((c: any) => ({ value: `client-${c.id}`, label: `${c.fullName} (Client)` }));
+
+    return [...empOpts, ...adminOpts, ...clientOpts];
+  })();
+console.log("reassignOptions",reassignOptions);
+
   const reassignMut = useMutation({
-    mutationFn: ({ taskId, assigneeId }: { taskId: number; assigneeId: number }) =>
-      ticketsApi.reassign(taskId, assigneeId),
+    mutationFn: ({ taskId, target }: { taskId: number; target: string }) => {
+      const [type, ...rest] = target.split('-');
+      const id = Number(rest.join('-'));
+      if (type === 'client' && ticketsApi.reassignAny) {
+        return ticketsApi.reassignAny(taskId, { clientId: id });
+      }
+      if (type === 'admin' && ticketsApi.reassignAny) {
+        return ticketsApi.reassignAny(taskId, { adminId: id });
+      }
+      if (ticketsApi.reassignAny) {
+        return ticketsApi.reassignAny(taskId, { employeeId: id });
+      }
+      return ticketsApi.reassign(taskId, id);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['project-tickets-all', isAdmin] });
       qc.invalidateQueries({ queryKey: ['project-ticket-detail', detailTask?.id] });
@@ -369,7 +467,7 @@ export default function FullTicketsPage() {
     setTaggedMentions([]);
     setReassignTo(t.assigneeId ? String(t.assigneeId) : '');
   };
-
+  console.log("reassignTo", reassignTo)
   return (
     <div className="space-y-4">
       {/* Gradient Header */}
@@ -388,14 +486,14 @@ export default function FullTicketsPage() {
       </div> */}
 
       {/* KPI Stats */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+      <div className={`grid grid-cols-2 gap-3 ${isClient ? 'lg:grid-cols-5' : 'lg:grid-cols-6'}`}>
         {[
           { label: 'To Do', count: statsAll.filter(t => t.status === 'todo').length, gradient: 'bg-gradient-to-br from-slate-500 to-slate-600', icon: Ticket },
           { label: 'In Progress', count: statsAll.filter(t => t.status === 'in_progress').length, gradient: 'bg-gradient-to-br from-blue-500 to-indigo-600', icon: Clock },
           { label: 'In Review', count: statsAll.filter(t => t.status === 'in_review').length, gradient: 'bg-gradient-to-br from-amber-500 to-orange-600', icon: MessageSquare },
           { label: 'Done', count: statsAll.filter(t => t.status === 'done').length, gradient: 'bg-gradient-to-br from-emerald-500 to-teal-600', icon: Target },
           { label: 'Closed', count: statsAll.filter(t => t.status === 'closed').length, gradient: 'bg-gradient-to-br from-purple-500 to-purple-700', icon: X },
-          { label: 'Overdue', count: statsAll.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'done' && t.status !== 'closed').length, gradient: 'bg-gradient-to-br from-red-500 to-rose-700', icon: AlertTriangle },
+          ...(!isClient ? [{ label: 'Overdue', count: statsAll.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'done' && t.status !== 'closed').length, gradient: 'bg-gradient-to-br from-red-500 to-rose-700', icon: AlertTriangle }] : []),
         ].map(({ label, count, gradient, icon: Icon }) => (
           <div key={label} className={`relative overflow-hidden rounded-xl border-0 ${gradient} p-4`}>
             <div className="flex items-start justify-between">
@@ -454,17 +552,19 @@ export default function FullTicketsPage() {
               <SelectItem value="critical">Critical</SelectItem>
             </SelectContent>
           </Select>
-          <Select value={projectFilter} onValueChange={setProjectFilter}>
-            <SelectTrigger className="w-full sm:w-44">
-              <SelectValue placeholder="Project" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Projects</SelectItem>
-              {(projectsList ?? []).map((p) => (
-                <SelectItem key={p.id} value={String(p.id)}>{p.projectName}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {!isClient && (
+            <Select value={projectFilter} onValueChange={setProjectFilter}>
+              <SelectTrigger className="w-full sm:w-44">
+                <SelectValue placeholder="Project" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Projects</SelectItem>
+                {(projectsList ?? []).map((p) => (
+                  <SelectItem key={p.id} value={String(p.id)}>{p.projectName}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <SearchableSelect
             value={assigneeFilter}
             onValueChange={setAssigneeFilter}
@@ -524,15 +624,14 @@ export default function FullTicketsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Ticket</TableHead><TableHead>Title</TableHead><TableHead>Project</TableHead>
+                  <TableHead>Ticket</TableHead><TableHead>Title</TableHead>{!isClient && <TableHead>Project</TableHead>}
                   <TableHead>Assignee</TableHead><TableHead>Priority</TableHead><TableHead>Status</TableHead>
-                  <TableHead>Due Date</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {[...Array(3)].map((_, i) => (
                   <TableRow key={i}>
-                    {[...Array(7)].map((__, j) => <TableCell key={j}><Skeleton className="h-5 w-24" /></TableCell>)}
+                    {[...Array(isClient ? 5 : 6)].map((__, j) => <TableCell key={j}><Skeleton className="h-5 w-24" /></TableCell>)}
                   </TableRow>
                 ))}
               </TableBody>
@@ -566,13 +665,15 @@ export default function FullTicketsPage() {
                     {priorityLabels[t.priority]}
                   </span>
                 </div>
-                <p className="text-xs text-muted-foreground truncate mb-1">
-                  <FolderKanban className="inline h-3 w-3 mr-1 -mt-0.5" />
-                  {t.project?.projectName ?? '—'}
-                </p>
+                {!isClient && (
+                  <p className="text-xs text-muted-foreground truncate mb-1">
+                    <FolderKanban className="inline h-3 w-3 mr-1 -mt-0.5" />
+                    {t.project?.projectName ?? '—'}
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground truncate mb-3">
                   <User className="inline h-3 w-3 mr-1 -mt-0.5" />
-                  {t.assignee?.empName ?? 'Unassigned'}
+                  {t.assignee?.empName ?? (t as any).assignedAdmin?.name ?? (t as any).assignedClient?.fullName ?? 'Unassigned'}
                 </p>
                 <div className="flex items-center justify-between gap-2">
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusColors[t.status]}`}>
@@ -600,16 +701,10 @@ export default function FullTicketsPage() {
                     </span>
                   </TableHead>
                   <TableHead>Title</TableHead>
-                  <TableHead>Project</TableHead>
+                  {!isClient && <TableHead>Project</TableHead>}
                   <TableHead>Assignee</TableHead>
                   <TableHead>Priority</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('dueDate')}>
-                    <span className="inline-flex items-center gap-1">
-                      Due Date
-                      {sortBy === 'dueDate' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-40" />}
-                    </span>
-                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -617,11 +712,13 @@ export default function FullTicketsPage() {
                   <TableRow key={t.id} className="cursor-pointer hover:bg-accent/50" onClick={() => openDetail(t)}>
                     <TableCell className="text-xs font-mono text-violet-600 dark:text-violet-400 whitespace-nowrap">{t.ticketNumber ?? '—'}</TableCell>
                     <TableCell className="font-medium">{t.title}</TableCell>
+                    {!isClient && (
+                      <TableCell className="text-sm text-muted-foreground">
+                        {t.project?.projectName ?? '—'}
+                      </TableCell>
+                    )}
                     <TableCell className="text-sm text-muted-foreground">
-                      {t.project?.projectName ?? '—'}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {t.assignee?.empName ?? 'Unassigned'}
+                      {t.assignee?.empName ?? (t as any).assignedAdmin?.name ?? (t as any).assignedClient?.fullName ?? 'Unassigned'}
                     </TableCell>
                     <TableCell>
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${priorityColors[t.priority]}`}>
@@ -632,9 +729,6 @@ export default function FullTicketsPage() {
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[t.status]}`}>
                         {statusLabels[t.status]}
                       </span>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                      {t.dueDate ? new Date(t.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -696,7 +790,7 @@ export default function FullTicketsPage() {
                     <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-blue-600 dark:text-blue-400 mb-1">
                       <User className="h-3 w-3" /> Assignee
                     </div>
-                    <p className="text-sm font-medium truncate">{taskDetail.assignee?.empName ?? 'Unassigned'}</p>
+                    <p className="text-sm font-medium truncate">{taskDetail.assignee?.empName ?? (taskDetail as any).assignedAdmin?.name ?? (taskDetail as any).assignedClient?.fullName ?? 'Unassigned'}</p>
                   </div>
                   <div className="rounded-lg border bg-amber-500/5 p-2.5">
                     <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-amber-600 dark:text-amber-400 mb-1">
@@ -753,10 +847,8 @@ export default function FullTicketsPage() {
                       <SearchableSelect
                         value={reassignTo}
                         onValueChange={setReassignTo}
-                        options={(companyEmployees ?? [])
-                          .filter((emp: any) => emp._type !== 'admin')
-                          .map((emp) => ({ value: String(emp.id), label: emp.empName }))}
-                        placeholder="Select employee..."
+                        options={reassignOptions}
+                        placeholder="Select assignee..."
                         disabled={taskDetail.status === 'closed'}
                         className="flex-1"
                       />
@@ -764,7 +856,7 @@ export default function FullTicketsPage() {
                         size="sm"
                         variant="secondary"
                         disabled={!reassignTo || reassignMut.isPending || taskDetail.status === 'closed'}
-                        onClick={() => reassignMut.mutate({ taskId: taskDetail.id, assigneeId: Number(reassignTo) })}
+                        onClick={() => reassignMut.mutate({ taskId: taskDetail.id, target: reassignTo })}
                       >
                         {reassignMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Reassign'}
                       </Button>
@@ -796,6 +888,84 @@ export default function FullTicketsPage() {
                     <User className="h-3.5 w-3.5 mr-1.5" />
                     View Contributors
                   </Button>
+                )}
+
+                {/* ── Attachments ──────────────────────────────────────────── */}
+                {ticketsApi.getAttachments && (
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <Paperclip className="h-3.5 w-3.5" />
+                        Attachments ({(attachments as any[])?.length ?? 0})
+                      </h4>
+                      <div>
+                        <input
+                          ref={attachInputRef}
+                          type="file"
+                          className="hidden"
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.txt,.csv"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) uploadAttachmentMut.mutate(f);
+                            e.target.value = '';
+                          }}
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => attachInputRef.current?.click()}
+                          disabled={uploadAttachmentMut.isPending}
+                        >
+                          {uploadAttachmentMut.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Paperclip className="h-3 w-3 mr-1" />}
+                          Upload
+                        </Button>
+                      </div>
+                    </div>
+                    {(attachments as any[])?.length > 0 ? (
+                      <div className="space-y-1.5">
+                        {(attachments as any[]).map((att: any) => {
+                          const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(att.originalName);
+                          const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
+                          return (
+                            <div key={att.id} className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+                              {isImage ? <ImageIcon className="h-4 w-4 text-blue-500 shrink-0" /> : <FileText className="h-4 w-4 text-violet-500 shrink-0" />}
+                              <div className="flex-1 min-w-0">
+                                <a
+                                  href={`${apiBase}${att.filePath}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs font-medium text-foreground hover:text-violet-600 truncate block"
+                                >
+                                  {att.originalName}
+                                </a>
+                                <p className="text-[10px] text-muted-foreground">
+                                  {(att.fileSize / 1024).toFixed(1)} KB · {att.uploadedByName}
+                                </p>
+                              </div>
+                              <a
+                                href={`${apiBase}${att.filePath}`}
+                                download={att.originalName}
+                                className="shrink-0 text-muted-foreground hover:text-foreground"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                              </a>
+                              {isAdmin && (
+                                <button
+                                  className="shrink-0 text-muted-foreground hover:text-red-500"
+                                  onClick={() => { if (confirm('Delete this attachment?')) deleteAttachmentMut.mutate(att.id); }}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground text-center py-3">No attachments yet.</p>
+                    )}
+                  </div>
                 )}
 
                 {/* ── Comments ─────────────────────────────────────────────── */}
@@ -877,14 +1047,13 @@ export default function FullTicketsPage() {
                 <div className="absolute left-2.5 top-2 bottom-2 w-px bg-border" />
                 {(historyData ?? []).map((h: ProjectTaskHistory) => (
                   <div key={h.id} className="relative mb-4 last:mb-0">
-                    <div className={`absolute -left-3.5 top-1.5 h-3 w-3 rounded-full border-2 border-background ${
-                      h.action === 'created' ? 'bg-emerald-500' :
-                      h.action === 'closed' ? 'bg-purple-500' :
-                      h.action === 'assigned' || h.action === 'reassigned' ? 'bg-blue-500' :
-                      h.action === 'status_changed' ? 'bg-amber-500' :
-                      h.action === 'priority_changed' ? 'bg-orange-500' :
-                      'bg-slate-400'
-                    }`} />
+                    <div className={`absolute -left-3.5 top-1.5 h-3 w-3 rounded-full border-2 border-background ${h.action === 'created' ? 'bg-emerald-500' :
+                        h.action === 'closed' ? 'bg-purple-500' :
+                          h.action === 'assigned' || h.action === 'reassigned' ? 'bg-blue-500' :
+                            h.action === 'status_changed' ? 'bg-amber-500' :
+                              h.action === 'priority_changed' ? 'bg-orange-500' :
+                                'bg-slate-400'
+                      }`} />
                     <div className="rounded-md border p-3">
                       <div className="flex items-center justify-between gap-2 mb-1">
                         <span className="text-xs font-semibold capitalize">

@@ -7,8 +7,9 @@ import { toast } from 'sonner';
 import {
   Loader2, MessageSquare, Calendar, Clock, User, Target, ListTodo, Search, X, FolderKanban, UserRoundPlus, History,
 } from 'lucide-react';
-import { myTasksApi } from '@/lib/api/project-planning';
+import { myTasksApi, clientTicketsApi } from '@/lib/api/project-planning';
 import { employeesApi } from '@/lib/api/employees';
+import { useAuth } from '@/providers/auth-provider';
 import { taskSheetsApi } from '@/lib/api/task-sheets';
 import {
   ProjectTask, ProjectTaskComment, ProjectTaskHistory, ProjectTaskStatus, TaskPriority,
@@ -74,6 +75,8 @@ const priorityLabels: Record<string, string> = {
 
 export default function MyTasksPage() {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const isClient = user?._type === 'client';
 
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -104,15 +107,18 @@ export default function MyTasksPage() {
   // ── Query ────────────────────────────────────────────────────────────────
 
   const { data: tasksData, isLoading } = useQuery({
-    queryKey: ['my-tasks', search, statusFilter, priorityFilter, projectFilter],
+    queryKey: ['my-tasks', search, statusFilter, priorityFilter, projectFilter, isClient],
     queryFn: async (): Promise<ProjectTask[]> => {
-      const r = await myTasksApi.getAll({
+      const params = {
         limit: 100,
         ...(search ? { search } : {}),
         ...(statusFilter !== 'all' ? { status: statusFilter as ProjectTaskStatus } : {}),
         ...(priorityFilter !== 'all' ? { priority: priorityFilter as TaskPriority } : {}),
         ...(projectFilter !== 'all' ? { projectId: Number(projectFilter) } : {}),
-      });
+      };
+      const r = isClient
+        ? await clientTicketsApi.getMyTasks(params)
+        : await myTasksApi.getAll(params);
       const body = r.data;
       if (Array.isArray(body?.data)) return body.data;
       if (Array.isArray((body?.data as any)?.data)) return (body.data as any).data;

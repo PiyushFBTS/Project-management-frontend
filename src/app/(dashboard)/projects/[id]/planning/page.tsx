@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -10,9 +10,10 @@ import { z } from 'zod';
 import { toast } from 'sonner';
 import {
   Plus, Pencil, Trash2, Loader2, ChevronDown, ChevronRight,
-  MessageSquare, Calendar, Clock, User, Target, Zap, History,
+  MessageSquare, Calendar, Clock, User, Target, Zap, History, Paperclip, X,
+  UserRoundPlus, FileText, Image as ImageIcon, Download,
 } from 'lucide-react';
-import { projectPlanningApi, employeePlanningApi } from '@/lib/api/project-planning';
+import { projectPlanningApi, employeePlanningApi, clientPlanningApi, clientTicketsApi, adminTicketsApi, projectTicketsApi } from '@/lib/api/project-planning';
 import { projectsApi } from '@/lib/api/projects';
 import { employeesApi } from '@/lib/api/employees';
 import { useAuth } from '@/providers/auth-provider';
@@ -38,6 +39,7 @@ import {
 import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage,
 } from '@/components/ui/form';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -104,9 +106,10 @@ export default function ProjectPlanningPage() {
   const qc = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?._type === 'admin';
+  const isClient = user?._type === 'client';
 
   // Pick the correct API based on user role
-  const planApi = isAdmin ? projectPlanningApi : employeePlanningApi;
+  const planApi = isAdmin ? projectPlanningApi : isClient ? clientPlanningApi : employeePlanningApi;
 
   // Dialogs
   const [phaseOpen, setPhaseOpen] = useState(false);
@@ -117,6 +120,8 @@ export default function ProjectPlanningPage() {
   const [detailTask, setDetailTask] = useState<ProjectTask | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [commentText, setCommentText] = useState('');
+  const [taskFiles, setTaskFiles] = useState<File[]>([]);
+  const taskFileInputRef = useRef<HTMLInputElement>(null);
 
   // History dialog
   const [historyTaskId, setHistoryTaskId] = useState<number | null>(null);
@@ -133,9 +138,10 @@ export default function ProjectPlanningPage() {
   // ── Queries ──────────────────────────────────────────────────────────────
 
   const { data: project } = useQuery({
-    queryKey: ['project', projectId, isAdmin],
+    queryKey: ['project', projectId, user?._type],
     queryFn: async () => {
       if (isAdmin) return projectsApi.getOne(projectId).then((r) => r.data.data);
+      if (isClient) return projectsApi.clientGetProject().then((r) => r.data?.data ?? r.data);
       // Employee: get from the project list
       const r = await projectsApi.employeeGetAll();
       const list = r.data.data as any[];
@@ -167,13 +173,18 @@ export default function ProjectPlanningPage() {
   });
 
   const { data: employees, error: employeesError } = useQuery({
-    queryKey: ['all-employees', isAdmin],
+    queryKey: ['all-employees', user?._type],
     queryFn: async () => {
+      if (isClient) {
+        const r = await clientTicketsApi.getEmployees();
+        const d: any = r.data?.data ?? r.data;
+        return (Array.isArray(d) ? d : []) as Employee[];
+      }
       const fn = isAdmin ? employeesApi.getAll : employeesApi.employeeGetAll;
       const r = await fn({ isActive: true, limit: 100 });
       const d: any = r.data?.data;
       const list = (Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : []) as any[];
-      return list.filter((e) => e._type !== 'admin') as Employee[];
+      return list as Employee[];
     },
   });
 
@@ -287,9 +298,20 @@ export default function ProjectPlanningPage() {
 
   const taskForm = useForm<TaskForm>({ resolver: zodResolver(taskSchema) });
 
+  // Pick the right ticket API for attachment uploads
+  const ticketAttApi = isAdmin ? adminTicketsApi : isClient ? clientTicketsApi : projectTicketsApi;
+
   const createTaskMut = useMutation({
     mutationFn: (dto: CreateTaskDto) => planApi.createTask(projectId, dto),
-    onSuccess: async () => {
+    onSuccess: async (res: any) => {
+      // Upload attachments if any
+      const newTaskId = res?.data?.data?.id ?? res?.data?.id;
+      if (newTaskId && taskFiles.length > 0 && ticketAttApi.uploadAttachment) {
+        for (const f of taskFiles) {
+          try { await ticketAttApi.uploadAttachment(newTaskId, f); } catch { /* ignore individual upload errors */ }
+        }
+        setTaskFiles([]);
+      }
       await qc.refetchQueries({ queryKey: ['planning-tasks', projectId] });
       await qc.refetchQueries({ queryKey: ['planning-summary', projectId] });
       qc.invalidateQueries({ queryKey: ['task-history'] });
@@ -327,6 +349,7 @@ export default function ProjectPlanningPage() {
   const openCreateTask = (phaseId?: number) => {
     setEditingTask(null);
     setDefaultPhaseId(phaseId);
+    setTaskFiles([]);
     taskForm.reset({
       title: '',
       description: '',
@@ -392,6 +415,76 @@ export default function ProjectPlanningPage() {
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
   });
 
+  // ── Detail: Status change ──
+  const [detailReassignValue, setDetailReassignValue] = useState('');
+  const detailAttachRef = useRef<HTMLInputElement>(null);
+  const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
+
+  const updateDetailStatusMut = useMutation({
+    mutationFn: ({ taskId, status }: { taskId: number; status: string }) =>
+      ticketAttApi.updateStatus(taskId, status as ProjectTaskStatus),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task-detail', detailTask?.id] });
+      qc.invalidateQueries({ queryKey: ['planning-tasks', projectId] });
+      qc.invalidateQueries({ queryKey: ['planning-summary', projectId] });
+      toast.success('Status updated');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
+  });
+
+  const reassignDetailMut = useMutation({
+    mutationFn: ({ taskId, target }: { taskId: number; target: string }) => {
+      const [type, ...rest] = target.split('-');
+      const id = Number(rest.join('-'));
+      if (type === 'client' && ticketAttApi.reassignAny) return ticketAttApi.reassignAny(taskId, { clientId: id });
+      if (type === 'admin' && ticketAttApi.reassignAny) return ticketAttApi.reassignAny(taskId, { adminId: id });
+      if (ticketAttApi.reassignAny) return ticketAttApi.reassignAny(taskId, { employeeId: id });
+      return ticketAttApi.reassign(taskId, id);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task-detail', detailTask?.id] });
+      qc.invalidateQueries({ queryKey: ['planning-tasks', projectId] });
+      toast.success('Reassigned');
+      setDetailReassignValue('');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
+  });
+
+  // Detail attachments
+  const { data: detailAttachments } = useQuery({
+    queryKey: ['task-attachments-plan', detailTask?.id],
+    queryFn: () => ticketAttApi.getAttachments!(detailTask!.id).then((r: any) => r.data?.data ?? r.data ?? []),
+    enabled: !!detailTask && detailOpen && !!ticketAttApi.getAttachments,
+  });
+
+  const uploadDetailAttMut = useMutation({
+    mutationFn: (file: File) => ticketAttApi.uploadAttachment!(detailTask!.id, file),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task-attachments-plan', detailTask?.id] });
+      toast.success('File uploaded');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Upload failed'),
+  });
+
+  const deleteDetailAttMut = useMutation({
+    mutationFn: (attId: number) => ticketAttApi.deleteAttachment!(detailTask!.id, attId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task-attachments-plan', detailTask?.id] });
+      toast.success('Deleted');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
+  });
+
+  // Reassign options for detail dialog
+  const reassignOpts = (() => {
+    const all = employees ?? [];
+    const deduped = all.filter((e: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.id === e.id && x._type === e._type) === i);
+    const empOpts = deduped.filter((e: any) => !e._type || e._type === 'employee').map((e: any) => ({ value: `emp-${e.id}`, label: e.empName }));
+    const adminOpts = deduped.filter((e: any) => e._type === 'admin').map((a: any) => ({ value: `admin-${a.id}`, label: `${a.empName} (Admin)` }));
+    const clientOpts = deduped.filter((e: any) => e._type === 'client').map((c: any) => ({ value: `client-${c.id}`, label: `${c.empName} (Client)` }));
+    return [...empOpts, ...adminOpts, ...clientOpts];
+  })();
+
   // ── Task history ────────────────────────────────────────────────────
   const { data: historyData, isLoading: historyLoading } = useQuery({
     queryKey: ['task-history', historyTaskId],
@@ -455,7 +548,7 @@ export default function ProjectPlanningPage() {
             </div>
           </div>
           <div className="flex gap-2">
-            {phaseList.length === 0 && (
+            {!isClient && phaseList.length === 0 && (
               <Button
                 size="sm"
                 onClick={() => quickSetupMut.mutate()}
@@ -466,9 +559,11 @@ export default function ProjectPlanningPage() {
                 Quick Setup
               </Button>
             )}
-            <Button size="sm" className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0" onClick={openCreatePhase}>
-              <Plus className="mr-1.5 h-4 w-4" /> Phase
-            </Button>
+            {!isClient && (
+              <Button size="sm" className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0" onClick={openCreatePhase}>
+                <Plus className="mr-1.5 h-4 w-4" /> Phase
+              </Button>
+            )}
             <Button
               size="sm"
               className="bg-white text-violet-700 hover:bg-white/90 border-0 shadow-lg font-semibold"
@@ -552,16 +647,20 @@ export default function ProjectPlanningPage() {
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openCreateTask(phase.id)}>
                       <Plus className="h-3.5 w-3.5" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditPhase(phase)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost" size="icon"
-                      className="h-7 w-7 text-red-500 hover:text-red-600"
-                      onClick={() => { if (confirm(`Delete phase "${phase.name}"?`)) deletePhaseMut.mutate(phase.id); }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    {!isClient && (
+                      <>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditPhase(phase)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost" size="icon"
+                          className="h-7 w-7 text-red-500 hover:text-red-600"
+                          onClick={() => { if (confirm(`Delete phase "${phase.name}"?`)) deletePhaseMut.mutate(phase.id); }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
                 {expanded && (
@@ -697,38 +796,40 @@ export default function ProjectPlanningPage() {
                   <FormMessage />
                 </FormItem>
               )} />
-              <div className="grid grid-cols-2 gap-3">
-                <FormField control={taskForm.control} name="phaseId" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Phase</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl><SelectTrigger className="w-full"><SelectValue placeholder="None" /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        <SelectItem value="__none__">None</SelectItem>
-                        {phaseList.map((p) => (
-                          <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={taskForm.control} name="assigneeId" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Assignee</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl><SelectTrigger className="w-full"><SelectValue placeholder="Unassigned" /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        <SelectItem value="__none__">Unassigned</SelectItem>
-                        {employeeList.map((e: Employee) => (
-                          <SelectItem key={e.id} value={String(e.id)}>{e.empName}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </div>
+              {!isClient && (
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField control={taskForm.control} name="phaseId" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phase</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger className="w-full"><SelectValue placeholder="None" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="__none__">None</SelectItem>
+                          {phaseList.map((p) => (
+                            <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={taskForm.control} name="assigneeId" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Assignee</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger className="w-full"><SelectValue placeholder="Unassigned" /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="__none__">Unassigned</SelectItem>
+                          {employeeList.map((e: Employee) => (
+                            <SelectItem key={e.id} value={String(e.id)}>{e.empName}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <FormField control={taskForm.control} name="priority" render={({ field }) => (
                   <FormItem>
@@ -745,24 +846,6 @@ export default function ProjectPlanningPage() {
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={taskForm.control} name="status" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl><SelectTrigger className="w-full"><SelectValue /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        <SelectItem value="todo">To Do</SelectItem>
-                        <SelectItem value="in_progress">In Progress</SelectItem>
-                        <SelectItem value="in_review">In Review</SelectItem>
-                        <SelectItem value="done">Done</SelectItem>
-                        <SelectItem value="closed">Closed</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
                 <FormField control={taskForm.control} name="dueDate" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Due Date</FormLabel>
@@ -770,14 +853,71 @@ export default function ProjectPlanningPage() {
                     <FormMessage />
                   </FormItem>
                 )} />
-                <FormField control={taskForm.control} name="estimatedHours" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Est. Hours</FormLabel>
-                    <FormControl><Input type="number" step="0.5" min="0" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
               </div>
+              {!isClient && (
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField control={taskForm.control} name="status" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Status</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl><SelectTrigger className="w-full"><SelectValue /></SelectTrigger></FormControl>
+                        <SelectContent>
+                          <SelectItem value="todo">To Do</SelectItem>
+                          <SelectItem value="in_progress">In Progress</SelectItem>
+                          <SelectItem value="in_review">In Review</SelectItem>
+                          <SelectItem value="done">Done</SelectItem>
+                          <SelectItem value="closed">Closed</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={taskForm.control} name="estimatedHours" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Est. Hours</FormLabel>
+                      <FormControl><Input type="number" step="0.5" min="0" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </div>
+              )}
+              {/* ── Attachments (create mode only) ── */}
+              {!editingTask && (
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">Attachments</label>
+                  <input
+                    ref={taskFileInputRef}
+                    type="file"
+                    multiple
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.txt,.csv"
+                    onChange={(e) => {
+                      if (e.target.files) setTaskFiles((prev) => [...prev, ...Array.from(e.target.files!)]);
+                      e.target.value = '';
+                    }}
+                  />
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {taskFiles.map((f, i) => (
+                      <span key={i} className="inline-flex items-center gap-1 rounded-md bg-violet-500/10 px-2 py-1 text-xs text-violet-700 dark:text-violet-300">
+                        <Paperclip className="h-3 w-3" />
+                        {f.name.length > 25 ? f.name.slice(0, 22) + '...' : f.name}
+                        <button type="button" onClick={() => setTaskFiles((prev) => prev.filter((_, j) => j !== i))}>
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => taskFileInputRef.current?.click()}
+                  >
+                    <Paperclip className="h-3 w-3 mr-1" /> Add Files
+                  </Button>
+                </div>
+              )}
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setTaskOpen(false)}>Cancel</Button>
                 <Button type="submit" disabled={isTaskPending}>
@@ -791,118 +931,187 @@ export default function ProjectPlanningPage() {
       </Dialog>
 
       {/* ── Task Detail Dialog ─────────────────────────────────────────────── */}
-      <Dialog open={detailOpen} onOpenChange={(v) => { setDetailOpen(v); if (!v) setDetailTask(null); }}>
-        <DialogContent className="max-w-xl flex flex-col max-h-[80vh] overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-violet-500 via-purple-500 to-fuchsia-500" />
-          <DialogHeader>
-            <DialogTitle>Task Detail</DialogTitle>
-          </DialogHeader>
+      <Dialog open={detailOpen} onOpenChange={(v) => { setDetailOpen(v); if (!v) { setDetailTask(null); setDetailReassignValue(''); } }}>
+        <DialogContent className="max-w-[95vw] sm:max-w-2xl flex flex-col max-h-[90vh] sm:max-h-[85vh] overflow-hidden gap-0 p-0">
+          <DialogTitle className="sr-only">Task Detail</DialogTitle>
+          {/* Gradient header */}
+          <div className="bg-linear-to-r from-violet-600 via-purple-600 to-indigo-600 px-5 py-4 text-white rounded-t-lg">
+            {detailLoading ? (
+              <Skeleton className="h-6 w-3/4 bg-white/20" />
+            ) : taskDetail ? (
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  {taskDetail.ticketNumber && (
+                    <span className="text-xs font-mono font-semibold bg-white/20 px-2 py-0.5 rounded">{taskDetail.ticketNumber}</span>
+                  )}
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium bg-white/20`}>{statusLabels[taskDetail.status]}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium bg-white/20`}>{priorityLabels[taskDetail.priority]}</span>
+                </div>
+                <h2 className="text-lg font-bold">{taskDetail.title}</h2>
+              </div>
+            ) : null}
+          </div>
+
           {detailLoading ? (
-            <div className="space-y-3">
-              <Skeleton className="h-6 w-3/4" />
-              <Skeleton className="h-20 w-full" />
-            </div>
+            <div className="p-5 space-y-3"><Skeleton className="h-20 w-full" /></div>
           ) : taskDetail ? (
             <>
-              {/* Scrollable content */}
-              <div className="space-y-4 flex-1 overflow-y-auto min-h-0 pr-1">
-                <div>
-                  <div className="flex items-center gap-2">
-                    {taskDetail.ticketNumber && (
-                      <span className="text-xs font-mono font-semibold text-violet-600 dark:text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded">{taskDetail.ticketNumber}</span>
-                    )}
-                    <h3 className="text-lg font-semibold">{taskDetail.title}</h3>
+              <div className="space-y-4 flex-1 overflow-y-auto min-h-0 p-5">
+                {taskDetail.description && (
+                  <p className="text-sm text-muted-foreground">{taskDetail.description}</p>
+                )}
+
+                {/* Info grid */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg border p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1"><User className="h-3 w-3" /> Assignee</p>
+                    <p className="text-sm font-medium truncate">{taskDetail.assignee?.empName ?? (taskDetail as any).assignedAdmin?.name ?? (taskDetail as any).assignedClient?.fullName ?? 'Unassigned'}</p>
                   </div>
-                  {taskDetail.description && (
-                    <p className="mt-1 text-sm text-muted-foreground">{taskDetail.description}</p>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[taskDetail.status]}`}>
-                    {statusLabels[taskDetail.status]}
-                  </span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${priorityColors[taskDetail.priority]}`}>
-                    {priorityLabels[taskDetail.priority]}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <User className="h-3.5 w-3.5" />
-                    {taskDetail.status === 'closed' && taskDetail.assignedAdmin?.name
-                      ? `Admin: ${taskDetail.assignedAdmin.name}`
-                      : taskDetail.assignee?.empName ?? 'Unassigned'}
+                  <div className="rounded-lg border p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1"><Calendar className="h-3 w-3" /> Due Date</p>
+                    <p className="text-sm font-medium">{taskDetail.dueDate ? new Date(taskDetail.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—'}</p>
                   </div>
-                  {taskDetail.dueDate && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Calendar className="h-3.5 w-3.5" />
-                      {taskDetail.dueDate}
-                    </div>
-                  )}
                   {taskDetail.estimatedHours && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Clock className="h-3.5 w-3.5" />
-                      {taskDetail.estimatedHours}h estimated
+                    <div className="rounded-lg border p-3">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1"><Clock className="h-3 w-3" /> Est. Hours</p>
+                      <p className="text-sm font-medium">{taskDetail.estimatedHours}h</p>
                     </div>
                   )}
                   {taskDetail.phase && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Target className="h-3.5 w-3.5" />
-                      {taskDetail.phase.name}
+                    <div className="rounded-lg border p-3">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1"><Target className="h-3 w-3" /> Phase</p>
+                      <p className="text-sm font-medium">{taskDetail.phase.name}</p>
                     </div>
                   )}
                 </div>
 
-                {/* Comments list */}
-                {/* History button */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-fit"
-                  onClick={() => { setHistoryTaskId(taskDetail.id); setHistoryOpen(true); }}
-                >
-                  <History className="h-4 w-4 mr-1.5" />
-                  View History
-                </Button>
-
-                <div className="border-t pt-3">
-                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-1.5">
-                    <MessageSquare className="h-4 w-4" />
-                    Comments ({taskDetail.comments?.length ?? 0})
-                  </h4>
-                  <div className="space-y-2">
-                    {(taskDetail.comments ?? []).map((c: ProjectTaskComment) => (
-                      <div key={c.id} className="rounded-md border p-2.5 text-sm">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-medium text-foreground">{(c as any).authorName ?? c.authorType}</span>
-                          <Badge variant="outline" className="text-[10px] capitalize">{c.authorType}</Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(c.createdAt).toLocaleString()}
-                          </span>
-                        </div>
-                        <p className="text-foreground">{c.content}</p>
-                      </div>
-                    ))}
+                {/* Status + Reassign (admin & employee only) */}
+                {!isClient && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 block">Change Status</label>
+                      <Select
+                        value={taskDetail.status}
+                        onValueChange={(v) => updateDetailStatusMut.mutate({ taskId: taskDetail.id, status: v })}
+                      >
+                        <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="todo">To Do</SelectItem>
+                          <SelectItem value="in_progress">In Progress</SelectItem>
+                          <SelectItem value="in_review">In Review</SelectItem>
+                          <SelectItem value="done">Done</SelectItem>
+                          <SelectItem value="closed">Closed</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 block">Reassign</label>
+                      <SearchableSelect
+                        options={reassignOpts}
+                        value={detailReassignValue}
+                        onValueChange={(v) => {
+                          setDetailReassignValue(v);
+                          reassignDetailMut.mutate({ taskId: taskDetail.id, target: v });
+                        }}
+                        placeholder="Select..."
+                      />
+                    </div>
                   </div>
+                )}
+
+                {/* Action buttons */}
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" onClick={() => { setHistoryTaskId(taskDetail.id); setHistoryOpen(true); }}>
+                    <History className="h-3.5 w-3.5 mr-1.5" /> View History
+                  </Button>
+                </div>
+
+                {/* Attachments */}
+                {ticketAttApi.getAttachments && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                        <Paperclip className="h-3.5 w-3.5" /> Attachments ({(detailAttachments as any[])?.length ?? 0})
+                      </h4>
+                      <div>
+                        <input ref={detailAttachRef} type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.txt,.csv"
+                          onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadDetailAttMut.mutate(f); e.target.value = ''; }} />
+                        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => detailAttachRef.current?.click()} disabled={uploadDetailAttMut.isPending}>
+                          {uploadDetailAttMut.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Paperclip className="h-3 w-3 mr-1" />} Upload
+                        </Button>
+                      </div>
+                    </div>
+                    {(detailAttachments as any[])?.length > 0 ? (
+                      <div className="space-y-1.5">
+                        {(detailAttachments as any[]).map((att: any) => {
+                          const isImg = /\.(jpg|jpeg|png|gif|webp)$/i.test(att.originalName);
+                          return (
+                            <div key={att.id} className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+                              {isImg ? <ImageIcon className="h-4 w-4 text-blue-500 shrink-0" /> : <FileText className="h-4 w-4 text-violet-500 shrink-0" />}
+                              <div className="flex-1 min-w-0">
+                                <a href={`${apiBase}${att.filePath}`} target="_blank" rel="noopener noreferrer" className="text-xs font-medium hover:text-violet-600 truncate block">{att.originalName}</a>
+                                <p className="text-[10px] text-muted-foreground">{(att.fileSize / 1024).toFixed(1)} KB · {att.uploadedByName}</p>
+                              </div>
+                              <a href={`${apiBase}${att.filePath}`} download={att.originalName} className="shrink-0 text-muted-foreground hover:text-foreground"><Download className="h-3.5 w-3.5" /></a>
+                              {!isClient && (
+                                <button className="shrink-0 text-muted-foreground hover:text-red-500" onClick={() => { if (confirm('Delete?')) deleteDetailAttMut.mutate(att.id); }}>
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground text-center py-2">No attachments yet.</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Comments */}
+                <div className="border-t pt-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                    <MessageSquare className="h-3.5 w-3.5" /> Comments ({taskDetail.comments?.length ?? 0})
+                  </h4>
+                  {(taskDetail.comments ?? []).length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-3">No comments yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {[...(taskDetail.comments ?? [])].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map((c: ProjectTaskComment) => (
+                        <div key={c.id} className="rounded-lg border p-2.5 text-sm">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-medium">{(c as any).authorName ?? c.authorType}</span>
+                            <Badge variant="outline" className="text-[10px] capitalize">{c.authorType}</Badge>
+                            <span className="text-[10px] text-muted-foreground ml-auto">
+                              {new Date(c.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'UTC' })}
+                            </span>
+                          </div>
+                          <p className="text-foreground text-sm">{c.content}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Fixed comment input at bottom */}
-              <div className="border-t pt-3 flex gap-2 shrink-0">
-                <Textarea
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  placeholder="Add a comment..."
-                  rows={2}
-                  className="flex-1"
-                />
-                <Button
-                  size="sm"
-                  className="self-end"
-                  disabled={!commentText.trim() || addCommentMut.isPending}
-                  onClick={() => addCommentMut.mutate(commentText.trim())}
-                >
-                  {addCommentMut.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Send'}
-                </Button>
+              {/* Fixed comment input */}
+              <div className="border-t px-5 py-3 shrink-0">
+                <div className="flex flex-col gap-2">
+                  <Textarea
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    placeholder="Add a comment..."
+                    rows={2}
+                  />
+                  <Button
+                    className="w-full bg-linear-to-r from-violet-500 to-purple-600 text-white hover:opacity-90 border-0"
+                    disabled={!commentText.trim() || addCommentMut.isPending}
+                    onClick={() => addCommentMut.mutate(commentText.trim())}
+                  >
+                    {addCommentMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <MessageSquare className="h-4 w-4 mr-1.5" />}
+                    Add Comment
+                  </Button>
+                </div>
               </div>
             </>
           ) : null}

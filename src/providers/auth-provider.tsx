@@ -5,7 +5,20 @@ import { AdminUser, Employee } from '@/types';
 import { tokenStorage, LoginType } from '@/lib/auth/token-storage';
 import { authApi } from '@/lib/api/auth';
 
-type AppUser = (AdminUser & { _type: 'admin' }) | (Employee & { _type: 'employee' });
+type ClientUser = {
+  id: number;
+  fullName: string;
+  email: string;
+  mobileNumber?: string;
+  projectId: number;
+  projectName: string | null;
+  companyId: number;
+  companyName: string | null;
+  companyLogoUrl: string | null;
+  _type: 'client';
+};
+
+type AppUser = (AdminUser & { _type: 'admin' }) | (Employee & { _type: 'employee' }) | ClientUser;
 
 interface AuthContextType {
   user: AppUser | null;
@@ -35,6 +48,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (type === 'employee') {
         const res = await authApi.getEmployeeProfile();
         setUser({ ...res.data.data, _type: 'employee' });
+      } else if (type === 'client') {
+        const res = await authApi.getClientProfile();
+        setUser({ ...res.data.data, _type: 'client' });
       } else {
         const res = await authApi.getProfile();
         setUser({ ...res.data.data, _type: 'admin' });
@@ -57,6 +73,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tokenStorage.setLoginType('employee');
       setLoginType('employee');
       setUser({ ...u, _type: 'employee' });
+    } else if (type === 'client') {
+      const res = await authApi.loginClient(email, password);
+      const { accessToken, refreshToken, user: u } = res.data.data;
+      tokenStorage.setAccess(accessToken);
+      tokenStorage.setRefresh(refreshToken);
+      tokenStorage.setLoginType('client');
+      setLoginType('client');
+      setUser({ ...u, _type: 'client' });
     } else {
       const res = await authApi.login(email, password);
       const { accessToken, refreshToken, user: u } = res.data.data;

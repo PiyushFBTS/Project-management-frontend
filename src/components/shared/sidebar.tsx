@@ -141,7 +141,7 @@ const platformNavItems: NavItem[] = [
   },
 ];
 
-function NavContent({ onNavigate, collapsed, isEmployee, isHr }: { onNavigate?: () => void; collapsed?: boolean; isEmployee?: boolean; isHr?: boolean }) {
+function NavContent({ onNavigate, collapsed, isEmployee, isHr, isClient }: { onNavigate?: () => void; collapsed?: boolean; isEmployee?: boolean; isHr?: boolean; isClient?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const { selectedCompany, clearCompany, isSuperAdmin } = useCompany();
@@ -158,7 +158,13 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr }: { onNavigate?: 
   // Super admin without company selected → show platform nav
   const baseItems = isSuperAdmin && !selectedCompany ? platformNavItems : navItems;
 
-  const visibleItems = (isEmployee ? baseItems.filter((item) => !item.adminOnly) : baseItems)
+  const clientAllowedLabels = ['Projects', 'All Tickets', 'My Tasks'];
+
+  const visibleItems = (() => {
+    if (isClient) return baseItems.filter((item) => clientAllowedLabels.includes(item.label));
+    if (isEmployee) return baseItems.filter((item) => !item.adminOnly);
+    return baseItems;
+  })()
     .map((item) => {
       if (!item.children) return item;
       const filteredChildren = item.children.filter((c) => !c.hrOrAdminOnly || canSeeHrItems);
@@ -330,6 +336,7 @@ export function Sidebar() {
   const { user } = useAuth();
   const isEmployee = user?._type === 'employee';
   const isHr = isEmployee && !!(user as any)?.isHr;
+  const isClient = user?._type === 'client';
 
   return (
     <aside
@@ -371,7 +378,7 @@ export function Sidebar() {
         )}
       </div>
 
-      <NavContent collapsed={isCollapsed} isEmployee={isEmployee} isHr={isHr} />
+      <NavContent collapsed={isCollapsed} isEmployee={isEmployee} isHr={isHr} isClient={isClient} />
 
       <Footer collapsed={isCollapsed} isEmployee={isEmployee} />
     </aside>
@@ -384,6 +391,7 @@ export function MobileSidebar() {
   const { user } = useAuth();
   const isEmployee = user?._type === 'employee';
   const isHr = isEmployee && !!(user as any)?.isHr;
+  const isClient = user?._type === 'client';
 
   return (
     <Sheet open={isOpen} onOpenChange={(v) => !v && close()}>
@@ -407,7 +415,7 @@ export function MobileSidebar() {
               <X className="h-4 w-4" />
             </button>
           </div>
-          <NavContent onNavigate={close} isEmployee={isEmployee} isHr={isHr} />
+          <NavContent onNavigate={close} isEmployee={isEmployee} isHr={isHr} isClient={isClient} />
           <Footer isEmployee={isEmployee} />
         </div>
       </SheetContent>

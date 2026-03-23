@@ -110,7 +110,7 @@ export default function LoginPage() {
           <div>
             <h2 className="text-2xl font-bold tracking-tight">Welcome back</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Sign in as {loginType === 'admin' ? 'an admin' : 'an employee'}
+              Sign in as {loginType === 'admin' ? 'an admin' : loginType === 'employee' ? 'an employee' : 'a client'}
             </p>
           </div>
 
@@ -138,6 +138,17 @@ export default function LoginPage() {
             >
               Employee
             </button>
+            <button
+              type="button"
+              onClick={() => setLoginType('client')}
+              className={`flex-1 rounded-md py-2 text-sm font-medium transition-all ${
+                loginType === 'client'
+                  ? 'bg-white dark:bg-card shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Client
+            </button>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
@@ -146,7 +157,7 @@ export default function LoginPage() {
               <Input
                 id="email"
                 type="email"
-                placeholder={loginType === 'admin' ? 'admin@acme.com' : 'priya.singh@acme.com'}
+                placeholder={loginType === 'admin' ? 'admin@acme.com' : loginType === 'employee' ? 'priya.singh@acme.com' : 'client@company.com'}
                 className="h-10"
                 {...register('email')}
               />

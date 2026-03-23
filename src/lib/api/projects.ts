@@ -26,6 +26,9 @@ export const projectsApi = {
   employeeGetOne: (id: number) =>
     api.get<ApiResponse<Project>>(`/employee/projects/${id}`),
 
+  employeeGetClients: (projectId: number) =>
+    api.get(`/employee/projects/${projectId}/clients`),
+
   // Documents (admin)
   getDocuments: (projectId: number) =>
     api.get(`/projects/${projectId}/documents`),
@@ -57,4 +60,22 @@ export const projectsApi = {
 
   employeeDeleteDocument: (projectId: number, docId: number) =>
     api.delete(`/employee/projects/${projectId}/documents/${docId}`),
+
+  // Client: own project
+  clientGetProject: () =>
+    api.get('/client/project'),
+
+  // Client: documents (read-only)
+  clientGetDocuments: (_projectId: number) =>
+    api.get('/client/documents'),
+
+  // Client users
+  getClients: (projectId: number) =>
+    api.get(`/projects/${projectId}/clients`),
+
+  createClient: (projectId: number, dto: { fullName: string; email: string; password: string; mobileNumber?: string }) =>
+    api.post(`/projects/${projectId}/clients`, dto),
+
+  deleteClient: (projectId: number, clientId: number) =>
+    api.delete(`/projects/${projectId}/clients/${clientId}`),
 };

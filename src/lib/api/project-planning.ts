@@ -120,6 +120,116 @@ export const employeePlanningApi = {
     api.post<ApiResponse<ProjectTaskComment>>(`/employee/projects/${projectId}/planning/tasks/${taskId}/comments`, dto),
 };
 
+// ── Client: Project Planning (same interface, ignores projectId) ────────────
+
+export const clientPlanningApi = {
+  getSummary: (_projectId: number) =>
+    api.get<ApiResponse<ProjectSummary>>('/client/summary'),
+
+  getPhases: (_projectId: number) =>
+    api.get<ApiResponse<ProjectPhase[]>>('/client/planning/phases'),
+
+  createPhase: (_projectId: number, _dto: CreatePhaseDto) => {
+    throw new Error('Clients cannot create phases');
+  },
+
+  updatePhase: (_projectId: number, _phaseId: number, _dto: UpdatePhaseDto) => {
+    throw new Error('Clients cannot update phases');
+  },
+
+  deletePhase: (_projectId: number, _phaseId: number) => {
+    throw new Error('Clients cannot delete phases');
+  },
+
+  reorderPhases: (_projectId: number, _phaseIds: number[]) => {
+    throw new Error('Clients cannot reorder phases');
+  },
+
+  getTasks: (_projectId: number, params?: {
+    page?: number;
+    limit?: number;
+    status?: ProjectTaskStatus;
+    priority?: TaskPriority;
+    assigneeId?: number;
+    phaseId?: number;
+  }) =>
+    api.get<ApiResponse<ProjectTask[]>>('/client/all-tickets', { params }),
+
+  createTask: (_projectId: number, dto: CreateTaskDto) =>
+    api.post<ApiResponse<ProjectTask>>('/client/planning/tasks', dto),
+
+  getTask: (_projectId: number, taskId: number) =>
+    api.get<ApiResponse<ProjectTask>>(`/client/planning/tasks/${taskId}`),
+
+  updateTask: (_projectId: number, _taskId: number, _dto: UpdateTaskDto) => {
+    throw new Error('Clients cannot update tasks');
+  },
+
+  deleteTask: (_projectId: number, _taskId: number) => {
+    throw new Error('Clients cannot delete tasks');
+  },
+
+  getHistory: (_projectId: number, taskId: number) =>
+    api.get<ApiResponse<ProjectTaskHistory[]>>(`/client/planning/tasks/${taskId}/history`),
+
+  addComment: (_projectId: number, taskId: number, dto: CreateCommentDto) =>
+    api.post<ApiResponse<ProjectTaskComment>>(`/client/tasks/${taskId}/comments`, dto),
+};
+
+// ── Client: Ticket APIs ─────────────────────────────────────────────────────
+
+export const clientTicketsApi = {
+  getAll: (params?: { limit?: number; status?: ProjectTaskStatus; priority?: TaskPriority; search?: string }) =>
+    api.get<ApiResponse<ProjectTask[]>>('/client/all-tickets', { params }),
+
+  getMyTasks: (params?: { limit?: number; status?: ProjectTaskStatus; priority?: TaskPriority; search?: string }) =>
+    api.get<ApiResponse<ProjectTask[]>>('/client/my-tasks', { params }),
+
+  getOne: (taskId: number) =>
+    api.get<ApiResponse<ProjectTask>>(`/client/planning/tasks/${taskId}`),
+
+  updateStatus: (taskId: number, status: ProjectTaskStatus) =>
+    api.patch<ApiResponse<ProjectTask>>(`/client/tasks/${taskId}/status`, { status }),
+
+  addComment: (taskId: number, dto: CreateCommentDto) =>
+    api.post<ApiResponse<ProjectTaskComment>>(`/client/tasks/${taskId}/comments`, dto),
+
+  getHistory: (taskId: number) =>
+    api.get<ApiResponse<ProjectTaskHistory[]>>(`/client/planning/tasks/${taskId}/history`),
+
+  getSummary: () =>
+    api.get('/client/summary'),
+
+  createTask: (dto: CreateTaskDto) =>
+    api.post<ApiResponse<ProjectTask>>('/client/planning/tasks', dto),
+
+  getPhases: () =>
+    api.get('/client/planning/phases'),
+
+  getEmployees: () =>
+    api.get('/client/employees'),
+
+  reassign: (taskId: number, assigneeId: number) =>
+    api.patch<ApiResponse<ProjectTask>>(`/client/tasks/${taskId}/reassign`, { employeeId: assigneeId }),
+
+  reassignAny: (taskId: number, body: { employeeId?: number; clientId?: number; adminId?: number }) =>
+    api.patch<ApiResponse<ProjectTask>>(`/client/tasks/${taskId}/reassign`, body),
+
+  getProjects: () => api.get('/client/project'),
+
+  getAttachments: (taskId: number) =>
+    api.get(`/client/tasks/${taskId}/attachments`),
+
+  uploadAttachment: (taskId: number, file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post(`/client/tasks/${taskId}/attachments`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+
+  deleteAttachment: (taskId: number, attId: number) =>
+    api.delete(`/client/tasks/${taskId}/attachments/${attId}`),
+};
+
 // ── Employee: My Tasks ───────────────────────────────────────────────────────
 
 export const myTasksApi = {
@@ -197,6 +307,9 @@ export const adminTicketsApi = {
   reassign: (taskId: number, assigneeId: number) =>
     api.patch<ApiResponse<ProjectTask>>(`/admin/all-tickets/${taskId}/reassign`, { assigneeId }),
 
+  reassignAny: (taskId: number, body: { employeeId?: number; clientId?: number }) =>
+    api.patch<ApiResponse<ProjectTask>>(`/admin/all-tickets/${taskId}/reassign-any`, body),
+
   getHistory: (taskId: number) =>
     api.get<ApiResponse<ProjectTaskHistory[]>>(`/admin/all-tickets/${taskId}/history`),
 
@@ -211,6 +324,18 @@ export const adminTicketsApi = {
 
   setContributors: (taskId: number, employeeIds: number[]) =>
     api.post(`/admin/all-tickets/${taskId}/contributors`, { employeeIds }),
+
+  getAttachments: (taskId: number) =>
+    api.get(`/admin/all-tickets/${taskId}/attachments`),
+
+  uploadAttachment: (taskId: number, file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post(`/admin/all-tickets/${taskId}/attachments`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+
+  deleteAttachment: (taskId: number, attId: number) =>
+    api.delete(`/admin/all-tickets/${taskId}/attachments/${attId}`),
 };
 
 // ── Employee: All Project Tickets ───────────────────────────────────────────
@@ -241,6 +366,9 @@ export const projectTicketsApi = {
   reassign: (taskId: number, assigneeId: number) =>
     api.patch<ApiResponse<ProjectTask>>(`/employee/project-tickets/${taskId}/reassign`, { assigneeId }),
 
+  reassignAny: (taskId: number, body: { employeeId?: number; clientId?: number }) =>
+    api.patch<ApiResponse<ProjectTask>>(`/employee/project-tickets/${taskId}/reassign-any`, body),
+
   getHistory: (taskId: number) =>
     api.get<ApiResponse<ProjectTaskHistory[]>>(`/employee/project-tickets/${taskId}/history`),
 
@@ -255,4 +383,16 @@ export const projectTicketsApi = {
 
   setContributors: (taskId: number, employeeIds: number[]) =>
     api.post(`/employee/project-tickets/${taskId}/contributors`, { employeeIds }),
+
+  getAttachments: (taskId: number) =>
+    api.get(`/employee/project-tickets/${taskId}/attachments`),
+
+  uploadAttachment: (taskId: number, file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return api.post(`/employee/project-tickets/${taskId}/attachments`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+  },
+
+  deleteAttachment: (taskId: number, attId: number) =>
+    api.delete(`/employee/project-tickets/${taskId}/attachments/${attId}`),
 };
