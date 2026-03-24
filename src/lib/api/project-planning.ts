@@ -223,7 +223,7 @@ export const clientTicketsApi = {
   uploadAttachment: (taskId: number, file: File) => {
     const fd = new FormData();
     fd.append('file', file);
-    return api.post(`/client/tasks/${taskId}/attachments`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+    return api.post(`/client/tasks/${taskId}/attachments`, fd);
   },
 
   deleteAttachment: (taskId: number, attId: number) =>
@@ -285,6 +285,16 @@ export const adminTicketsApi = {
   getProjects: () =>
     api.get<ApiResponse<{ id: number; projectName: string; projectCode: string }[]>>('/admin/all-tickets/projects'),
 
+  getMyTasks: (params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: ProjectTaskStatus;
+    priority?: TaskPriority;
+    projectId?: number;
+  }) =>
+    api.get<ApiResponse<ProjectTask[]>>('/admin/all-tickets/my-tasks', { params }),
+
   getAll: (params?: {
     page?: number;
     limit?: number;
@@ -331,7 +341,7 @@ export const adminTicketsApi = {
   uploadAttachment: (taskId: number, file: File) => {
     const fd = new FormData();
     fd.append('file', file);
-    return api.post(`/admin/all-tickets/${taskId}/attachments`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+    return api.post(`/admin/all-tickets/${taskId}/attachments`, fd);
   },
 
   deleteAttachment: (taskId: number, attId: number) =>
@@ -390,7 +400,7 @@ export const projectTicketsApi = {
   uploadAttachment: (taskId: number, file: File) => {
     const fd = new FormData();
     fd.append('file', file);
-    return api.post(`/employee/project-tickets/${taskId}/attachments`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+    return api.post(`/employee/project-tickets/${taskId}/attachments`, fd);
   },
 
   deleteAttachment: (taskId: number, attId: number) =>

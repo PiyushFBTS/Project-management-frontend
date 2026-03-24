@@ -44,4 +44,43 @@ export const employeesApi = {
 
   employeeGetTodayEvents: () =>
     api.get<ApiResponse<TodayEvent[]>>('/employee/employees/today-events'),
+
+  // ── Employee Documents (admin endpoint) ──
+  getDocuments: (userType: string, userId: number) =>
+    api.get(`/employees/documents/${userType}/${userId}`),
+
+  uploadDocument: (userType: string, userId: number, file: File, category: string) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('category', category);
+    return api.post(`/employees/documents/${userType}/${userId}`, fd);
+  },
+
+  deleteDocument: (docId: number) =>
+    api.delete(`/employees/documents/${docId}`),
+
+  // ── Employee Documents (employee/HR endpoint) ──
+  employeeGetDocuments: (userType: string, userId: number) =>
+    api.get(`/employee/employees/documents/${userType}/${userId}`),
+
+  employeeUploadDocument: (userType: string, userId: number, file: File, category: string) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('category', category);
+    return api.post(`/employee/employees/documents/${userType}/${userId}`, fd);
+  },
+
+  employeeDeleteDocument: (docId: number) =>
+    api.delete(`/employee/employees/documents/${docId}`),
+
+  // ── Employee: own documents ──
+  getMyDocuments: () =>
+    api.get('/employee/employees/me/documents'),
+
+  uploadMyDocument: (file: File, category: string) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('category', category);
+    return api.post('/employee/employees/me/documents', fd);
+  },
 };

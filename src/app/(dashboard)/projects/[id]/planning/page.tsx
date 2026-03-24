@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -103,6 +103,7 @@ const phaseStatusLabels: Record<string, string> = {
 export default function ProjectPlanningPage() {
   const params = useParams();
   const projectId = Number(params.id);
+  const router = useRouter();
   const qc = useQueryClient();
   const { user } = useAuth();
   const isAdmin = user?._type === 'admin';
@@ -346,21 +347,8 @@ export default function ProjectPlanningPage() {
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
   });
 
-  const openCreateTask = (phaseId?: number) => {
-    setEditingTask(null);
-    setDefaultPhaseId(phaseId);
-    setTaskFiles([]);
-    taskForm.reset({
-      title: '',
-      description: '',
-      priority: 'medium',
-      status: 'todo',
-      phaseId: phaseId ? String(phaseId) : '__none__',
-      assigneeId: '__none__',
-      dueDate: '',
-      estimatedHours: '',
-    });
-    setTaskOpen(true);
+  const openCreateTask = () => {
+    router.push(`/projects/${projectId}/planning/new-task`);
   };
 
   const openEditTask = (t: ProjectTask) => {

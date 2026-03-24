@@ -39,7 +39,6 @@ export const smtpApi = {
     api.post<{ message: string }>(
       `/platform/smtp/${smtpId}/send`,
       buildSendFormData(recipientEmail, subject, body, attachments),
-      { headers: { 'Content-Type': 'multipart/form-data' } },
     ),
 
   // ── Platform per-company ──────────────────────────────────────────────
@@ -63,7 +62,6 @@ export const smtpApi = {
     api.post<{ message: string }>(
       `/platform/companies/${companyId}/smtp/${smtpId}/send`,
       buildSendFormData(recipientEmail, subject, body, attachments),
-      { headers: { 'Content-Type': 'multipart/form-data' } },
     ),
 
   // ── Company Admin ───────────────────────────────────────────────────────
@@ -87,6 +85,5 @@ export const smtpApi = {
     api.post<{ message: string }>(
       `/admin/smtp/${smtpId}/send`,
       buildSendFormData(recipientEmail, subject, body, attachments),
-      { headers: { 'Content-Type': 'multipart/form-data' } },
     ),
 };

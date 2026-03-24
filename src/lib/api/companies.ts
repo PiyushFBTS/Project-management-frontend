@@ -84,9 +84,7 @@ export const companiesApi = {
   uploadLogo: (id: number, file: File) => {
     const formData = new FormData();
     formData.append('logo', file);
-    return api.post<ApiResponse<{ logoUrl: string }>>(`/platform/companies/${id}/logo`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    return api.post<ApiResponse<{ logoUrl: string }>>(`/platform/companies/${id}/logo`, formData);
   },
 
   getPlatformDashboard: () =>

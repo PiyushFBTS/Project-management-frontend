@@ -1,231 +1,428 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useRef, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { ArrowLeft, Mail, Phone } from 'lucide-react';
+import { toast } from 'sonner';
+import {
+  ArrowLeft, Mail, Phone, FileText, Download, Paperclip, Upload, Trash2, Loader2,
+  User, Shield, KeyRound, Eye, EyeOff, CheckCircle2,
+} from 'lucide-react';
 import { employeesApi } from '@/lib/api/employees';
+import { authApi } from '@/lib/api/auth';
 import { useAuth } from '@/providers/auth-provider';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 
 const AVATAR_GRADIENTS = [
-  'from-pink-500 to-rose-600',
-  'from-violet-500 to-purple-600',
-  'from-indigo-500 to-blue-600',
-  'from-emerald-500 to-teal-600',
+  'from-pink-500 to-rose-600', 'from-violet-500 to-purple-600',
+  'from-indigo-500 to-blue-600', 'from-emerald-500 to-teal-600',
   'from-amber-500 to-orange-600',
 ];
 
 const TYPE_LABELS: Record<string, string> = {
-  project_manager: 'Project Manager',
-  functional: 'Functional Consultant',
-  technical: 'Technical Consultant',
-  management: 'Management',
-  core_team: 'Core Team',
+  project_manager: 'Project Manager', functional: 'Functional Consultant',
+  technical: 'Technical Consultant', management: 'Management', core_team: 'Core Team',
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  aadhaar: 'Aadhaar Card', pan: 'PAN Card', joining: 'Joining Doc', exit: 'Exit Doc', other: 'Other',
 };
 
 function getInitials(name: string) {
   return name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 }
 
-function getAvatarGradient(id: number) {
-  return AVATAR_GRADIENTS[id % AVATAR_GRADIENTS.length];
-}
-
-function DetailRow({ label, value, highlight }: { label: string; value?: string | null; highlight?: boolean }) {
-  if (!value) return null;
-  return (
-    <div className="flex items-start py-3 border-b border-border/50 last:border-0 gap-4">
-      <span className="w-40 shrink-0 text-sm text-muted-foreground">{label}</span>
-      <span className={`text-sm font-medium ${highlight ? 'text-indigo-500 dark:text-indigo-400' : 'text-foreground'}`}>
-        {value}
-      </span>
-    </div>
-  );
-}
+type Tab = 'profile' | 'documents' | 'security';
 
 export default function EmployeeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const qc = useQueryClient();
   const { user } = useAuth();
   const isEmployee = user?._type === 'employee';
-  const isAdmin = user?._type !== 'employee';
-  const targetType = searchParams.get('type') ?? 'employee'; // 'admin' or 'employee'
+  const isAdmin = user?._type === 'admin';
+  const isHr = isEmployee && !!(user as any)?.isHr;
+  const canManageAllDocs = isAdmin || isHr;
+  const targetType = searchParams.get('type') ?? 'employee';
+  const isSelf = (targetType === 'employee' && isEmployee && Number(id) === user?.id) ||
+                 (targetType === 'admin' && isAdmin && Number(id) === user?.id);
+  const canUploadDocs = canManageAllDocs || isSelf;
+
+  const [activeTab, setActiveTab] = useState<Tab>('profile');
+  const [docCategory, setDocCategory] = useState('other');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
+
+  // Password change state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const { data: emp, isLoading } = useQuery({
     queryKey: ['employee-detail', id, targetType],
     queryFn: () => {
-      if (targetType === 'admin' && isAdmin) {
-        return employeesApi.getAdmin(Number(id)).then((r) => r.data.data);
-      }
-      return (isEmployee
-        ? employeesApi.employeeGetOne(Number(id))
-        : employeesApi.getOne(Number(id))
-      ).then((r) => r.data.data);
+      if (targetType === 'admin' && isAdmin) return employeesApi.getAdmin(Number(id)).then((r) => r.data.data);
+      return (isEmployee ? employeesApi.employeeGetOne(Number(id)) : employeesApi.getOne(Number(id))).then((r) => r.data.data);
     },
     enabled: !!id,
   });
 
+  // Use admin or employee API based on logged-in user role
+  const docApi = {
+    get: isAdmin ? employeesApi.getDocuments : employeesApi.employeeGetDocuments,
+    upload: isAdmin ? employeesApi.uploadDocument : employeesApi.employeeUploadDocument,
+    del: isAdmin ? employeesApi.deleteDocument : employeesApi.employeeDeleteDocument,
+  };
+
+  const { data: docs, isLoading: docsLoading } = useQuery({
+    queryKey: ['employee-documents', targetType, id],
+    queryFn: () => {
+      if (isSelf && isEmployee) return employeesApi.getMyDocuments().then((r: any) => r.data?.data ?? r.data ?? []);
+      return docApi.get(targetType, Number(id)).then((r: any) => r.data?.data ?? r.data ?? []);
+    },
+    enabled: !!id && activeTab === 'documents',
+  });
+
+  const uploadMut = useMutation({
+    mutationFn: (file: File) => {
+      // Employee self-upload (aadhaar/pan only)
+      if (isSelf && isEmployee) return employeesApi.uploadMyDocument(file, docCategory);
+      return docApi.upload(targetType, Number(id), file, docCategory);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['employee-documents', targetType, id] });
+      toast.success('Document uploaded');
+      setDocCategory('other');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Upload failed'),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (docId: number) => docApi.del(docId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['employee-documents', targetType, id] });
+      toast.success('Document deleted');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Delete failed'),
+  });
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) { toast.error('Passwords do not match'); return; }
+    if (newPassword.length < 6) { toast.error('Min 6 characters'); return; }
+    setSaving(true);
+    try {
+      await authApi.changePassword(currentPassword, newPassword);
+      toast.success('Password changed');
+      setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Failed');
+    } finally { setSaving(false); }
+  };
+
+  const passwordStrength = (() => {
+    if (!newPassword) return null;
+    if (newPassword.length < 6) return { label: 'Too short', color: 'bg-red-500', width: 'w-1/4' };
+    if (newPassword.length < 8 || !/[0-9]/.test(newPassword)) return { label: 'Weak', color: 'bg-amber-500', width: 'w-2/4' };
+    if (!/[^a-zA-Z0-9]/.test(newPassword)) return { label: 'Medium', color: 'bg-yellow-500', width: 'w-3/4' };
+    return { label: 'Strong', color: 'bg-emerald-500', width: 'w-full' };
+  })();
+
+  // Documents tab visible to: admin, HR, or the employee viewing their own profile
+  const canViewDocs = canManageAllDocs || isSelf;
+
+  const tabs: { key: Tab; label: string; icon: any }[] = [
+    { key: 'profile', label: 'Profile', icon: User },
+    ...(canViewDocs ? [{ key: 'documents' as Tab, label: 'Documents', icon: Paperclip }] : []),
+    ...(isSelf ? [{ key: 'security' as Tab, label: 'Security', icon: Shield }] : []),
+  ];
+
   return (
     <div className="space-y-4">
       <Button variant="ghost" size="sm" className="gap-1.5 -ml-1" onClick={() => router.back()}>
-        <ArrowLeft className="h-4 w-4" />
-        Back
+        <ArrowLeft className="h-4 w-4" /> Back
       </Button>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_1fr]">
-          <div className="space-y-4">
-            <Skeleton className="h-64 rounded-2xl" />
-            <Skeleton className="h-36 rounded-2xl" />
-          </div>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_1fr]">
+          <Skeleton className="h-80 rounded-2xl" />
           <Skeleton className="h-96 rounded-2xl" />
         </div>
       ) : !emp ? (
         <Card><CardContent className="py-16 text-center text-muted-foreground">Employee not found.</CardContent></Card>
       ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_1fr]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_1fr]">
 
-          {/* ── Left sidebar ─────────────────────────────────── */}
-          <div className="space-y-4">
-
-            {/* Avatar card */}
+          {/* ── Left sidebar ─────────────────────── */}
+          <div className="space-y-3">
+            {/* Avatar + info */}
             <Card className="overflow-hidden shadow-sm">
-              <div className={`bg-linear-to-br ${getAvatarGradient(emp.id)} p-6 flex flex-col items-center gap-3`}>
-                <div className="flex h-24 w-24 items-center justify-center rounded-full bg-white/25 backdrop-blur-sm text-white text-3xl font-bold ring-4 ring-white/30 shadow-xl">
+              <div className={`bg-linear-to-br ${AVATAR_GRADIENTS[emp.id % AVATAR_GRADIENTS.length]} p-5 flex flex-col items-center gap-2`}>
+                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/25 backdrop-blur-sm text-white text-2xl font-bold ring-4 ring-white/30 shadow-xl">
                   {getInitials(emp.empName)}
                 </div>
-                <div className="text-center">
-                  <p className="font-bold text-white text-base leading-tight">{emp.empName}</p>
-                  <p className="text-white/70 text-xs mt-0.5">{TYPE_LABELS[emp.consultantType] ?? emp.consultantType}</p>
-                </div>
-              </div>
-              <CardContent className="px-4 py-3 flex flex-wrap gap-1.5 justify-center">
-                <Badge variant="outline" className="text-xs">{emp.empCode}</Badge>
-                {emp.isHr && <Badge className="text-xs bg-violet-500/10 text-violet-600 border-violet-200 dark:border-violet-800 dark:text-violet-400">HR</Badge>}
-                <Badge className={`text-xs border-0 ${emp.isActive ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-red-500/10 text-red-600 dark:text-red-400'}`}>
+                <p className="font-bold text-white text-sm leading-tight truncate max-w-full">{emp.empName}</p>
+                <p className="text-white/70 text-xs">{emp.email}</p>
+                <Badge className={`text-[10px] border-0 ${emp.isActive ? 'bg-emerald-500/20 text-emerald-100' : 'bg-red-500/20 text-red-100'}`}>
                   {emp.isActive ? 'Active' : 'Inactive'}
                 </Badge>
-              </CardContent>
+              </div>
             </Card>
 
-            {/* Contact quick links */}
+            {/* Tab nav */}
             <Card className="shadow-sm">
-              <CardContent className="px-4 py-3 space-y-2.5">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Contact</p>
-                {emp.email && (
-                  <a href={`mailto:${emp.email}`} className="flex items-center gap-2.5 text-sm text-indigo-500 hover:text-indigo-600 transition-colors">
-                    <Mail className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">{emp.email}</span>
-                  </a>
-                )}
-                {emp.mobileNumber && (
-                  <a href={`tel:${emp.mobileNumber}`} className="flex items-center gap-2.5 text-sm text-indigo-500 hover:text-indigo-600 transition-colors">
-                    <Phone className="h-3.5 w-3.5 shrink-0" />
-                    {emp.mobileNumber}
-                  </a>
-                )}
+              <CardContent className="p-2">
+                {tabs.map(({ key, label, icon: Icon }) => (
+                  <button
+                    key={key}
+                    onClick={() => setActiveTab(key)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      activeTab === key
+                        ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                        : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {label}
+                  </button>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* ── Right content ─────────────────────── */}
+          <div className="space-y-4">
+
+            {/* Header card */}
+            <Card className="shadow-sm">
+              <CardContent className="px-5 py-4 flex items-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-linear-to-br from-slate-800 to-slate-900 text-white text-xl font-bold shrink-0">
+                  {getInitials(emp.empName)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h1 className="text-lg font-bold">{emp.empName}</h1>
+                  <p className="text-sm text-muted-foreground">
+                    {TYPE_LABELS[emp.consultantType] ?? emp.consultantType}
+                    {emp.isHr ? ' · HR' : ''}
+                  </p>
+                  {emp.mobileNumber && <p className="text-xs text-muted-foreground mt-0.5">{emp.mobileNumber}</p>}
+                </div>
               </CardContent>
             </Card>
 
-            {/* Tags */}
-            {(emp.consultantType || emp.assignedProject) && (
+            {/* ── Profile tab ───────────────────────── */}
+            {activeTab === 'profile' && (
               <Card className="shadow-sm">
-                <CardContent className="px-4 py-3">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Info</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    <span className="rounded-md bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 text-xs font-medium text-indigo-600 dark:text-indigo-400">
-                      {TYPE_LABELS[emp.consultantType] ?? emp.consultantType}
-                    </span>
-                    {emp.isHr && (
-                      <span className="rounded-md bg-violet-50 dark:bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-600 dark:text-violet-400">
-                        Human Resources
-                      </span>
+                <CardContent className="px-5 py-4">
+                  <h2 className="text-base font-semibold mb-4">Personal Information</h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-5 gap-x-8">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Full Name</p>
+                      <p className="text-sm font-medium">{emp.empName}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Email Address</p>
+                      <p className="text-sm font-medium">{emp.email}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Phone Number</p>
+                      <p className="text-sm font-medium">{emp.mobileNumber || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Date of Birth</p>
+                      <p className="text-sm font-medium">{emp.dateOfBirth ? format(new Date(emp.dateOfBirth + 'T00:00:00'), 'dd MMM yyyy') : '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">User Role</p>
+                      <p className="text-sm font-medium uppercase">{targetType === 'admin' ? 'Admin' : TYPE_LABELS[emp.consultantType] ?? emp.consultantType}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Joined</p>
+                      <p className="text-sm font-medium">{emp.joiningDate ? format(new Date(emp.joiningDate + 'T00:00:00'), 'dd MMM yyyy') : emp.createdAt ? format(new Date(emp.createdAt), 'dd MMM yyyy') : '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Employee Code</p>
+                      <p className="text-sm font-medium font-mono">{emp.empCode ?? '—'}</p>
+                    </div>
+                    {emp.reportsTo && (
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Reports To</p>
+                        <p className="text-sm font-medium">{emp.reportsTo.empName}</p>
+                      </div>
                     )}
                     {emp.assignedProject && (
-                      <span className="rounded-md bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                        {emp.assignedProject.projectName}
-                      </span>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Assigned Project</p>
+                        <p className="text-sm font-medium">{emp.assignedProject.projectName}</p>
+                      </div>
                     )}
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Status</p>
+                      <Badge className={`text-xs border-0 ${emp.isActive ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
+                        {emp.isActive ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
             )}
-          </div>
 
-          {/* ── Right main area ───────────────────────────────── */}
-          <div className="space-y-4">
-
-            {/* Name + role header */}
-            <Card className="shadow-sm">
-              <CardContent className="px-5 py-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <h1 className="text-xl font-bold text-foreground">{emp.empName}</h1>
-                    <p className="text-sm text-indigo-500 dark:text-indigo-400 font-medium mt-0.5">
-                      {TYPE_LABELS[emp.consultantType] ?? emp.consultantType}
-                      {emp.isHr ? ' · HR' : ''}
-                    </p>
+            {/* ── Documents tab ─────────────────────── */}
+            {activeTab === 'documents' && (
+              <Card className="shadow-sm">
+                <CardContent className="px-5 py-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-base font-semibold">Documents</h2>
+                    {canUploadDocs && (
+                      <div className="flex items-center gap-2">
+                        <Select value={docCategory} onValueChange={setDocCategory}>
+                          <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="aadhaar">Aadhaar Card</SelectItem>
+                            <SelectItem value="pan">PAN Card</SelectItem>
+                            {canManageAllDocs && (
+                              <>
+                                <SelectItem value="joining">Joining Doc</SelectItem>
+                                <SelectItem value="exit">Exit Doc</SelectItem>
+                                <SelectItem value="other">Other</SelectItem>
+                              </>
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <input
+                          ref={fileInputRef} type="file" className="hidden"
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.txt"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) uploadMut.mutate(f);
+                            if (fileInputRef.current) fileInputRef.current.value = '';
+                          }}
+                        />
+                        <Button size="sm" variant="outline" disabled={uploadMut.isPending} onClick={() => fileInputRef.current?.click()}>
+                          {uploadMut.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
+                          Upload
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                  {isAdmin && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="shrink-0"
-                      onClick={() => router.push('/employees')}
-                    >
-                      Edit Profile
-                    </Button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
 
-            {/* About tab content */}
-            <Card className="shadow-sm">
-              <CardContent className="px-5 py-2">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground py-3 border-b">About</p>
-                <DetailRow label="Employee ID" value={emp.empCode} highlight />
-                <DetailRow label="Full Name" value={emp.empName} highlight />
-                <DetailRow label="Email" value={emp.email} highlight />
-                <DetailRow label="Phone" value={emp.mobileNumber} highlight />
-                <DetailRow
-                  label="Role"
-                  value={TYPE_LABELS[emp.consultantType] ?? emp.consultantType}
-                  highlight
-                />
-                <DetailRow
-                  label="Reports To"
-                  value={emp.reportsTo ? `${emp.reportsTo.empName} (${emp.reportsTo.empCode})` : null}
-                  highlight
-                />
-                <DetailRow
-                  label="Assigned Project"
-                  value={emp.assignedProject ? `${emp.assignedProject.projectName} (${emp.assignedProject.projectCode})` : null}
-                  highlight
-                />
-                <DetailRow
-                  label="Date of Birth"
-                  value={emp.dateOfBirth ? format(new Date(emp.dateOfBirth + 'T00:00:00'), 'dd MMMM yyyy') : null}
-                />
-                <DetailRow
-                  label="Work Anniversary"
-                  value={emp.joiningDate ? format(new Date(emp.joiningDate + 'T00:00:00'), 'dd MMMM yyyy') : null}
-                />
-                <DetailRow
-                  label="Member Since"
-                  value={emp.createdAt ? format(new Date(emp.createdAt), 'dd MMMM yyyy') : null}
-                />
-                <DetailRow
-                  label="Status"
-                  value={emp.isActive ? 'Active' : 'Inactive'}
-                />
-              </CardContent>
-            </Card>
+                  {docsLoading ? (
+                    <div className="space-y-2">{[...Array(2)].map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}</div>
+                  ) : !(docs as any[])?.length ? (
+                    <p className="text-sm text-muted-foreground text-center py-8">No documents uploaded yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {(docs as any[]).map((doc: any) => (
+                        <div key={doc.id} className="flex items-center gap-3 rounded-lg border p-3 hover:bg-accent/30 transition-colors">
+                          <div className="h-10 w-10 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+                            <FileText className="h-5 w-5 text-violet-500" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{doc.originalName}</p>
+                            <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+                              <span className="capitalize rounded bg-violet-500/10 px-1.5 py-0.5 text-violet-600 dark:text-violet-400">
+                                {CATEGORY_LABELS[doc.category] ?? doc.category}
+                              </span>
+                              <span>{(doc.fileSize / 1024).toFixed(0)} KB</span>
+                              <span>by {doc.uploadedByName}</span>
+                            </div>
+                          </div>
+                          <div className="flex gap-1 shrink-0">
+                            <a href={`${apiBase}${doc.filePath}`} target="_blank" rel="noopener noreferrer">
+                              <Button variant="ghost" size="icon" className="h-8 w-8"><Download className="h-4 w-4" /></Button>
+                            </a>
+                            {canManageAllDocs && (
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600"
+                                disabled={deleteMut.isPending}
+                                onClick={() => { if (confirm(`Delete "${doc.originalName}"?`)) deleteMut.mutate(doc.id); }}>
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* ── Security tab (only for own profile) ───── */}
+            {activeTab === 'security' && isSelf && (
+              <Card className="shadow-sm">
+                <CardContent className="px-5 py-4">
+                  <h2 className="text-base font-semibold mb-4 flex items-center gap-2">
+                    <KeyRound className="h-4 w-4 text-amber-500" /> Change Password
+                  </h2>
+                  <form onSubmit={handleChangePassword} className="space-y-4 max-w-lg">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Current Password</label>
+                      <div className="relative">
+                        <Input type={showCurrent ? 'text' : 'password'} value={currentPassword}
+                          onChange={(e) => setCurrentPassword(e.target.value)} required className="pr-9" />
+                        <button type="button" onClick={() => setShowCurrent(v => !v)}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                          {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">New Password</label>
+                      <div className="relative">
+                        <Input type={showNew ? 'text' : 'password'} value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)} required className="pr-9" />
+                        <button type="button" onClick={() => setShowNew(v => !v)}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                          {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      {passwordStrength && (
+                        <div className="space-y-0.5">
+                          <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
+                            <div className={`h-full rounded-full transition-all ${passwordStrength.color} ${passwordStrength.width}`} />
+                          </div>
+                          <p className="text-[10px] font-medium text-muted-foreground">{passwordStrength.label}</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-muted-foreground">Confirm Password</label>
+                      <div className="relative">
+                        <Input type={showConfirm ? 'text' : 'password'} value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)} required
+                          className={`pr-9 ${confirmPassword && confirmPassword !== newPassword ? 'border-red-500' : confirmPassword && confirmPassword === newPassword ? 'border-emerald-500' : ''}`} />
+                        <button type="button" onClick={() => setShowConfirm(v => !v)}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                          {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      {confirmPassword && confirmPassword === newPassword && (
+                        <p className="text-[10px] text-emerald-500 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Passwords match</p>
+                      )}
+                    </div>
+                    <Button type="submit" disabled={saving}
+                      className="bg-linear-to-r from-indigo-500 to-violet-600 text-white hover:opacity-90 border-0">
+                      <KeyRound className="mr-1.5 h-4 w-4" />
+                      {saving ? 'Updating…' : 'Update Password'}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       )}

@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -52,6 +53,20 @@ function formatCommentTime(dateStr: string): string {
   return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'UTC' });
 }
 
+/** Convert mention tokens to styled HTML spans and sanitize plain text */
+function renderMentionsHtml(content: string): string {
+  // First escape HTML in the raw text
+  const escaped = content
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  // Replace @[name](id) tokens with styled spans
+  return escaped.replace(
+    /@\[([^\]]+)\]\(\d+\)/g,
+    '<span class="inline-flex items-center rounded-full bg-violet-500/15 px-1.5 py-0.5 text-xs font-medium text-violet-600 dark:text-violet-400">@$1</span>',
+  ).replace(/\n/g, '<br/>');
+}
+
 // ── Color maps ───────────────────────────────────────────────────────────────
 
 const statusColors: Record<string, string> = {
@@ -77,6 +92,7 @@ const priorityLabels: Record<string, string> = {
 };
 
 export default function FullTicketsPage() {
+  const router = useRouter();
   const qc = useQueryClient();
   const { user, isLoading: authLoading } = useAuth();
   const isAdmin = user?._type === 'admin';
@@ -461,11 +477,7 @@ console.log("reassignOptions",reassignOptions);
   });
 
   const openDetail = (t: ProjectTask) => {
-    setDetailTask(t);
-    setDetailOpen(true);
-    setCommentText('');
-    setTaggedMentions([]);
-    setReassignTo(t.assigneeId ? String(t.assigneeId) : '');
+    router.push(`/full-tickets/${t.id}`);
   };
   console.log("reassignTo", reassignTo)
   return (
@@ -601,16 +613,27 @@ console.log("reassignOptions",reassignOptions);
             Clear Filters
           </Button>
         )}
-        <Button
-          variant="outline"
-          size="sm"
-          className="ml-auto shrink-0"
-          disabled={tasks.length === 0}
-          onClick={exportToExcel}
-        >
-          <Download className="h-4 w-4 mr-1.5" />
-          Export Excel
-        </Button>
+        <div className="ml-auto flex items-center gap-2 shrink-0">
+          {isClient && (user as any)?.projectId && (
+            <Button
+              size="sm"
+              className="bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white"
+              onClick={() => router.push(`/projects/${(user as any).projectId}/planning/new-task`)}
+            >
+              <Ticket className="h-4 w-4 mr-1.5" />
+              New Ticket
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={tasks.length === 0}
+            onClick={exportToExcel}
+          >
+            <Download className="h-4 w-4 mr-1.5" />
+            Export Excel
+          </Button>
+        </div>
       </div>
 
       {/* Empty / Loading state */}
@@ -992,7 +1015,9 @@ console.log("reassignOptions",reassignOptions);
                               {timeAgo(c.createdAt)}
                             </span>
                           </div>
-                          <p className="text-foreground leading-relaxed pl-8">{renderMentions(c.content)}</p>
+                          <div className="text-foreground leading-relaxed pl-8 text-sm [&_p]:my-0.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_h1]:text-lg [&_h1]:font-bold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold"
+                            dangerouslySetInnerHTML={{ __html: renderMentionsHtml(c.content) }}
+                          />
                         </div>
                       ))}
                     </div>

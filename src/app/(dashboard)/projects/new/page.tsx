@@ -10,7 +10,7 @@ import { projectsApi } from '@/lib/api/projects';
 import { CreateProjectDto } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -246,12 +246,11 @@ export default function NewProjectPage() {
         <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">
           <FileText className="h-3 w-3" /> Description
         </div>
-        <Textarea
+        <RichTextEditor
           value={form.description}
-          onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+          onChange={(html) => setForm((p) => ({ ...p, description: html }))}
           placeholder="Brief project description..."
-          rows={3}
-          className="text-sm"
+          minHeight="150px"
         />
       </div>
 

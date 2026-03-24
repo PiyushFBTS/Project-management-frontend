@@ -38,7 +38,6 @@ export const projectsApi = {
     fd.append('file', file);
     fd.append('category', category);
     return api.post(`/projects/${projectId}/documents`, fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
 
@@ -54,7 +53,6 @@ export const projectsApi = {
     fd.append('file', file);
     fd.append('category', category);
     return api.post(`/employee/projects/${projectId}/documents`, fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
 

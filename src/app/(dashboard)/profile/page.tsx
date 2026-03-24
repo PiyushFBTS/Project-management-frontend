@@ -1,103 +1,144 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useAuth } from '@/providers/auth-provider';
 import { authApi } from '@/lib/api/auth';
 import { employeesApi } from '@/lib/api/employees';
 import { Employee } from '@/types';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Mail, Phone, KeyRound, Eye, EyeOff, CheckCircle2, Pencil,
+  KeyRound, Eye, EyeOff, CheckCircle2, Pencil,
+  FileText, Download, Paperclip, User, Shield, Loader2, Upload, Trash2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 
 const AVATAR_GRADIENTS = [
-  'from-indigo-500 to-violet-600',
-  'from-pink-500 to-rose-600',
-  'from-emerald-500 to-teal-600',
-  'from-amber-500 to-orange-600',
+  'from-indigo-500 to-violet-600', 'from-pink-500 to-rose-600',
+  'from-emerald-500 to-teal-600', 'from-amber-500 to-orange-600',
   'from-blue-500 to-indigo-600',
 ];
 
-const roleMap: Record<string, { label: string; color: string }> = {
-  super_admin: { label: 'Super Admin', color: 'bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-800' },
-  admin:       { label: 'Admin',       color: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800' },
-};
-
 const consultantTypeLabels: Record<string, string> = {
-  project_manager: 'Project Manager',
-  functional: 'Functional Consultant',
-  technical: 'Technical Consultant',
-  management: 'Management',
-  core_team: 'Core Team',
+  project_manager: 'Project Manager', functional: 'Functional Consultant',
+  technical: 'Technical Consultant', management: 'Management', core_team: 'Core Team',
 };
 
-function DetailRow({ label, value, highlight }: { label: string; value?: string | null; highlight?: boolean }) {
-  if (!value) return null;
-  return (
-    <div className="flex items-start py-3 border-b border-border/50 last:border-0 gap-4">
-      <span className="w-36 shrink-0 text-sm text-muted-foreground">{label}</span>
-      <span className={`text-sm font-medium ${highlight ? 'text-indigo-500 dark:text-indigo-400' : 'text-foreground'}`}>
-        {value}
-      </span>
-    </div>
-  );
-}
+const CATEGORY_LABELS: Record<string, string> = {
+  aadhaar: 'Aadhaar Card', pan: 'PAN Card', joining: 'Joining Doc', exit: 'Exit Doc', other: 'Other',
+};
+
+type Tab = 'profile' | 'documents' | 'security';
 
 export default function ProfilePage() {
   const { user, refreshProfile } = useAuth();
+  const [activeTab, setActiveTab] = useState<Tab>('profile');
 
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword]         = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showCurrent, setShowCurrent]         = useState(false);
-  const [showNew, setShowNew]                 = useState(false);
-  const [showConfirm, setShowConfirm]         = useState(false);
-  const [saving, setSaving]                   = useState(false);
-
-  // Edit profile state (employees only)
-  const [editName, setEditName]           = useState('');
-  const [editPhone, setEditPhone]         = useState('');
-  const [editDob, setEditDob]             = useState('');
-  const [editMode, setEditMode]           = useState(false);
+  // Edit state
+  const [editMode, setEditMode] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editDob, setEditDob] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
 
+  // Password state
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const isEmp = user?._type === 'employee';
+  const isAdmin = user?._type === 'admin';
+  const emp = isEmp ? (user as Employee & { _type: 'employee' }) : null;
+
   const displayName = user
-    ? user._type === 'employee' ? (user as { empName: string }).empName : user.name
+    ? isEmp ? (user as any).empName : (user as any).name ?? (user as any).fullName
     : '';
 
   const initials = displayName
-    ? displayName.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
+    ? displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
     : 'U';
 
-  const isEmp = user?._type === 'employee';
-  const emp = isEmp ? (user as Employee & { _type: 'employee' }) : null;
-
-  const roleInfo = isEmp
-    ? { label: emp?.isHr ? 'HR Employee' : 'Employee', color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800' }
-    : roleMap[(user as { role?: string })?.role ?? ''] ?? { label: 'Admin', color: roleMap.admin.color };
+  const roleLabel = isEmp
+    ? (emp?.isHr ? 'HR Employee' : 'Employee')
+    : (user as any)?.role === 'super_admin' ? 'Super Admin' : 'Admin';
 
   const gradient = AVATAR_GRADIENTS[(user?.id ?? 0) % AVATAR_GRADIENTS.length];
+  const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
+
+  // Documents
+  const qc = useQueryClient();
+  const [docCategory, setDocCategory] = useState('aadhaar');
+  const docFileRef = useRef<HTMLInputElement>(null);
+
+  const { data: docs, isLoading: docsLoading } = useQuery({
+    queryKey: ['my-documents', isEmp ? 'employee' : 'admin', user?.id],
+    queryFn: () =>
+      isEmp
+        ? employeesApi.getMyDocuments().then((r: any) => r.data?.data ?? r.data ?? [])
+        : employeesApi.getDocuments('admin', user!.id).then((r: any) => r.data?.data ?? r.data ?? []),
+    enabled: !!user?.id && activeTab === 'documents',
+  });
+
+  const uploadMyDocMut = useMutation({
+    mutationFn: (file: File) => {
+      if (isEmp) return employeesApi.uploadMyDocument(file, docCategory);
+      return employeesApi.uploadDocument('admin', user!.id, file, docCategory);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['my-documents'] });
+      toast.success('Document uploaded');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Upload failed'),
+  });
+
+  const openEdit = () => {
+    setEditName(emp?.empName ?? '');
+    setEditPhone(emp?.mobileNumber ?? '');
+    setEditDob(emp?.dateOfBirth ?? '');
+    setEditMode(true);
+  };
+
+  const handleSaveProfile = async () => {
+    setSavingProfile(true);
+    try {
+      await employeesApi.updateSelf({
+        empName: editName || undefined,
+        mobileNumber: editPhone || undefined,
+        dateOfBirth: editDob || undefined,
+      });
+      await refreshProfile();
+      toast.success('Profile updated');
+      setEditMode(false);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Failed');
+    } finally { setSavingProfile(false); }
+  };
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword !== confirmPassword) { toast.error('New passwords do not match'); return; }
-    if (newPassword.length < 6) { toast.error('Password must be at least 6 characters'); return; }
+    if (newPassword !== confirmPassword) { toast.error('Passwords do not match'); return; }
+    if (newPassword.length < 6) { toast.error('Min 6 characters'); return; }
     setSaving(true);
     try {
       await authApi.changePassword(currentPassword, newPassword);
-      toast.success('Password changed successfully');
+      toast.success('Password changed');
       setCurrentPassword(''); setNewPassword(''); setConfirmPassword('');
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      toast.error(msg ?? 'Failed to change password');
-    } finally {
-      setSaving(false);
-    }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Failed');
+    } finally { setSaving(false); }
   };
 
   const passwordStrength = (() => {
@@ -108,278 +149,248 @@ export default function ProfilePage() {
     return { label: 'Strong', color: 'bg-emerald-500', width: 'w-full' };
   })();
 
-  const openEdit = () => {
-    setEditName(emp?.empName ?? '');
-    setEditPhone(emp?.mobileNumber ?? '');
-    setEditDob(emp?.dateOfBirth ?? '');
-    setEditMode(true);
-  };
-
-  const handleSaveProfile = async (e?: React.FormEvent | React.MouseEvent) => {
-    e?.preventDefault();
-    setSavingProfile(true);
-    try {
-      await employeesApi.updateSelf({
-        empName: editName || undefined,
-        mobileNumber: editPhone || undefined,
-        dateOfBirth: editDob || undefined,
-      });
-      await refreshProfile();
-      toast.success('Profile updated successfully');
-      setEditMode(false);
-    } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      toast.error(msg ?? 'Failed to update profile');
-    } finally {
-      setSavingProfile(false);
-    }
-  };
+  const tabs: { key: Tab; label: string; icon: any }[] = [
+    { key: 'profile', label: 'Profile', icon: User },
+    { key: 'documents', label: 'Documents', icon: Paperclip },
+    { key: 'security', label: 'Security', icon: Shield },
+  ];
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_1fr]">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[240px_1fr]">
 
-      {/* ── Left sidebar ───────────────────────────── */}
-      <div className="space-y-4">
-
+      {/* ── Left sidebar ──────────────────────── */}
+      <div className="space-y-3">
         {/* Avatar card */}
         <Card className="overflow-hidden shadow-sm">
-          <div className={`bg-linear-to-br ${gradient} p-6 flex flex-col items-center gap-3`}>
-            <div className="flex h-24 w-24 items-center justify-center rounded-full bg-white/25 backdrop-blur-sm text-white text-3xl font-bold ring-4 ring-white/30 shadow-xl">
+          <div className={`bg-linear-to-br ${gradient} p-5 flex flex-col items-center gap-2`}>
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/25 backdrop-blur-sm text-white text-2xl font-bold ring-4 ring-white/30 shadow-xl">
               {initials}
             </div>
-            <div className="text-center">
-              <p className="font-bold text-white text-base leading-tight">{displayName || '—'}</p>
-              <p className="text-white/70 text-xs mt-0.5">
-                {isEmp
-                  ? (consultantTypeLabels[emp?.consultantType ?? ''] ?? emp?.consultantType)
-                  : roleInfo.label}
-              </p>
-            </div>
+            <p className="font-bold text-white text-sm leading-tight truncate max-w-full">{displayName || '—'}</p>
+            <p className="text-white/70 text-xs">{user?.email}</p>
+            <Badge className="text-[10px] border-0 bg-emerald-500/20 text-emerald-100">Active</Badge>
           </div>
-          <CardContent className="px-4 py-3 flex flex-wrap gap-1.5 justify-center">
-            <Badge variant="outline" className={`text-xs ${roleInfo.color}`}>{roleInfo.label}</Badge>
-            {isEmp && emp?.isHr && (
-              <Badge className="text-xs bg-violet-500/10 text-violet-600 border-violet-200 dark:border-violet-800 dark:text-violet-400">HR</Badge>
-            )}
-            <Badge className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-800 dark:text-emerald-400">
-              Active
-            </Badge>
-          </CardContent>
         </Card>
 
-        {/* Contact */}
+        {/* Tab nav */}
         <Card className="shadow-sm">
-          <CardContent className="px-4 py-3 space-y-2.5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Contact</p>
-            {user?.email && (
-              <a href={`mailto:${user.email}`} className="flex items-center gap-2.5 text-sm text-indigo-500 hover:text-indigo-600 transition-colors">
-                <Mail className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{user.email}</span>
-              </a>
-            )}
-            {isEmp && emp?.mobileNumber && (
-              <a href={`tel:${emp.mobileNumber}`} className="flex items-center gap-2.5 text-sm text-indigo-500 hover:text-indigo-600 transition-colors">
-                <Phone className="h-3.5 w-3.5 shrink-0" />
-                {emp.mobileNumber}
-              </a>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Tags */}
-        <Card className="shadow-sm">
-          <CardContent className="px-4 py-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Info</p>
-            <div className="flex flex-wrap gap-1.5">
-              {isEmp && emp?.consultantType && (
-                <span className="rounded-md bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 text-xs font-medium text-indigo-600 dark:text-indigo-400">
-                  {consultantTypeLabels[emp.consultantType] ?? emp.consultantType}
-                </span>
-              )}
-              {isEmp && emp?.isHr && (
-                <span className="rounded-md bg-violet-50 dark:bg-violet-500/10 px-2 py-0.5 text-xs font-medium text-violet-600 dark:text-violet-400">
-                  Human Resources
-                </span>
-              )}
-              {!isEmp && (
-                <span className="rounded-md bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 text-xs font-medium text-indigo-600 dark:text-indigo-400">
-                  {roleInfo.label}
-                </span>
-              )}
-            </div>
+          <CardContent className="p-2">
+            {tabs.map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => setActiveTab(key)}
+                className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  activeTab === key
+                    ? 'bg-violet-500/10 text-violet-600 dark:text-violet-400'
+                    : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </button>
+            ))}
           </CardContent>
         </Card>
       </div>
 
-      {/* ── Right main area ─────────────────────────── */}
+      {/* ── Right content ─────────────────────── */}
       <div className="space-y-4">
 
-        {/* Name + role header */}
+        {/* Header card */}
         <Card className="shadow-sm">
-          <CardContent className="px-5 py-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h1 className="text-xl font-bold text-foreground">{displayName || '—'}</h1>
-                <p className="text-sm text-indigo-500 dark:text-indigo-400 font-medium mt-0.5">
-                  {isEmp
-                    ? `${consultantTypeLabels[emp?.consultantType ?? ''] ?? emp?.consultantType ?? ''}${emp?.isHr ? ' · HR' : ''}`
-                    : roleInfo.label}
-                </p>
-              </div>
-              <Badge variant="outline" className={`text-xs shrink-0 ${roleInfo.color}`}>{roleInfo.label}</Badge>
+          <CardContent className="px-5 py-4 flex items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-linear-to-br from-slate-800 to-slate-900 text-white text-xl font-bold shrink-0">
+              {initials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-lg font-bold">{displayName}</h1>
+              <p className="text-sm text-muted-foreground">{roleLabel}</p>
+              {isEmp && emp?.mobileNumber && <p className="text-xs text-muted-foreground mt-0.5">{emp.mobileNumber}</p>}
             </div>
           </CardContent>
         </Card>
 
-        {/* About */}
-        <Card className="shadow-sm">
-          <CardContent className="px-5 py-2">
-            <div className="flex items-center justify-between py-3 border-b">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">About</p>
-              {isEmp && !editMode && (
-                <Button variant="ghost" size="sm" onClick={openEdit} className="h-6 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground">
-                  <Pencil className="h-3 w-3" /> Edit
-                </Button>
-              )}
-              {isEmp && editMode && (
-                <div className="flex gap-1.5">
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setEditMode(false)} className="h-6 px-2 text-xs">
-                    Cancel
+        {/* ── Profile tab ──────────────────────── */}
+        {activeTab === 'profile' && (
+          <Card className="shadow-sm">
+            <CardContent className="px-5 py-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-semibold">Personal Information</h2>
+                {isEmp && !editMode && (
+                  <Button variant="ghost" size="sm" onClick={openEdit} className="gap-1 text-xs text-muted-foreground">
+                    <Pencil className="h-3 w-3" /> Edit
                   </Button>
-                  <Button
-                    type="button" size="sm" disabled={savingProfile}
-                    onClick={handleSaveProfile}
-                    className="h-6 px-2 text-xs bg-indigo-500 hover:bg-indigo-600 text-white border-0"
-                  >
-                    {savingProfile ? 'Saving…' : 'Save'}
+                )}
+                {isEmp && editMode && (
+                  <div className="flex gap-1.5">
+                    <Button variant="ghost" size="sm" onClick={() => setEditMode(false)} className="text-xs">Cancel</Button>
+                    <Button size="sm" disabled={savingProfile} onClick={handleSaveProfile}
+                      className="text-xs bg-indigo-500 hover:bg-indigo-600 text-white border-0">
+                      {savingProfile ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                      Save
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-5 gap-x-8">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Full Name</p>
+                  {isEmp && editMode ? (
+                    <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="h-8 text-sm" />
+                  ) : (
+                    <p className="text-sm font-medium">{displayName}</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Email Address</p>
+                  <p className="text-sm font-medium">{user?.email}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Phone Number</p>
+                  {isEmp && editMode ? (
+                    <Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} className="h-8 text-sm" />
+                  ) : (
+                    <p className="text-sm font-medium">{isEmp ? emp?.mobileNumber || '—' : '—'}</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Date of Birth</p>
+                  {isEmp && editMode ? (
+                    <Input type="date" value={editDob} onChange={(e) => setEditDob(e.target.value)} className="h-8 text-sm w-40" />
+                  ) : (
+                    <p className="text-sm font-medium">
+                      {isEmp && emp?.dateOfBirth ? format(new Date(emp.dateOfBirth + 'T00:00:00'), 'dd MMM yyyy') : '—'}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">User Role</p>
+                  <p className="text-sm font-medium uppercase">{roleLabel}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Joined</p>
+                  <p className="text-sm font-medium">
+                    {isEmp && emp?.joiningDate
+                      ? format(new Date(emp.joiningDate + 'T00:00:00'), 'dd MMM yyyy')
+                      : (user as any)?.createdAt ? format(new Date((user as any).createdAt), 'dd MMM yyyy') : '—'}
+                  </p>
+                </div>
+                {isEmp && emp?.empCode && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Employee Code</p>
+                    <p className="text-sm font-medium font-mono">{emp.empCode}</p>
+                  </div>
+                )}
+                {isEmp && emp?.consultantType && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Type</p>
+                    <p className="text-sm font-medium">{consultantTypeLabels[emp.consultantType] ?? emp.consultantType}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Status</p>
+                  <Badge className="text-xs border-0 bg-emerald-500/10 text-emerald-600">Active</Badge>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Documents tab ────────────────────── */}
+        {activeTab === 'documents' && (
+          <Card className="shadow-sm">
+            <CardContent className="px-5 py-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-semibold">My Documents</h2>
+                <div className="flex items-center gap-2">
+                  <Select value={docCategory} onValueChange={setDocCategory}>
+                    <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="aadhaar">Aadhaar Card</SelectItem>
+                      <SelectItem value="pan">PAN Card</SelectItem>
+                      {!isEmp && (
+                        <>
+                          <SelectItem value="joining">Joining Doc</SelectItem>
+                          <SelectItem value="exit">Exit Doc</SelectItem>
+                          <SelectItem value="other">Other</SelectItem>
+                        </>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <input
+                    ref={docFileRef} type="file" className="hidden"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.txt"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) uploadMyDocMut.mutate(f);
+                      if (docFileRef.current) docFileRef.current.value = '';
+                    }}
+                  />
+                  <Button size="sm" variant="outline" disabled={uploadMyDocMut.isPending} onClick={() => docFileRef.current?.click()}>
+                    {uploadMyDocMut.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
+                    Upload
                   </Button>
                 </div>
-              )}
-            </div>
-
-            <DetailRow label="Email" value={user?.email} highlight />
-
-            {isEmp && emp && (
-              <>
-                <DetailRow label="Employee ID" value={emp.empCode} highlight />
-
-                {/* Editable: Full Name */}
-                {editMode ? (
-                  <div className="flex items-center py-3 border-b border-border/50 gap-4">
-                    <span className="w-36 shrink-0 text-sm text-muted-foreground">Full Name</span>
-                    <Input
-                      value={editName}
-                      onChange={(e) => setEditName(e.target.value)}
-                      className="h-7 text-sm"
-                      placeholder="Full name"
-                    />
-                  </div>
-                ) : (
-                  <DetailRow label="Full Name" value={emp.empName} highlight />
-                )}
-
-                {/* Editable: Phone */}
-                {editMode ? (
-                  <div className="flex items-center py-3 border-b border-border/50 gap-4">
-                    <span className="w-36 shrink-0 text-sm text-muted-foreground">Phone</span>
-                    <Input
-                      value={editPhone}
-                      onChange={(e) => setEditPhone(e.target.value)}
-                      className="h-7 text-sm"
-                      placeholder="Mobile number"
-                    />
-                  </div>
-                ) : (
-                  <DetailRow label="Phone" value={emp.mobileNumber} highlight />
-                )}
-
-                <DetailRow label="Role" value={consultantTypeLabels[emp.consultantType] ?? emp.consultantType} highlight />
-                <DetailRow
-                  label="Reports To"
-                  value={emp.reportsTo ? `${emp.reportsTo.empName} (${emp.reportsTo.empCode})` : null}
-                  highlight
-                />
-
-                {/* Editable: Date of Birth */}
-                {editMode ? (
-                  <div className="flex items-center py-3 border-b border-border/50 gap-4">
-                    <span className="w-36 shrink-0 text-sm text-muted-foreground">Date of Birth</span>
-                    <Input
-                      type="date"
-                      value={editDob}
-                      onChange={(e) => setEditDob(e.target.value)}
-                      className="h-7 text-sm w-40"
-                    />
-                  </div>
-                ) : (
-                  <DetailRow
-                    label="Date of Birth"
-                    value={emp.dateOfBirth ? format(new Date(emp.dateOfBirth + 'T00:00:00'), 'dd MMMM yyyy') : null}
-                  />
-                )}
-
-                <DetailRow
-                  label="Work Anniversary"
-                  value={emp.joiningDate ? format(new Date(emp.joiningDate + 'T00:00:00'), 'dd MMMM yyyy') : null}
-                />
-              </>
-            )}
-            {!isEmp && (
-              <DetailRow label="Role" value={roleInfo.label} highlight />
-            )}
-            <DetailRow
-              label="Member Since"
-              value={user?.createdAt ? format(new Date(user.createdAt), 'dd MMMM yyyy') : null}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Change Password */}
-        <Card className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-500/15">
-                <KeyRound className="h-3.5 w-3.5 text-amber-500" />
               </div>
-              Change Password
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Use a strong password with letters, numbers and symbols.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleChangePassword} className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-3">
+              {docsLoading ? (
+                <div className="space-y-2">{[...Array(2)].map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}</div>
+              ) : !(docs as any[])?.length ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No documents uploaded yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {(docs as any[]).map((doc: any) => (
+                    <div key={doc.id} className="flex items-center gap-3 rounded-lg border p-3 hover:bg-accent/30 transition-colors">
+                      <div className="h-10 w-10 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+                        <FileText className="h-5 w-5 text-violet-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{doc.originalName}</p>
+                        <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+                          <span className="capitalize rounded bg-violet-500/10 px-1.5 py-0.5 text-violet-600 dark:text-violet-400">
+                            {CATEGORY_LABELS[doc.category] ?? doc.category}
+                          </span>
+                          <span>{(doc.fileSize / 1024).toFixed(0)} KB</span>
+                          <span>by {doc.uploadedByName}</span>
+                        </div>
+                      </div>
+                      <a href={`${apiBase}${doc.filePath}`} target="_blank" rel="noopener noreferrer">
+                        <Button variant="ghost" size="icon" className="h-8 w-8"><Download className="h-4 w-4" /></Button>
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
+        {/* ── Security tab ─────────────────────── */}
+        {activeTab === 'security' && (
+          <Card className="shadow-sm">
+            <CardContent className="px-5 py-4">
+              <h2 className="text-base font-semibold mb-4 flex items-center gap-2">
+                <KeyRound className="h-4 w-4 text-amber-500" /> Change Password
+              </h2>
+              <form onSubmit={handleChangePassword} className="space-y-4 max-w-lg">
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Current Password</label>
                   <div className="relative">
-                    <Input
-                      type={showCurrent ? 'text' : 'password'}
-                      placeholder="Enter current"
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      required className="pr-9"
-                    />
-                    <button type="button" onClick={() => setShowCurrent((v) => !v)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                    <Input type={showCurrent ? 'text' : 'password'} value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)} required className="pr-9" />
+                    <button type="button" onClick={() => setShowCurrent(v => !v)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                       {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
                 </div>
-
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">New Password</label>
                   <div className="relative">
-                    <Input
-                      type={showNew ? 'text' : 'password'}
-                      placeholder="Enter new"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      required className="pr-9"
-                    />
-                    <button type="button" onClick={() => setShowNew((v) => !v)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                    <Input type={showNew ? 'text' : 'password'} value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)} required className="pr-9" />
+                    <button type="button" onClick={() => setShowNew(v => !v)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                       {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
@@ -388,58 +399,34 @@ export default function ProfilePage() {
                       <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
                         <div className={`h-full rounded-full transition-all ${passwordStrength.color} ${passwordStrength.width}`} />
                       </div>
-                      <p className={`text-[10px] font-medium ${
-                        passwordStrength.label === 'Strong' ? 'text-emerald-500' :
-                        passwordStrength.label === 'Medium' ? 'text-yellow-500' :
-                        passwordStrength.label === 'Weak'   ? 'text-amber-500'  : 'text-red-500'
-                      }`}>{passwordStrength.label}</p>
+                      <p className="text-[10px] font-medium text-muted-foreground">{passwordStrength.label}</p>
                     </div>
                   )}
                 </div>
-
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Confirm Password</label>
                   <div className="relative">
-                    <Input
-                      type={showConfirm ? 'text' : 'password'}
-                      placeholder="Confirm new"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      required
-                      className={`pr-9 ${
-                        confirmPassword && confirmPassword !== newPassword ? 'border-red-500 focus-visible:ring-red-500' :
-                        confirmPassword && confirmPassword === newPassword  ? 'border-emerald-500 focus-visible:ring-emerald-500' : ''
-                      }`}
-                    />
-                    <button type="button" onClick={() => setShowConfirm((v) => !v)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors">
+                    <Input type={showConfirm ? 'text' : 'password'} value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)} required
+                      className={`pr-9 ${confirmPassword && confirmPassword !== newPassword ? 'border-red-500' : confirmPassword && confirmPassword === newPassword ? 'border-emerald-500' : ''}`} />
+                    <button type="button" onClick={() => setShowConfirm(v => !v)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                       {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
-                  {confirmPassword && confirmPassword !== newPassword && (
-                    <p className="text-[10px] text-red-500 font-medium">Passwords do not match</p>
-                  )}
                   {confirmPassword && confirmPassword === newPassword && (
-                    <p className="text-[10px] text-emerald-500 font-medium flex items-center gap-1">
-                      <CheckCircle2 className="h-3 w-3" /> Passwords match
-                    </p>
+                    <p className="text-[10px] text-emerald-500 flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Passwords match</p>
                   )}
                 </div>
-              </div>
-
-              <div className="flex justify-end pt-1">
-                <Button
-                  type="submit" size="sm" disabled={saving}
-                  className="bg-linear-to-r from-indigo-500 to-violet-600 text-white hover:opacity-90 shadow-sm shadow-indigo-500/25 border-0"
-                >
+                <Button type="submit" disabled={saving}
+                  className="bg-linear-to-r from-indigo-500 to-violet-600 text-white hover:opacity-90 border-0">
                   <KeyRound className="mr-1.5 h-4 w-4" />
                   {saving ? 'Updating…' : 'Update Password'}
                 </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-
+              </form>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );

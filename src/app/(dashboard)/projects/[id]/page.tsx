@@ -17,7 +17,7 @@ import { projectsApi } from '@/lib/api/projects';
 import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { RichTextEditor, RichTextDisplay } from '@/components/ui/rich-text-editor';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -387,13 +387,13 @@ export default function ProjectDetailPage() {
           <FileText className="h-3 w-3" /> Description
         </div>
         {!editMode ? (
-          <p className="text-sm text-muted-foreground leading-relaxed">{project.description || 'No description'}</p>
+          <RichTextDisplay html={project.description} />
         ) : (
-          <Textarea
+          <RichTextEditor
             value={form.description}
-            onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-            rows={3}
+            onChange={(html) => setForm((p) => ({ ...p, description: html }))}
             placeholder="Project description..."
+            minHeight="150px"
           />
         )}
       </div>

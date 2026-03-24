@@ -5,7 +5,6 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
 
 export const api = axios.create({
   baseURL: BASE_URL,
-  headers: { 'Content-Type': 'application/json' },
 });
 
 // ── Company context header (set by CompanyProvider) ─────────────────────
@@ -16,14 +15,23 @@ export function setCompanyIdGetter(getter: () => number | null) {
   companyIdGetter = getter;
 }
 
-// ── Request: attach access token + company context ──────────────────────
+// ── Request: attach token, company context, and handle Content-Type ─────
 
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  // Auth token
   const token = tokenStorage.getAccess();
   if (token) config.headers.Authorization = `Bearer ${token}`;
 
+  // Company context
   const companyId = companyIdGetter();
   if (companyId) config.headers['X-Company-Id'] = String(companyId);
+
+  // Content-Type: let FormData set multipart/form-data with boundary automatically
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
+  } else if (!config.headers['Content-Type']) {
+    config.headers['Content-Type'] = 'application/json';
+  }
 
   return config;
 });

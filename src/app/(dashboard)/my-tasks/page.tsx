@@ -2,12 +2,13 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   Loader2, MessageSquare, Calendar, Clock, User, Target, ListTodo, Search, X, FolderKanban, UserRoundPlus, History,
 } from 'lucide-react';
-import { myTasksApi, clientTicketsApi } from '@/lib/api/project-planning';
+import { myTasksApi, clientTicketsApi, adminTicketsApi } from '@/lib/api/project-planning';
 import { employeesApi } from '@/lib/api/employees';
 import { useAuth } from '@/providers/auth-provider';
 import { taskSheetsApi } from '@/lib/api/task-sheets';
@@ -49,6 +50,14 @@ function formatCommentTime(dateStr: string): string {
   return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'UTC' });
 }
 
+function renderMentionsHtml(content: string): string {
+  const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return escaped.replace(
+    /@\[([^\]]+)\]\(\d+\)/g,
+    '<span class="inline-flex items-center rounded-full bg-violet-500/15 px-1.5 py-0.5 text-xs font-medium text-violet-600 dark:text-violet-400">@$1</span>',
+  ).replace(/\n/g, '<br/>');
+}
+
 // ── Color maps ───────────────────────────────────────────────────────────────
 
 const statusColors: Record<string, string> = {
@@ -74,8 +83,10 @@ const priorityLabels: Record<string, string> = {
 };
 
 export default function MyTasksPage() {
+  const router = useRouter();
   const qc = useQueryClient();
   const { user } = useAuth();
+  const isAdmin = user?._type === 'admin';
   const isClient = user?._type === 'client';
 
   // Filters
@@ -107,7 +118,8 @@ export default function MyTasksPage() {
   // ── Query ────────────────────────────────────────────────────────────────
 
   const { data: tasksData, isLoading } = useQuery({
-    queryKey: ['my-tasks', search, statusFilter, priorityFilter, projectFilter, isClient],
+    queryKey: ['my-tasks', search, statusFilter, priorityFilter, projectFilter, isClient, isAdmin],
+    enabled: !!user,
     queryFn: async (): Promise<ProjectTask[]> => {
       const params = {
         limit: 100,
@@ -118,7 +130,9 @@ export default function MyTasksPage() {
       };
       const r = isClient
         ? await clientTicketsApi.getMyTasks(params)
-        : await myTasksApi.getAll(params);
+        : isAdmin
+          ? await adminTicketsApi.getMyTasks(params)
+          : await myTasksApi.getAll(params);
       const body = r.data;
       if (Array.isArray(body?.data)) return body.data;
       if (Array.isArray((body?.data as any)?.data)) return (body.data as any).data;
@@ -132,7 +146,7 @@ export default function MyTasksPage() {
 
   const updateStatusMut = useMutation({
     mutationFn: ({ taskId, status }: { taskId: number; status: ProjectTaskStatus }) =>
-      myTasksApi.updateStatus(taskId, status),
+      isAdmin ? adminTicketsApi.updateStatus(taskId, status) : myTasksApi.updateStatus(taskId, status),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['my-tasks'] });
       qc.invalidateQueries({ queryKey: ['my-task-detail', detailTask?.id] });
@@ -193,8 +207,7 @@ export default function MyTasksPage() {
   });
 
   const openDetail = (t: ProjectTask) => {
-    setDetailTask(t);
-    setDetailOpen(true);
+    router.push(`/full-tickets/${t.id}`);
     setCommentText('');
     setTaggedMentions([]);
     setReassignTo(t.assigneeId ? String(t.assigneeId) : '');
@@ -608,7 +621,9 @@ export default function MyTasksPage() {
                             {timeAgo(c.createdAt)}
                           </span>
                         </div>
-                        <p className="text-foreground">{renderMentions(c.content)}</p>
+                        <div className="text-foreground text-sm leading-relaxed [&_h1]:text-lg [&_h1]:font-bold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:text-sm [&_h3]:font-semibold [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+                          dangerouslySetInnerHTML={{ __html: renderMentionsHtml(c.content) }}
+                        />
                       </div>
                     ))}
                   </div>
