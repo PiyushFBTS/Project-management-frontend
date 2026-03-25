@@ -285,7 +285,7 @@ export default function FullTicketsPage() {
     // Save contributors first, then close the ticket
     if (contribs.length > 0) {
       try {
-        const res = await ticketsApi.setContributors(taskId, contribs);
+        const res = await (ticketsApi as any).setContributors(taskId, contribs);
         console.log('Contributors saved:', res.data);
       } catch (err: any) {
         console.error('Failed to save contributors:', err?.response?.data ?? err);
@@ -307,7 +307,7 @@ export default function FullTicketsPage() {
   // Contributors for the view dialog
   const { data: viewContributors, isLoading: viewContribLoading } = useQuery({
     queryKey: ['ticket-contributors', contributorsViewTaskId],
-    queryFn: () => ticketsApi.getContributors(contributorsViewTaskId!).then((r: any) => r.data?.data ?? r.data),
+    queryFn: () => (ticketsApi as any).getContributors(contributorsViewTaskId!).then((r: any) => r.data?.data ?? r.data),
     enabled: !!contributorsViewTaskId && contributorsViewOpen,
   });
 
@@ -914,7 +914,7 @@ console.log("reassignOptions",reassignOptions);
                 )}
 
                 {/* ── Attachments ──────────────────────────────────────────── */}
-                {ticketsApi.getAttachments && (
+                {'getAttachments' in ticketsApi && (
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { format } from 'date-fns';
@@ -61,7 +61,15 @@ function buildTimesFromHours(hours: number, entries: TaskEntry[]): { fromTime: s
   return { fromTime, toTime };
 }
 
-export default function FillTaskSheetPage() {
+export default function FillTaskSheetPageWrapper() {
+  return (
+    <Suspense fallback={<div className="p-6 text-center text-muted-foreground">Loading...</div>}>
+      <FillTaskSheetPage />
+    </Suspense>
+  );
+}
+
+function FillTaskSheetPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();

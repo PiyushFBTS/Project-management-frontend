@@ -41,6 +41,8 @@ const typeConfig: Record<NotificationType, {
   task_status_changed:              { icon: ArrowRightLeft, iconBg: 'bg-indigo-100 dark:bg-indigo-500/15',  iconColor: 'text-indigo-600 dark:text-indigo-400'   },
   task_commented:                   { icon: MessageSquare, iconBg: 'bg-cyan-100 dark:bg-cyan-500/15',       iconColor: 'text-cyan-600 dark:text-cyan-400'       },
   task_mention:                     { icon: AtSign,        iconBg: 'bg-violet-100 dark:bg-violet-500/15',  iconColor: 'text-violet-600 dark:text-violet-400'   },
+  birthday:                         { icon: CalendarCheck, iconBg: 'bg-pink-100 dark:bg-pink-500/15',      iconColor: 'text-pink-600 dark:text-pink-400'       },
+  work_anniversary:                 { icon: CalendarCheck, iconBg: 'bg-amber-100 dark:bg-amber-500/15',    iconColor: 'text-amber-600 dark:text-amber-400'     },
 };
 
 // ── Resolve notification → target route ──────────────────────────────────────

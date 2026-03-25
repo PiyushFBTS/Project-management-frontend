@@ -63,7 +63,7 @@ export function Header() {
     : (user as any)?.companyName;
 
   const displayName = user
-    ? user._type === 'employee' ? (user as { empName: string }).empName : user.name
+    ? user._type === 'employee' ? (user as any).empName : user._type === 'client' ? (user as any).fullName : (user as any).name
     : '';
 
   const initials = displayName

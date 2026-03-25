@@ -210,7 +210,9 @@ function EmployeeDashboard() {
   const { user } = useAuth();
   const displayName = user?._type === 'employee'
     ? (user as { empName: string }).empName
-    : user?.name ?? '';
+    : user?._type === 'client'
+      ? (user as { fullName: string }).fullName
+      : (user as any)?.name ?? '';
 
   const { data: personal, isLoading } = useQuery({
     queryKey: ['emp-personal-dashboard'],

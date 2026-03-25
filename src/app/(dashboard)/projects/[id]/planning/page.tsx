@@ -632,7 +632,7 @@ export default function ProjectPlanningPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openCreateTask(phase.id)}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openCreateTask()}>
                       <Plus className="h-3.5 w-3.5" />
                     </Button>
                     {!isClient && (
@@ -1015,7 +1015,7 @@ export default function ProjectPlanningPage() {
                 </div>
 
                 {/* Attachments */}
-                {ticketAttApi.getAttachments && (
+                {'getAttachments' in ticketAttApi && (
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
