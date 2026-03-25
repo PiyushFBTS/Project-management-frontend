@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -127,6 +128,11 @@ export default function ProjectPlanningPage() {
   // History dialog
   const [historyTaskId, setHistoryTaskId] = useState<number | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+
+  // Excel import
+  const excelInputRef = useRef<HTMLInputElement>(null);
+  const [excelImporting, setExcelImporting] = useState(false);
+  const [excelResults, setExcelResults] = useState<Array<{ index: number; title: string; ticketNumber?: string; taskId?: number; success: boolean; error?: string }> | null>(null);
 
   // Collapsible phases
   const [expandedPhases, setExpandedPhases] = useState<Record<number, boolean>>({});
@@ -351,6 +357,73 @@ export default function ProjectPlanningPage() {
     router.push(`/projects/${projectId}/planning/new-task`);
   };
 
+  // ── Excel import handler ──────────────────────────────────────────────
+  const handleExcelImport = async (file: File) => {
+    setExcelImporting(true);
+    try {
+      const data = await file.arrayBuffer();
+      const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rawRows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: '' });
+
+      if (rawRows.length === 0) {
+        toast.error('Excel file is empty or has no data rows');
+        setExcelImporting(false);
+        return;
+      }
+
+      // Map Excel columns to API fields (case-insensitive header matching)
+      const rows = rawRows.map((r) => {
+        const get = (keys: string[]) => {
+          for (const k of keys) {
+            const match = Object.keys(r).find((h) => h.toLowerCase().trim() === k.toLowerCase());
+            if (match && r[match] !== '') return r[match];
+          }
+          return undefined;
+        };
+        const dueRaw = get(['due date', 'duedate', 'due_date', 'deadline']);
+        let dueDate: string | undefined;
+        if (dueRaw instanceof Date) dueDate = dueRaw.toISOString().split('T')[0];
+        else if (typeof dueRaw === 'string' && dueRaw) dueDate = dueRaw;
+        else if (typeof dueRaw === 'number') {
+          // Excel serial date
+          const d = new Date((dueRaw - 25569) * 86400 * 1000);
+          if (!isNaN(d.getTime())) dueDate = d.toISOString().split('T')[0];
+        }
+
+        const estRaw = get(['estimated hours', 'estimatedhours', 'estimated_hours', 'est. hours', 'hours']);
+        return {
+          title: String(get(['title', 'task', 'task name', 'name']) ?? '').trim(),
+          description: String(get(['description', 'desc', 'details']) ?? '').trim() || undefined,
+          status: String(get(['status']) ?? '').trim() || undefined,
+          priority: String(get(['priority']) ?? '').trim() || undefined,
+          phase: String(get(['phase']) ?? '').trim() || undefined,
+          dueDate,
+          estimatedHours: estRaw ? Number(estRaw) : undefined,
+        };
+      }).filter((r) => r.title);
+
+      if (rows.length === 0) {
+        toast.error('No valid rows found. Make sure the "Title" column has data.');
+        setExcelImporting(false);
+        return;
+      }
+
+      const resp = await (planApi as any).bulkCreateTasks(projectId, rows);
+      const results = resp.data?.data ?? resp.data ?? [];
+      setExcelResults(Array.isArray(results) ? results : []);
+      qc.invalidateQueries({ queryKey: ['project-tasks'] });
+      qc.invalidateQueries({ queryKey: ['project-tickets-all'] });
+
+      const successCount = (Array.isArray(results) ? results : []).filter((r: any) => r.success).length;
+      toast.success(`${successCount}/${rows.length} tasks created`);
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? 'Failed to import Excel');
+    } finally {
+      setExcelImporting(false);
+    }
+  };
+
   const openEditTask = (t: ProjectTask) => {
     setEditingTask(t);
     taskForm.reset({
@@ -506,17 +579,17 @@ export default function ProjectPlanningPage() {
       <div className="relative overflow-hidden rounded-2xl shadow-lg">
         <div className="absolute inset-0 bg-linear-to-r from-violet-600 via-purple-600 to-fuchsia-600" />
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djZoLTZWMzRoNnptMC0zMHY2aC02VjRoNnptMCAzMHY2aC02di02aDZ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30" />
-        <div className="relative px-6 py-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative px-4 sm:px-6 py-4 sm:py-5 flex flex-col gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
-              <Target className="h-5 w-5 text-white" />
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm shrink-0">
+              <Target className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">
+            <div className="min-w-0">
+              <h1 className="text-base sm:text-xl font-bold text-white truncate">
                 {project?.projectName ?? 'Project'} — Planning
               </h1>
-              <div className="flex items-center gap-3 text-sm text-white/60">
-                <span>Project planning & tasks</span>
+              <div className="flex items-center gap-2 sm:gap-3 text-xs sm:text-sm text-white/60 flex-wrap">
+                <span className="hidden sm:inline">Project planning & tasks</span>
                 {summary && (
                   <>
                     <span>{summary.totalTasks} tasks</span>
@@ -535,38 +608,62 @@ export default function ProjectPlanningPage() {
               </div>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5 sm:gap-2 flex-wrap">
             {!isClient && phaseList.length === 0 && (
               <Button
                 size="sm"
                 onClick={() => quickSetupMut.mutate()}
                 disabled={quickSetupMut.isPending}
-                className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0"
+                className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 text-xs sm:text-sm"
               >
-                {quickSetupMut.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Zap className="mr-1.5 h-4 w-4" />}
-                Quick Setup
+                {quickSetupMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <Zap className="h-3.5 w-3.5 sm:mr-1.5" />}
+                <span className="hidden sm:inline">Quick Setup</span>
               </Button>
             )}
             {!isClient && (
-              <Button size="sm" className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0" onClick={openCreatePhase}>
-                <Plus className="mr-1.5 h-4 w-4" /> Phase
+              <Button size="sm" className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 text-xs sm:text-sm" onClick={openCreatePhase}>
+                <Plus className="h-3.5 w-3.5 sm:mr-1.5" /> <span className="hidden sm:inline">Phase</span>
               </Button>
+            )}
+            {!isClient && (
+              <>
+                <Button
+                  size="sm"
+                  className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 text-xs sm:text-sm"
+                  onClick={() => excelInputRef.current?.click()}
+                  disabled={excelImporting}
+                >
+                  {excelImporting ? <Loader2 className="h-3.5 w-3.5 animate-spin sm:mr-1.5" /> : <FileText className="h-3.5 w-3.5 sm:mr-1.5" />}
+                  <span className="hidden sm:inline">Import Excel</span>
+                </Button>
+                <input
+                  ref={excelInputRef}
+                  type="file"
+                  className="hidden"
+                  accept=".xls,.xlsx,.csv"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleExcelImport(f);
+                    e.target.value = '';
+                  }}
+                />
+              </>
             )}
             <Button
               size="sm"
-              className="bg-white text-violet-700 hover:bg-white/90 border-0 shadow-lg font-semibold"
+              className="bg-white text-violet-700 hover:bg-white/90 border-0 shadow-lg font-semibold text-xs sm:text-sm"
               onClick={() => openCreateTask()}
             >
-              <Plus className="mr-1.5 h-4 w-4" /> Task
+              <Plus className="h-3.5 w-3.5 sm:mr-1.5" /> <span className="hidden xs:inline">Task</span>
             </Button>
           </div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-2 sm:gap-3">
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-36">
+          <SelectTrigger className="w-28 sm:w-36 text-xs sm:text-sm">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -579,7 +676,7 @@ export default function ProjectPlanningPage() {
           </SelectContent>
         </Select>
         <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-          <SelectTrigger className="w-36">
+          <SelectTrigger className="w-28 sm:w-36 text-xs sm:text-sm">
             <SelectValue placeholder="Priority" />
           </SelectTrigger>
           <SelectContent>
@@ -609,27 +706,29 @@ export default function ProjectPlanningPage() {
               <div key={phase.id} className="rounded-lg border bg-card overflow-hidden shadow-sm">
                 <div className="h-1.5 bg-linear-to-r from-violet-500 via-purple-500 to-fuchsia-500" />
                 <div
-                  className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-accent/50 transition-colors"
+                  className="flex items-center justify-between px-3 sm:px-4 py-2.5 sm:py-3 cursor-pointer hover:bg-accent/50 transition-colors gap-2"
                   onClick={() => togglePhase(phase.id)}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                     {expanded ? (
-                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
                     ) : (
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                     )}
-                    <div>
-                      <span className="font-medium text-foreground">{phase.name}</span>
-                      <span className="ml-2 text-xs text-muted-foreground">({phaseTasks.length} tasks)</span>
+                    <div className="min-w-0">
+                      <span className="font-medium text-foreground text-sm sm:text-base truncate block">{phase.name}</span>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[10px] sm:text-xs text-muted-foreground">({phaseTasks.length} tasks)</span>
+                        <span className={`rounded-full px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-medium ${phaseStatusColors[phase.status]}`}>
+                          {phaseStatusLabels[phase.status]}
+                        </span>
+                        {phase.startDate && (
+                          <span className="text-[10px] text-muted-foreground hidden sm:inline">
+                            {phase.startDate} — {phase.endDate ?? '...'}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${phaseStatusColors[phase.status]}`}>
-                      {phaseStatusLabels[phase.status]}
-                    </span>
-                    {phase.startDate && (
-                      <span className="text-xs text-muted-foreground">
-                        {phase.startDate} — {phase.endDate ?? '...'}
-                      </span>
-                    )}
                   </div>
                   <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openCreateTask()}>
@@ -1155,6 +1254,69 @@ export default function ProjectPlanningPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ── Excel Import Results Dialog ──────────────────────────────── */}
+      <Dialog open={!!excelResults} onOpenChange={(open) => { if (!open) setExcelResults(null); }}>
+        <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-violet-600" />
+              Excel Import Results
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-2">
+            {excelResults?.filter((r) => r.success).length ?? 0} of {excelResults?.length ?? 0} tasks created successfully
+          </p>
+          <div className="flex-1 overflow-y-auto -mx-6 px-6">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-background">
+                <tr className="border-b text-left">
+                  <th className="py-2 pr-2 w-8 text-xs text-muted-foreground">#</th>
+                  <th className="py-2 pr-2 text-xs text-muted-foreground">Ticket</th>
+                  <th className="py-2 pr-2 text-xs text-muted-foreground">Title</th>
+                  <th className="py-2 w-8 text-xs text-muted-foreground text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(excelResults ?? []).map((r) => (
+                  <tr key={r.index} className="border-b last:border-0">
+                    <td className="py-2 pr-2 text-xs text-muted-foreground">{r.index}</td>
+                    <td className="py-2 pr-2">
+                      {r.ticketNumber ? (
+                        <button
+                          onClick={() => { setExcelResults(null); router.push(`/full-tickets/${r.taskId}`); }}
+                          className="text-xs font-mono font-semibold text-violet-600 hover:underline"
+                        >
+                          {r.ticketNumber}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-2 text-sm truncate max-w-[200px]">{r.title}</td>
+                    <td className="py-2 text-center">
+                      {r.success ? (
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-500/15">
+                          <svg className="h-3 w-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                        </span>
+                      ) : (
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-red-100 dark:bg-red-500/15" title={r.error}>
+                          <X className="h-3 w-3 text-red-600" />
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex justify-end pt-3 border-t">
+            <Button onClick={() => setExcelResults(null)}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1179,56 +1341,89 @@ function TaskTable({
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Ticket</TableHead>
-          <TableHead>Title</TableHead>
-          <TableHead>Assignee</TableHead>
-          <TableHead>Priority</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Due Date</TableHead>
-          <TableHead className="w-28">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
+    <>
+      {/* Mobile: card layout */}
+      <div className="md:hidden space-y-2 p-3">
         {tasks.map((t) => (
-          <TableRow key={t.id} className="cursor-pointer hover:bg-accent/50" onClick={() => onDetail(t)}>
-            <TableCell className="text-xs font-mono text-violet-600 dark:text-violet-400 whitespace-nowrap">{t.ticketNumber ?? '—'}</TableCell>
-            <TableCell className="font-medium">{t.title}</TableCell>
-            <TableCell className="text-muted-foreground text-sm">
-              {t.status === 'closed' && t.assignedAdmin?.name
-                ? `Admin: ${t.assignedAdmin.name}`
-                : t.assignee?.empName ?? <span className="italic text-muted-foreground/50">Unassigned</span>}
-            </TableCell>
-            <TableCell>
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${priorityColors[t.priority]}`}>
+          <div
+            key={t.id}
+            className="rounded-lg border p-3 cursor-pointer hover:ring-1 hover:ring-violet-500/30 transition-all"
+            onClick={() => onDetail(t)}
+          >
+            <div className="flex items-start justify-between gap-2 mb-1.5">
+              <div className="min-w-0">
+                <span className="text-[10px] font-mono font-semibold text-violet-600 dark:text-violet-400">{t.ticketNumber ?? '—'}</span>
+                <p className="text-sm font-semibold truncate">{t.title}</p>
+              </div>
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium shrink-0 ${priorityColors[t.priority]}`}>
                 {priorityLabels[t.priority]}
               </span>
-            </TableCell>
-            <TableCell>
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[t.status]}`}>
-                {statusLabels[t.status]}
-              </span>
-            </TableCell>
-            <TableCell className="text-sm text-muted-foreground">{t.dueDate ?? '—'}</TableCell>
-            <TableCell>
-              <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(t)}>
-                  <Pencil className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost" size="icon"
-                  className="h-7 w-7 text-red-500 hover:text-red-600"
-                  onClick={() => onDelete(t)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </TableCell>
-          </TableRow>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusColors[t.status]}`}>{statusLabels[t.status]}</span>
+              <span>{t.assignee?.empName ?? 'Unassigned'}</span>
+              {t.dueDate && <span>{t.dueDate}</span>}
+            </div>
+            <div className="flex gap-1 mt-2" onClick={(e) => e.stopPropagation()}>
+              <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={() => onEdit(t)}>
+                <Pencil className="h-3 w-3 mr-1" /> Edit
+              </Button>
+              <Button variant="ghost" size="sm" className="h-6 text-xs px-2 text-red-500" onClick={() => onDelete(t)}>
+                <Trash2 className="h-3 w-3 mr-1" /> Delete
+              </Button>
+            </div>
+          </div>
         ))}
-      </TableBody>
-    </Table>
+      </div>
+
+      {/* Desktop: table layout */}
+      <div className="hidden md:block overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Ticket</TableHead>
+              <TableHead>Title</TableHead>
+              <TableHead>Assignee</TableHead>
+              <TableHead>Priority</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Due Date</TableHead>
+              <TableHead className="w-28">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {tasks.map((t) => (
+              <TableRow key={t.id} className="cursor-pointer hover:bg-accent/50" onClick={() => onDetail(t)}>
+                <TableCell className="text-xs font-mono text-violet-600 dark:text-violet-400 whitespace-nowrap">{t.ticketNumber ?? '—'}</TableCell>
+                <TableCell className="font-medium">{t.title}</TableCell>
+                <TableCell className="text-muted-foreground text-sm">
+                  {t.assignee?.empName ?? t.assignedAdmin?.name ?? <span className="italic text-muted-foreground/50">Unassigned</span>}
+                </TableCell>
+                <TableCell>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${priorityColors[t.priority]}`}>
+                    {priorityLabels[t.priority]}
+                  </span>
+                </TableCell>
+                <TableCell>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[t.status]}`}>
+                    {statusLabels[t.status]}
+                  </span>
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">{t.dueDate ?? '—'}</TableCell>
+                <TableCell>
+                  <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEdit(t)}>
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600" onClick={() => onDelete(t)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </>
   );
 }

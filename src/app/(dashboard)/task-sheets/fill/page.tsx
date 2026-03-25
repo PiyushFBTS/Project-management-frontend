@@ -35,10 +35,15 @@ const statusOptions: { value: TaskStatus; label: string }[] = [
   { value: 'failed', label: 'Failed' },
 ];
 
+const projectTypeLabels: Record<string, string> = {
+  fresh_implement: 'Fresh Implement', migration: 'Migration', change_request: 'Change Request',
+  support: 'Support', development: 'Development', consulting: 'Consulting', maintenance: 'Maintenance',
+  project: 'Project',
+};
+
 const emptyForm = {
   projectId: '',
   otherProjectName: '',
-  taskTypeId: '',
   hoursSpent: '',
   taskDescription: '',
   status: 'in_progress' as TaskStatus,
@@ -102,11 +107,6 @@ function FillTaskSheetPage() {
     queryFn: () => taskSheetsApi.getProjects().then((r) => r.data.data),
   });
 
-  const { data: taskTypes } = useQuery({
-    queryKey: ['employee-task-types'],
-    queryFn: () => taskSheetsApi.getTaskTypes().then((r) => r.data.data),
-  });
-
   // Add entry
   const addMutation = useMutation({
     mutationFn: (data: typeof emptyForm) => {
@@ -117,7 +117,6 @@ function FillTaskSheetPage() {
         ...(isOther
           ? { otherProjectName: data.otherProjectName }
           : { projectId: Number(data.projectId) }),
-        taskTypeId: data.taskTypeId ? Number(data.taskTypeId) : undefined,
         fromTime,
         toTime,
         taskDescription: data.taskDescription,
@@ -148,7 +147,6 @@ function FillTaskSheetPage() {
         ...(isOther
           ? { otherProjectName: data.otherProjectName, projectId: undefined }
           : { projectId: Number(data.projectId), otherProjectName: undefined }),
-        taskTypeId: data.taskTypeId ? Number(data.taskTypeId) : undefined,
         fromTime: origFrom,
         toTime,
         taskDescription: data.taskDescription,
@@ -213,7 +211,6 @@ function FillTaskSheetPage() {
     setForm({
       projectId: entry.projectId ? String(entry.projectId) : 'other',
       otherProjectName: entry.otherProjectName ?? '',
-      taskTypeId: entry.taskTypeId ? String(entry.taskTypeId) : '',
       hoursSpent: String(Number(entry.durationHours).toFixed(2)),
       taskDescription: entry.taskDescription,
       status: entry.status,
@@ -354,7 +351,7 @@ function FillTaskSheetPage() {
             <TableRow>
               <TableHead className="w-10">#</TableHead>
               <TableHead>Project</TableHead>
-              <TableHead>Task Type</TableHead>
+              <TableHead>Project Type</TableHead>
               <TableHead>Description</TableHead>
               <TableHead className="w-24">Time Taken</TableHead>
               <TableHead className="w-28">Status</TableHead>
@@ -381,7 +378,7 @@ function FillTaskSheetPage() {
                   <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                   <TableCell className="font-medium text-sm">{entry.project?.projectName ?? entry.otherProjectName ?? '—'}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {entry.taskType?.typeName ?? (entry.taskTypeId ? `#${entry.taskTypeId}` : '—')}
+                    {projectTypeLabels[(entry.project as any)?.projectType] ?? (entry.project as any)?.projectType ?? '—'}
                   </TableCell>
                   <TableCell className="max-w-xs truncate text-sm">{entry.taskDescription}</TableCell>
                   <TableCell className="font-semibold">{Number(entry.durationHours).toFixed(2)}h</TableCell>
@@ -452,20 +449,18 @@ function FillTaskSheetPage() {
               )}
             </div>
 
-            {/* Task Type (optional) */}
+            {/* Project Type (auto from selected project) */}
             <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Task Type</Label>
-              <Select value={form.taskTypeId || 'none'} onValueChange={(v) => setForm((p) => ({ ...p, taskTypeId: v === 'none' ? '' : v }))}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select task type (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">— None —</SelectItem>
-                  {(taskTypes ?? []).map((t) => (
-                    <SelectItem key={t.id} value={String(t.id)}>{t.typeName}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="text-sm font-medium">Project Type</Label>
+              <Input
+                readOnly
+                value={
+                  form.projectId && form.projectId !== 'other'
+                    ? projectTypeLabels[(projects ?? []).find((p: any) => String(p.id) === form.projectId)?.projectType] ?? (projects ?? []).find((p: any) => String(p.id) === form.projectId)?.projectType ?? '—'
+                    : '—'
+                }
+                className="bg-muted/50"
+              />
             </div>
 
             {/* Description */}

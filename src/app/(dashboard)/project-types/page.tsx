@@ -1,0 +1,180 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+'use client';
+
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { Tags, Plus, Trash2, Loader2 } from 'lucide-react';
+import { projectsApi } from '@/lib/api/projects';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+
+const typeColors: Record<string, string> = {
+  fresh_implement: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
+  migration: 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400',
+  change_request: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
+  support: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-400',
+  development: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-400',
+  consulting: 'bg-pink-100 text-pink-700 dark:bg-pink-500/15 dark:text-pink-400',
+  maintenance: 'bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-400',
+};
+
+const defaultColor = 'bg-slate-100 text-slate-700 dark:bg-slate-500/15 dark:text-slate-400';
+
+export default function ProjectTypesPage() {
+  const qc = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [label, setLabel] = useState('');
+  const [value, setValue] = useState('');
+  const [description, setDescription] = useState('');
+
+  const { data: types, isLoading } = useQuery({
+    queryKey: ['project-types'],
+    queryFn: () => projectsApi.getProjectTypes().then((r: any) => r.data?.data ?? r.data ?? []),
+  });
+
+  const createMut = useMutation({
+    mutationFn: () => projectsApi.createProjectType({ value: value || label, label, description }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project-types'] });
+      setDialogOpen(false);
+      setLabel('');
+      setValue('');
+      setDescription('');
+      toast.success('Project type added');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to add'),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: number) => projectsApi.deleteProjectType(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project-types'] });
+      toast.success('Deleted');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
+  });
+
+  // Auto-generate value from label
+  const handleLabelChange = (v: string) => {
+    setLabel(v);
+    setValue(v.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''));
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="relative overflow-hidden rounded-2xl shadow-lg">
+        <div className="absolute inset-0 bg-linear-to-r from-cyan-600 via-blue-600 to-indigo-600" />
+        <div className="relative px-4 sm:px-6 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+              <Tags className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-lg sm:text-xl font-bold text-white">Project Types</h1>
+              <p className="text-xs sm:text-sm text-white/60">{((types ?? []) as any[])?.length ?? 0} types available</p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            className="bg-white text-blue-700 hover:bg-white/90 border-0 shadow-lg font-semibold"
+            onClick={() => setDialogOpen(true)}
+          >
+            <Plus className="mr-1.5 h-4 w-4" /> Add Type
+          </Button>
+        </div>
+      </div>
+
+      {/* Types grid */}
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+        </div>
+      ) : ((types ?? []) as any[])?.length === 0 ? (
+        <div className="text-center py-12">
+          <Tags className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">No project types yet. Add one to get started.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {((types ?? []) as any[]).map((type: any) => (
+            <div key={type.id} className="rounded-xl border bg-card p-4 hover:shadow-md transition-shadow group">
+              <div className="flex items-start justify-between gap-2">
+                <Badge className={`${typeColors[type.value] ?? defaultColor} text-xs font-semibold`}>
+                  {type.label}
+                </Badge>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0 text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => { if (confirm(`Delete "${type.label}"?`)) deleteMut.mutate(type.id); }}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+              {type.description && <p className="text-sm text-muted-foreground mt-2">{type.description}</p>}
+              <p className="text-[10px] text-muted-foreground/60 mt-2 font-mono">{type.value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Tags className="h-5 w-5 text-blue-600" /> Add Project Type
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Label *</Label>
+              <Input
+                value={label}
+                onChange={(e) => handleLabelChange(e.target.value)}
+                placeholder="e.g. Staff Augmentation"
+                className="mt-1"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Value (auto-generated)</Label>
+              <Input
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                placeholder="staff_augmentation"
+                className="mt-1 font-mono text-sm"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Description</Label>
+              <Textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Brief description of this project type..."
+                rows={2}
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+            <Button
+              disabled={!label.trim() || createMut.isPending}
+              onClick={() => createMut.mutate()}
+            >
+              {createMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              Add Type
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

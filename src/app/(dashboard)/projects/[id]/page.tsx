@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   ArrowLeft, FolderKanban, Calendar, User, ClipboardList, Clock, FileText, Pencil, Loader2, X, Check,
-  Upload, Trash2, Download, File, UserPlus, Users,
+  Upload, Trash2, Download, File, UserPlus, Users, Milestone, Plus,
 } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -32,7 +32,15 @@ const statusColors: Record<string, string> = {
 };
 
 const statusOptions = ['active', 'completed', 'on_hold', 'cancelled'];
-const typeOptions = ['project', 'support', 'development', 'consulting', 'migration', 'maintenance'];
+const typeOptions = [
+  { value: 'fresh_implement', label: 'Fresh Implement' },
+  { value: 'migration', label: 'Migration' },
+  { value: 'change_request', label: 'Change Request' },
+  { value: 'support', label: 'Support' },
+  { value: 'development', label: 'Development' },
+  { value: 'consulting', label: 'Consulting' },
+  { value: 'maintenance', label: 'Maintenance' },
+];
 
 function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '—';
@@ -83,6 +91,58 @@ export default function ProjectDetailPage() {
       setEditMode(false);
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to update'),
+  });
+
+  // ── Milestones (visible to admin, HR, super admin) ──
+  const canViewMilestones = isAdmin || isHr;
+  const { data: milestones = [], isLoading: milestonesLoading } = useQuery({
+    queryKey: ['project-milestones', id],
+    queryFn: () => projectsApi.getMilestones(Number(id)).then((r: any) => r.data?.data ?? r.data ?? []),
+    enabled: !!project && canViewMilestones,
+  });
+
+  const [msDialogOpen, setMsDialogOpen] = useState(false);
+  const [msName, setMsName] = useState('');
+  const [msExpectedPct, setMsExpectedPct] = useState('');
+  const [msExpectedAmt, setMsExpectedAmt] = useState('');
+  const [editingMsId, setEditingMsId] = useState<number | null>(null);
+  const [editRecvPct, setEditRecvPct] = useState('');
+  const [editRecvAmt, setEditRecvAmt] = useState('');
+
+  const createMsMut = useMutation({
+    mutationFn: () => projectsApi.createMilestone(Number(id), {
+      name: msName.trim(),
+      expectedPercentage: Number(msExpectedPct),
+      expectedAmount: Number(msExpectedAmt),
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project-milestones', id] });
+      setMsName('');
+      setMsExpectedPct('');
+      setMsExpectedAmt('');
+      setMsDialogOpen(false);
+      toast.success('Milestone added');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
+  });
+
+  const updateMsMut = useMutation({
+    mutationFn: ({ msId, dto }: { msId: number; dto: any }) => projectsApi.updateMilestone(Number(id), msId, dto),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project-milestones', id] });
+      setEditingMsId(null);
+      toast.success('Milestone updated');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
+  });
+
+  const deleteMsMut = useMutation({
+    mutationFn: (msId: number) => projectsApi.deleteMilestone(Number(id), msId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project-milestones', id] });
+      toast.success('Milestone deleted');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
   });
 
   // ── Documents (visible to all roles) ──
@@ -208,37 +268,50 @@ export default function ProjectDetailPage() {
   return (
     <div className="space-y-5">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex-1 min-w-0">
-          {!editMode ? (
-            <>
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="text-xs font-mono font-semibold text-violet-600 dark:text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded">
-                  {project.projectCode}
-                </span>
-                <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${statusColors[project.status] ?? ''}`}>
-                  {project.status}
-                </span>
-              </div>
-              <h1 className="text-xl font-bold">{project.projectName}</h1>
-            </>
-          ) : (
-            <>
-              <h1 className="text-xl font-bold">Edit Project</h1>
-              <p className="text-sm text-muted-foreground">Update the project details below</p>
-            </>
-          )}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <Button variant="ghost" size="icon" className="shrink-0" onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex-1 min-w-0">
+            {!editMode ? (
+              <>
+                <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                  <span className="text-xs font-mono font-semibold text-violet-600 dark:text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded">
+                    {project.projectCode}
+                  </span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${statusColors[project.status] ?? ''}`}>
+                    {project.status}
+                  </span>
+                </div>
+                <h1 className="text-lg sm:text-xl font-bold truncate">{project.projectName}</h1>
+              </>
+            ) : (
+              <>
+                <h1 className="text-lg sm:text-xl font-bold">Edit Project</h1>
+                <p className="text-xs sm:text-sm text-muted-foreground">Update the project details below</p>
+              </>
+            )}
+          </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap pl-11 sm:pl-0">
           {!editMode ? (
             <>
               {isAdmin && (
                 <Button variant="outline" size="sm" onClick={startEdit}>
-                  <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                  Edit
+                  <Pencil className="h-3.5 w-3.5 sm:mr-1.5" />
+                  <span className="hidden sm:inline">Edit</span>
+                </Button>
+              )}
+              {canViewMilestones && (
+                <Button variant="outline" size="sm" onClick={() => setMsDialogOpen(true)}>
+                  <Milestone className="h-3.5 w-3.5 sm:mr-1.5" />
+                  <span className="hidden sm:inline">Milestones</span>
+                  {(milestones as any[]).length > 0 && (
+                    <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white px-1">
+                      {(milestones as any[]).length}
+                    </span>
+                  )}
                 </Button>
               )}
               <Button
@@ -246,8 +319,8 @@ export default function ProjectDetailPage() {
                 className="bg-linear-to-r from-violet-500 to-purple-600 text-white hover:opacity-90 border-0"
                 onClick={() => router.push(`/projects/${id}/planning`)}
               >
-                <ClipboardList className="mr-1.5 h-4 w-4" />
-                Planning
+                <ClipboardList className="h-4 w-4 sm:mr-1.5" />
+                <span className="hidden sm:inline">Planning</span>
               </Button>
             </>
           ) : (
@@ -267,7 +340,7 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Info Cards */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
         {/* Project Code — only shown in edit mode as card, in view mode it's in header */}
         {editMode && (
           <div className="rounded-xl border bg-card p-4">
@@ -294,9 +367,9 @@ export default function ProjectDetailPage() {
             <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-orange-600 dark:text-orange-400 mb-1.5">
               <Clock className="h-3 w-3" /> Status
             </div>
-            <Select value={form.status} onValueChange={(v) => setForm((p) => ({ ...p, status: v }))}>
-              <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-              <SelectContent>
+            <Select value={form.status}  onValueChange={(v) => setForm((p) => ({ ...p, status: v }))}>
+              <SelectTrigger className="h-8 text-sm Edit Project w-full"><SelectValue /></SelectTrigger>
+              <SelectContent className="Edit Project">
                 {statusOptions.map((s) => <SelectItem key={s} value={s} className="capitalize">{s.replace('_', ' ')}</SelectItem>)}
               </SelectContent>
             </Select>
@@ -308,12 +381,12 @@ export default function ProjectDetailPage() {
             <FolderKanban className="h-3 w-3" /> Type
           </div>
           {!editMode ? (
-            <p className="text-sm font-medium capitalize">{project.projectType}</p>
+            <p className="text-sm font-medium">{typeOptions.find((t) => t.value === project.projectType)?.label ?? project.projectType}</p>
           ) : (
             <Select value={form.projectType} onValueChange={(v) => setForm((p) => ({ ...p, projectType: v }))}>
-              <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 text-sm  w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {typeOptions.map((t) => <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>)}
+                {typeOptions.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
               </SelectContent>
             </Select>
           )}
@@ -338,7 +411,7 @@ export default function ProjectDetailPage() {
             <p className="text-sm font-medium">{project.projectManager?.empName ?? '—'}</p>
           ) : (
             <Select value={form.projectManagerId} onValueChange={(v) => setForm((p) => ({ ...p, projectManagerId: v }))}>
-              <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select manager" /></SelectTrigger>
+              <SelectTrigger className="h-8 text-sm  w-full"><SelectValue placeholder="Select manager" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">None</SelectItem>
                 {(managers ?? []).map((m: any) => (
@@ -398,6 +471,170 @@ export default function ProjectDetailPage() {
         )}
       </div>
 
+      {/* ── Milestones Dialog (admin, HR, super admin) ─────────────── */}
+      <Dialog open={msDialogOpen} onOpenChange={setMsDialogOpen} >
+        <DialogContent className="sm:max-w-[100vw] md:max-w-[80vw] lg:max-w-[60vw] w-full h-[100vh] md:h-[85vh] max-h-[100vh] md:max-h-[95vh] rounded-none md:rounded-lg flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Milestone className="h-5 w-5 text-violet-600" /> Project Milestones
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Add new milestone form */}
+          <div className="border-b pb-3 space-y-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 items-end">
+              <div className="col-span-2 sm:col-span-1">
+                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Name</label>
+                <Input value={msName} onChange={(e) => setMsName(e.target.value)} placeholder="e.g. Advance" className="h-8 text-sm" />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Exp %</label>
+                <Input type="number" min="0" max="100" step="0.01" value={msExpectedPct} onChange={(e) => setMsExpectedPct(e.target.value)} placeholder="20" className="h-8 text-sm" />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Exp Amt</label>
+                <Input type="number" min="0" step="0.01" value={msExpectedAmt} onChange={(e) => setMsExpectedAmt(e.target.value)} placeholder="200000" className="h-8 text-sm" />
+              </div>
+              <div className="hidden md:block"><label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Recv %</label><Input disabled placeholder="—" className="h-8 text-sm bg-muted/50" /></div>
+              <div className="hidden md:block"><label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Recv Amt</label><Input disabled placeholder="—" className="h-8 text-sm bg-muted/50" /></div>
+              <div>
+                <Button size="sm" className="h-8 w-full md:w-auto" disabled={!msName.trim() || !msExpectedPct || !msExpectedAmt || Number(msExpectedAmt) <= 0 || createMsMut.isPending} onClick={() => createMsMut.mutate()}>
+                  {createMsMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Plus className="h-3.5 w-3.5 mr-1" /><span className="md:hidden">Add</span></>}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Milestone list */}
+          <div className="flex-1 overflow-y-auto -mx-6 px-4 sm:px-6">
+            {milestonesLoading ? (
+              <Skeleton className="h-20 w-full" />
+            ) : (milestones as any[]).length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No milestones yet. Add one above.</p>
+            ) : (
+              <>
+                {/* Mobile: card layout */}
+                <div className="md:hidden space-y-3">
+                  {(milestones as any[]).map((ms: any) => (
+                    <div key={ms.id} className="rounded-lg border p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="font-semibold text-sm">{ms.name}</p>
+                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500" onClick={() => deleteMsMut.mutate(ms.id)}><Trash2 className="h-3 w-3" /></Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                        <div><span className="text-muted-foreground">Exp %:</span> <span className="font-medium">{Number(ms.expectedPercentage ?? 0)}%</span></div>
+                        <div><span className="text-muted-foreground">Exp Amt:</span> <span className="font-medium">₹{Number(ms.expectedAmount ?? 0).toLocaleString('en-IN')}</span></div>
+                        {editingMsId === ms.id ? (
+                          <>
+                            <div className="col-span-2 grid grid-cols-2 gap-2 pt-1">
+                              <div>
+                                <label className="text-[10px] text-muted-foreground">Recv %</label>
+                                <Input type="number" min="0" max="100" step="0.01" value={editRecvPct} onChange={(e) => setEditRecvPct(e.target.value)} className="h-7 text-xs" />
+                              </div>
+                              <div>
+                                <label className="text-[10px] text-muted-foreground">Recv Amt</label>
+                                <Input type="number" min="0" step="0.01" value={editRecvAmt} onChange={(e) => setEditRecvAmt(e.target.value)} className="h-7 text-xs" />
+                              </div>
+                            </div>
+                            <div className="col-span-2 flex gap-2 pt-1">
+                              <Button size="sm" className="h-7 flex-1 text-xs" onClick={() => updateMsMut.mutate({ msId: ms.id, dto: { receivedPercentage: Number(editRecvPct), receivedAmount: Number(editRecvAmt) } })}>
+                                <Check className="h-3 w-3 mr-1" /> Save
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditingMsId(null)}>Cancel</Button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="cursor-pointer hover:text-violet-600" onClick={() => { setEditingMsId(ms.id); setEditRecvPct(String(ms.receivedPercentage ?? 0)); setEditRecvAmt(String(ms.receivedAmount ?? 0)); }}>
+                              <span className="text-muted-foreground">Recv %:</span> <span className="font-medium">{Number(ms.receivedPercentage ?? 0)}%</span> <Pencil className="inline h-2.5 w-2.5 text-muted-foreground" />
+                            </div>
+                            <div className="cursor-pointer hover:text-violet-600" onClick={() => { setEditingMsId(ms.id); setEditRecvPct(String(ms.receivedPercentage ?? 0)); setEditRecvAmt(String(ms.receivedAmount ?? 0)); }}>
+                              <span className="text-muted-foreground">Recv Amt:</span> <span className="font-medium">₹{Number(ms.receivedAmount ?? 0).toLocaleString('en-IN')}</span> <Pencil className="inline h-2.5 w-2.5 text-muted-foreground" />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop: table layout */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-background">
+                      <tr className="border-b text-left">
+                        <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold">Name</th>
+                        <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold text-right">Exp %</th>
+                        <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold text-right">Exp Amt</th>
+                        <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold text-right">Recv %</th>
+                        <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold text-right">Recv Amt</th>
+                        <th className="py-2 w-20 text-xs text-muted-foreground font-semibold text-center">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(milestones as any[]).map((ms: any) => (
+                        <tr key={ms.id} className="border-b last:border-0 hover:bg-muted/30">
+                          <td className="py-2 pr-2 font-medium">{ms.name}</td>
+                          <td className="py-2 pr-2 text-right">{Number(ms.expectedPercentage ?? 0)}%</td>
+                          <td className="py-2 pr-2 text-right">₹{Number(ms.expectedAmount ?? 0).toLocaleString('en-IN')}</td>
+                          {editingMsId === ms.id ? (
+                            <>
+                              <td className="py-2 pr-1"><Input type="number" min="0" max="100" step="0.01" value={editRecvPct} onChange={(e) => setEditRecvPct(e.target.value)} className="h-7 text-xs w-20 text-right ml-auto" /></td>
+                              <td className="py-2 pr-1"><Input type="number" min="0" step="0.01" value={editRecvAmt} onChange={(e) => setEditRecvAmt(e.target.value)} className="h-7 text-xs w-28 text-right ml-auto" /></td>
+                              <td className="py-2 text-center">
+                                <div className="flex justify-center gap-0.5">
+                                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => updateMsMut.mutate({ msId: ms.id, dto: { receivedPercentage: Number(editRecvPct), receivedAmount: Number(editRecvAmt) } })}><Check className="h-3 w-3 text-emerald-600" /></Button>
+                                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setEditingMsId(null)}><X className="h-3 w-3" /></Button>
+                                </div>
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="py-2 pr-2 text-right cursor-pointer hover:text-violet-600 transition-colors" onClick={() => { setEditingMsId(ms.id); setEditRecvPct(String(ms.receivedPercentage ?? 0)); setEditRecvAmt(String(ms.receivedAmount ?? 0)); }}>
+                                {Number(ms.receivedPercentage ?? 0)}% <Pencil className="inline h-2.5 w-2.5 ml-1 text-muted-foreground" />
+                              </td>
+                              <td className="py-2 pr-2 text-right cursor-pointer hover:text-violet-600 transition-colors" onClick={() => { setEditingMsId(ms.id); setEditRecvPct(String(ms.receivedPercentage ?? 0)); setEditRecvAmt(String(ms.receivedAmount ?? 0)); }}>
+                                ₹{Number(ms.receivedAmount ?? 0).toLocaleString('en-IN')} <Pencil className="inline h-2.5 w-2.5 ml-1 text-muted-foreground" />
+                              </td>
+                              <td className="py-2 text-center">
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500 hover:text-red-600" onClick={() => deleteMsMut.mutate(ms.id)}><Trash2 className="h-3 w-3" /></Button>
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Fixed totals at bottom */}
+          {(milestones as any[]).length > 0 && (
+            <div className="border-t pt-2 shrink-0">
+              {/* Mobile totals */}
+              <div className="md:hidden grid grid-cols-2 gap-x-4 gap-y-1 text-xs font-semibold px-1">
+                <div>Exp: {(milestones as any[]).reduce((s: number, m: any) => s + Number(m.expectedPercentage ?? 0), 0)}% / ₹{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.expectedAmount ?? 0), 0).toLocaleString('en-IN')}</div>
+                <div>Recv: {(milestones as any[]).reduce((s: number, m: any) => s + Number(m.receivedPercentage ?? 0), 0)}% / ₹{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.receivedAmount ?? 0), 0).toLocaleString('en-IN')}</div>
+              </div>
+              {/* Desktop totals */}
+              <div className="hidden md:grid grid-cols-[1fr_80px_120px_80px_120px_80px] gap-2 text-sm font-semibold px-1">
+                <span>Total</span>
+                <span className="text-right">{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.expectedPercentage ?? 0), 0)}%</span>
+                <span className="text-right">₹{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.expectedAmount ?? 0), 0).toLocaleString('en-IN')}</span>
+                <span className="text-right">{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.receivedPercentage ?? 0), 0)}%</span>
+                <span className="text-right">₹{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.receivedAmount ?? 0), 0).toLocaleString('en-IN')}</span>
+                <span></span>
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end pt-2 border-t shrink-0">
+            <Button onClick={() => setMsDialogOpen(false)}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* ── Documents (visible to all, editable by admin/HR/PM) ────── */}
       <div className="rounded-xl border bg-card p-4">
         <div className="flex items-center justify-between mb-3">
@@ -405,9 +642,9 @@ export default function ProjectDetailPage() {
             <File className="h-3 w-3" /> Documents
           </div>
           {canEditDocs && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Select value={uploadCategory} onValueChange={setUploadCategory}>
-                <SelectTrigger className="h-7 text-xs w-32"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-7 text-xs w-24 sm:w-32"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="project_plan">Project Plan</SelectItem>
                   <SelectItem value="frd">FRD</SelectItem>
@@ -450,11 +687,11 @@ export default function ProjectDetailPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{doc.originalName}</p>
-                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                  <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] text-muted-foreground flex-wrap">
                     <Badge variant="outline" className="text-[10px] capitalize">{doc.category?.replace('_', ' ')}</Badge>
                     <span>{(doc.fileSize / 1024).toFixed(0)} KB</span>
-                    <span>by {doc.uploadedByName}</span>
-                    <span>{new Date(doc.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'UTC' })}</span>
+                    <span className="hidden sm:inline">by {doc.uploadedByName}</span>
+                    <span className="hidden sm:inline">{new Date(doc.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'UTC' })}</span>
                   </div>
                 </div>
                 <div className="flex gap-1 shrink-0">

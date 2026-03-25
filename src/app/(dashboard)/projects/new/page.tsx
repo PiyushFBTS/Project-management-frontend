@@ -5,7 +5,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowLeft, FolderKanban, Loader2, CheckCircle2, User, Calendar, Clock, FileText, Check, X, Paperclip, Upload, File, Trash2 } from 'lucide-react';
+import { ArrowLeft, FolderKanban, Loader2, CheckCircle2, User, Calendar, Clock, FileText, Check, X, Paperclip, Upload, File, Trash2, Milestone, Plus } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { projectsApi } from '@/lib/api/projects';
 import { CreateProjectDto } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -16,7 +17,15 @@ import {
 } from '@/components/ui/select';
 
 const statusOptions = ['active', 'inactive', 'completed'];
-const typeOptions = ['project', 'support', 'development', 'consulting', 'migration', 'maintenance'];
+const typeOptions = [
+  { value: 'fresh_implement', label: 'Fresh Implement' },
+  { value: 'migration', label: 'Migration' },
+  { value: 'change_request', label: 'Change Request' },
+  { value: 'support', label: 'Support' },
+  { value: 'development', label: 'Development' },
+  { value: 'consulting', label: 'Consulting' },
+  { value: 'maintenance', label: 'Maintenance' },
+];
 
 const statusColors: Record<string, string> = {
   active: 'bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/30',
@@ -32,10 +41,17 @@ export default function NewProjectPage() {
   const docInputRef = useRef<HTMLInputElement>(null);
   const [docCategory, setDocCategory] = useState('other');
 
+  // Milestones
+  const [milestones, setMilestones] = useState<Array<{ name: string; expectedPercentage: string; expectedAmount: string }>>([]);
+  const [milestoneDialogOpen, setMilestoneDialogOpen] = useState(false);
+  const [msName, setMsName] = useState('');
+  const [msExpectedPct, setMsExpectedPct] = useState('');
+  const [msExpectedAmt, setMsExpectedAmt] = useState('');
+
   const [form, setForm] = useState({
     projectCode: '',
     projectName: '',
-    projectType: 'project',
+    projectType: 'fresh_implement',
     clientName: '',
     status: 'active',
     startDate: '',
@@ -60,6 +76,15 @@ export default function NewProjectPage() {
           try { await projectsApi.uploadDocument(newId, file, category); } catch { /* ignore individual errors */ }
         }
       }
+      // Create milestones if any
+      if (milestones.length > 0) {
+        try {
+          await projectsApi.bulkCreateMilestones(
+            newId,
+            milestones.map((m) => ({ name: m.name, expectedPercentage: Number(m.expectedPercentage), expectedAmount: Number(m.expectedAmount) })),
+          );
+        } catch { /* ignore */ }
+      }
       qc.invalidateQueries({ queryKey: ['projects'] });
       setCreateStatus('success');
       setTimeout(() => router.push(`/projects/${newId}`), 1500);
@@ -70,9 +95,28 @@ export default function NewProjectPage() {
     },
   });
 
+  const addMilestone = () => {
+    if (!msName.trim() || !msExpectedPct.trim() || !msExpectedAmt.trim() || Number(msExpectedAmt) <= 0) {
+      toast.error('Enter milestone name, expected percentage and amount');
+      return;
+    }
+    setMilestones((prev) => [...prev, { name: msName.trim(), expectedPercentage: msExpectedPct.trim(), expectedAmount: msExpectedAmt.trim() }]);
+    setMsName('');
+    setMsExpectedPct('');
+    setMsExpectedAmt('');
+  };
+
+  const removeMilestone = (idx: number) => {
+    setMilestones((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const handleSave = () => {
     if (!form.projectCode.trim() || !form.projectName.trim() || !form.clientName.trim() || !form.startDate) {
       toast.error('Please fill in all required fields (Code, Name, Client, Start Date)');
+      return;
+    }
+    if (milestones.length === 0) {
+      toast.error('Please add at least one milestone');
       return;
     }
     const pmId = form.projectManagerId && form.projectManagerId !== 'none' ? Number(form.projectManagerId) : null;
@@ -123,6 +167,20 @@ export default function NewProjectPage() {
           <p className="text-sm text-muted-foreground">Fill in the details to create a new project</p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setMilestoneDialogOpen(true)}
+            className="relative"
+          >
+            <Milestone className="mr-1 h-3.5 w-3.5" />
+            Milestones
+            {milestones.length > 0 && (
+              <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white px-1">
+                {milestones.length}
+              </span>
+            )}
+          </Button>
           <Button variant="outline" size="sm" onClick={() => router.back()}>
             <X className="mr-1 h-3.5 w-3.5" /> Cancel
           </Button>
@@ -183,7 +241,7 @@ export default function NewProjectPage() {
           <Select value={form.projectType} onValueChange={(v) => setForm((p) => ({ ...p, projectType: v }))}>
             <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {typeOptions.map((t) => <SelectItem key={t} value={t} className="capitalize">{t}</SelectItem>)}
+              {typeOptions.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
@@ -316,6 +374,88 @@ export default function NewProjectPage() {
           </div>
         )}
       </div>
+
+      {/* ── Milestone Dialog ──────────────────────────────────────────── */}
+      <Dialog open={milestoneDialogOpen} onOpenChange={setMilestoneDialogOpen}>
+        <DialogContent className="sm:max-w-[100vw] md:max-w-[80vw] lg:max-w-[60vw] w-full h-[100vh] md:h-[85vh] max-h-[100vh] md:max-h-[95vh] rounded-none md:rounded-lg flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Milestone className="h-5 w-5 text-violet-600" />
+              Project Milestones
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-2">Add at least one milestone. Received amount can be updated later.</p>
+
+          {/* Add new milestone form */}
+          <div className="grid grid-cols-[1fr_80px_120px_auto] gap-2 items-end">
+            <div>
+              <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Name *</label>
+              <Input value={msName} onChange={(e) => setMsName(e.target.value)} placeholder="e.g. Advance" className="h-9" />
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Exp % *</label>
+              <Input type="number" min="0" max="100" step="0.01" value={msExpectedPct} onChange={(e) => setMsExpectedPct(e.target.value)} placeholder="20" className="h-9" />
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Exp Amt *</label>
+              <Input type="number" min="0" step="0.01" value={msExpectedAmt} onChange={(e) => setMsExpectedAmt(e.target.value)} placeholder="200000" className="h-9" />
+            </div>
+            <Button size="sm" className="h-9" onClick={addMilestone}>
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+
+          {/* Milestone list */}
+          {/* Scrollable list */}
+          <div className="flex-1 overflow-y-auto -mx-6 px-6">
+            {milestones.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">No milestones added yet</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-background">
+                  <tr className="border-b text-left">
+                    <th className="py-1.5 text-xs text-muted-foreground">Name</th>
+                    <th className="py-1.5 text-xs text-muted-foreground text-right">Exp %</th>
+                    <th className="py-1.5 text-xs text-muted-foreground text-right">Exp Amt</th>
+                    <th className="py-1.5 w-8"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {milestones.map((m, idx) => (
+                    <tr key={idx} className="border-b last:border-0">
+                      <td className="py-2 font-medium">{m.name}</td>
+                      <td className="py-2 text-right">{m.expectedPercentage}%</td>
+                      <td className="py-2 text-right">₹{Number(m.expectedAmount).toLocaleString('en-IN')}</td>
+                      <td className="py-2 text-center">
+                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500 hover:text-red-600" onClick={() => removeMilestone(idx)}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Fixed total + done at bottom */}
+          {milestones.length > 0 && (
+            <div className="border-t pt-2 shrink-0">
+              <div className="flex justify-between text-sm font-semibold">
+                <span>Total</span>
+                <span>
+                  {milestones.reduce((s, m) => s + Number(m.expectedPercentage || 0), 0)}% · ₹{milestones.reduce((s, m) => s + Number(m.expectedAmount || 0), 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end pt-2 border-t shrink-0">
+            <Button onClick={() => setMilestoneDialogOpen(false)}>
+              Done ({milestones.length} milestone{milestones.length !== 1 ? 's' : ''})
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

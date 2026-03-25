@@ -52,6 +52,9 @@ export const projectPlanningApi = {
   createTask: (projectId: number, dto: CreateTaskDto) =>
     api.post<ApiResponse<ProjectTask>>(`/projects/${projectId}/planning/tasks`, dto),
 
+  bulkCreateTasks: (projectId: number, rows: any[]) =>
+    api.post(`/projects/${projectId}/planning/tasks/bulk`, { rows }),
+
   getTask: (projectId: number, taskId: number) =>
     api.get<ApiResponse<ProjectTask>>(`/projects/${projectId}/planning/tasks/${taskId}`),
 
@@ -103,6 +106,9 @@ export const employeePlanningApi = {
 
   createTask: (projectId: number, dto: CreateTaskDto) =>
     api.post<ApiResponse<ProjectTask>>(`/employee/projects/${projectId}/planning/tasks`, dto),
+
+  bulkCreateTasks: (projectId: number, rows: any[]) =>
+    api.post(`/employee/projects/${projectId}/planning/tasks/bulk`, { rows }),
 
   getTask: (projectId: number, taskId: number) =>
     api.get<ApiResponse<ProjectTask>>(`/employee/projects/${projectId}/planning/tasks/${taskId}`),

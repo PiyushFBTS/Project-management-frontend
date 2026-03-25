@@ -76,4 +76,30 @@ export const projectsApi = {
 
   deleteClient: (projectId: number, clientId: number) =>
     api.delete(`/projects/${projectId}/clients/${clientId}`),
+
+  // Milestones
+  getMilestones: (projectId: number) =>
+    api.get(`/projects/${projectId}/milestones`),
+
+  createMilestone: (projectId: number, dto: { name: string; expectedPercentage: number; expectedAmount: number; receivedPercentage?: number; receivedAmount?: number }) =>
+    api.post(`/projects/${projectId}/milestones`, dto),
+
+  bulkCreateMilestones: (projectId: number, milestones: Array<{ name: string; expectedPercentage: number; expectedAmount: number; receivedPercentage?: number; receivedAmount?: number }>) =>
+    api.post(`/projects/${projectId}/milestones/bulk`, { milestones }),
+
+  updateMilestone: (projectId: number, milestoneId: number, dto: { name?: string; expectedPercentage?: number; expectedAmount?: number; receivedPercentage?: number; receivedAmount?: number }) =>
+    api.patch(`/projects/${projectId}/milestones/${milestoneId}`, dto),
+
+  deleteMilestone: (projectId: number, milestoneId: number) =>
+    api.delete(`/projects/${projectId}/milestones/${milestoneId}`),
+
+  // Project Types
+  getProjectTypes: () =>
+    api.get('/projects/types/list'),
+
+  createProjectType: (dto: { value: string; label: string; description?: string }) =>
+    api.post('/projects/types', dto),
+
+  deleteProjectType: (typeId: number) =>
+    api.delete(`/projects/types/${typeId}`),
 };

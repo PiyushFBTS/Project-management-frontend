@@ -129,7 +129,9 @@ export default function ProjectsPage() {
                       </Link>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="capitalize">{p.projectType}</Badge>
+                      <Badge variant="outline">{
+                        ({ fresh_implement: 'Fresh Implement', migration: 'Migration', change_request: 'Change Request', support: 'Support', development: 'Development', consulting: 'Consulting', maintenance: 'Maintenance' } as Record<string, string>)[p.projectType] ?? p.projectType
+                      }</Badge>
                     </TableCell>
                     <TableCell className="text-slate-600">{p.clientName}</TableCell>
                     <TableCell className="text-slate-600 text-sm">

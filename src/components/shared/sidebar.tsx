@@ -41,16 +41,16 @@ const navItems: NavItem[] = [
     borderColor: 'border-l-indigo-400', dotColor: 'bg-indigo-400',
   },
   {
+    label: 'Project Types', href: '/project-types', icon: Tags,
+    iconColor: 'text-cyan-400', iconBg: 'bg-cyan-500/20',
+    activeBg: 'bg-cyan-500/20', hoverBg: 'hover:bg-cyan-500/10',
+    borderColor: 'border-l-cyan-400', dotColor: 'bg-cyan-400',
+  },
+  {
     label: 'Projects', href: '/projects', icon: FolderKanban,
     iconColor: 'text-blue-400', iconBg: 'bg-blue-500/20',
     activeBg: 'bg-blue-500/20', hoverBg: 'hover:bg-blue-500/10',
     borderColor: 'border-l-blue-400', dotColor: 'bg-blue-400',
-  },
-  {
-    label: 'Task Types', href: '/task-types', icon: Tags,
-    iconColor: 'text-cyan-400', iconBg: 'bg-cyan-500/20',
-    activeBg: 'bg-cyan-500/20', hoverBg: 'hover:bg-cyan-500/10',
-    borderColor: 'border-l-cyan-400', dotColor: 'bg-cyan-400',
   },
   {
     label: 'My Tasks', href: '/my-tasks', icon: ListTodo,
