@@ -286,7 +286,6 @@ export default function FullTicketsPage() {
     if (contribs.length > 0) {
       try {
         const res = await (ticketsApi as any).setContributors(taskId, contribs);
-        console.log('Contributors saved:', res.data);
       } catch (err: any) {
         console.error('Failed to save contributors:', err?.response?.data ?? err);
         toast.error(err?.response?.data?.message ?? 'Failed to save contributors');
@@ -353,7 +352,6 @@ export default function FullTicketsPage() {
     queryFn: () => ticketsApi.getHistory(historyTaskId!).then((r) => r.data.data),
     enabled: !!historyTaskId && historyOpen,
   });
-  console.log("historyData", historyData)
 
   // ── Employees list for reassign ─────────────────────────────────────
   const { data: companyEmployeesRaw } = useQuery({
@@ -447,7 +445,6 @@ export default function FullTicketsPage() {
 
     return [...empOpts, ...adminOpts, ...clientOpts];
   })();
-console.log("reassignOptions",reassignOptions);
 
   const reassignMut = useMutation({
     mutationFn: ({ taskId, target }: { taskId: number; target: string }) => {
@@ -479,7 +476,6 @@ console.log("reassignOptions",reassignOptions);
   const openDetail = (t: ProjectTask) => {
     router.push(`/full-tickets/${t.id}`);
   };
-  console.log("reassignTo", reassignTo)
   return (
     <div className="space-y-4">
       {/* Gradient Header */}

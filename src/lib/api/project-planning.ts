@@ -234,6 +234,14 @@ export const clientTicketsApi = {
 
   deleteAttachment: (taskId: number, attId: number) =>
     api.delete(`/client/tasks/${taskId}/attachments/${attId}`),
+
+  // Multi-assignee
+  getAssignees: (taskId: number) =>
+    api.get(`/client/tasks/${taskId}/assignees`),
+  addAssignee: (taskId: number, userId: number, userType: 'employee' | 'admin' | 'client') =>
+    api.post(`/client/tasks/${taskId}/assignees`, { userId, userType }),
+  removeAssignee: (taskId: number, assigneeId: number) =>
+    api.delete(`/client/tasks/${taskId}/assignees/${assigneeId}`),
 };
 
 // ── Employee: My Tasks ───────────────────────────────────────────────────────
@@ -352,6 +360,14 @@ export const adminTicketsApi = {
 
   deleteAttachment: (taskId: number, attId: number) =>
     api.delete(`/admin/all-tickets/${taskId}/attachments/${attId}`),
+
+  // Multi-assignee
+  getAssignees: (taskId: number) =>
+    api.get(`/admin/all-tickets/${taskId}/assignees`),
+  addAssignee: (taskId: number, userId: number, userType: 'employee' | 'admin' | 'client') =>
+    api.post(`/admin/all-tickets/${taskId}/assignees`, { userId, userType }),
+  removeAssignee: (taskId: number, assigneeId: number) =>
+    api.delete(`/admin/all-tickets/${taskId}/assignees/${assigneeId}`),
 };
 
 // ── Employee: All Project Tickets ───────────────────────────────────────────
@@ -411,4 +427,12 @@ export const projectTicketsApi = {
 
   deleteAttachment: (taskId: number, attId: number) =>
     api.delete(`/employee/project-tickets/${taskId}/attachments/${attId}`),
+
+  // Multi-assignee
+  getAssignees: (taskId: number) =>
+    api.get(`/employee/project-tickets/${taskId}/assignees`),
+  addAssignee: (taskId: number, userId: number, userType: 'employee' | 'admin' | 'client') =>
+    api.post(`/employee/project-tickets/${taskId}/assignees`, { userId, userType }),
+  removeAssignee: (taskId: number, assigneeId: number) =>
+    api.delete(`/employee/project-tickets/${taskId}/assignees/${assigneeId}`),
 };

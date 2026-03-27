@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 const AVATAR_GRADIENTS = [
   'from-pink-500 to-rose-600', 'from-violet-500 to-purple-600',
@@ -63,6 +64,18 @@ export default function EmployeeDetailPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
 
+  // Edit profile state (admin/HR or self)
+  const [editMode, setEditMode] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editDob, setEditDob] = useState('');
+  const [editType, setEditType] = useState('');
+  const [editJoiningDate, setEditJoiningDate] = useState('');
+  const [editIsHr, setEditIsHr] = useState(false);
+  const [editReportsToId, setEditReportsToId] = useState<string>('');
+  const canEdit = canManageAllDocs || isSelf; // admin, HR, or self
+
   // Password change state
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -95,6 +108,60 @@ export default function EmployeeDetailPage() {
       return docApi.get(targetType, Number(id)).then((r: any) => r.data?.data ?? r.data ?? []);
     },
     enabled: !!id && activeTab === 'documents',
+  });
+
+  // Employee list for "Reports To" dropdown — load for admin/HR always
+  const { data: allEmployeesRaw } = useQuery({
+    queryKey: ['all-employees-for-reports-to'],
+    queryFn: async () => {
+      const r = await employeesApi.getAll({ limit: 100 });
+      return r.data;
+    },
+    enabled: !!user && (isAdmin || isHr),
+  });
+  const allEmployees: any[] = (() => {
+    const d = allEmployeesRaw as any;
+    if (Array.isArray(d)) return d;
+    if (Array.isArray(d?.data)) return d.data;
+    return [];
+  })();
+  const startEdit = () => {
+    if (!emp) return;
+    setEditName(emp.empName ?? '');
+    setEditEmail(emp.email ?? '');
+    setEditPhone(emp.mobileNumber ?? '');
+    setEditDob(emp.dateOfBirth ?? '');
+    setEditType(emp.consultantType ?? '');
+    setEditJoiningDate(emp.joiningDate ?? '');
+    setEditIsHr(!!emp.isHr);
+    setEditReportsToId(
+      (emp as any).isReportToAdmin && (emp as any).reportsToAdminId
+        ? `adm-${(emp as any).reportsToAdminId}`
+        : emp.reportsToId ? `emp-${emp.reportsToId}` : 'none'
+    );
+    setEditMode(true);
+  };
+
+  const saveProfileMut = useMutation({
+    mutationFn: async () => {
+      if (isSelf && isEmployee) {
+        // Employee self-update (limited fields)
+        return employeesApi.updateSelf({ empName: editName, mobileNumber: editPhone, dateOfBirth: editDob || undefined });
+      }
+      // Admin/HR update (all fields)
+      const [reportsType, reportsIdStr] = editReportsToId && editReportsToId !== 'none' ? editReportsToId.split('-') : [null, null];
+      const isReportToAdmin = reportsType === 'adm';
+      const reportsToId = reportsType === 'emp' ? Number(reportsIdStr) : null;
+      const reportsToAdminId = reportsType === 'adm' ? Number(reportsIdStr) : null;
+      const dto: any = { empName: editName, email: editEmail, mobileNumber: editPhone, dateOfBirth: editDob || undefined, consultantType: editType, joiningDate: editJoiningDate || undefined, isHr: editIsHr, isReportToAdmin, reportsToId, reportsToAdminId };
+      return employeesApi.update(Number(id), dto);
+    },
+    onSuccess: () => {
+      toast.success('Profile updated');
+      setEditMode(false);
+      qc.invalidateQueries({ queryKey: ['employee-detail', id] });
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Update failed'),
   });
 
   const uploadMut = useMutation({
@@ -228,42 +295,83 @@ export default function EmployeeDetailPage() {
             {activeTab === 'profile' && (
               <Card className="shadow-sm">
                 <CardContent className="px-5 py-4">
-                  <h2 className="text-base font-semibold mb-4">Personal Information</h2>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-base font-semibold">Personal Information</h2>
+                    {canEdit && targetType !== 'admin' && !editMode && (
+                      <Button size="sm" variant="outline" onClick={startEdit}>Edit</Button>
+                    )}
+                    {editMode && (
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="ghost" onClick={() => setEditMode(false)}>Cancel</Button>
+                        <Button size="sm" onClick={() => saveProfileMut.mutate()} disabled={saveProfileMut.isPending}>
+                          {saveProfileMut.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null} Save
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-5 gap-x-8">
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Full Name</p>
-                      <p className="text-sm font-medium">{emp.empName}</p>
+                      {editMode ? <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="h-8 text-sm" /> : <p className="text-sm font-medium">{emp.empName}</p>}
                     </div>
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Email Address</p>
-                      <p className="text-sm font-medium">{emp.email}</p>
+                      {editMode && canManageAllDocs ? <Input value={editEmail} onChange={(e) => setEditEmail(e.target.value)} className="h-8 text-sm" /> : <p className="text-sm font-medium">{emp.email}</p>}
                     </div>
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Phone Number</p>
-                      <p className="text-sm font-medium">{emp.mobileNumber || '—'}</p>
+                      {editMode ? <Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} className="h-8 text-sm" /> : <p className="text-sm font-medium">{emp.mobileNumber || '—'}</p>}
                     </div>
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Date of Birth</p>
-                      <p className="text-sm font-medium">{emp.dateOfBirth ? format(new Date(emp.dateOfBirth + 'T00:00:00'), 'dd MMM yyyy') : '—'}</p>
+                      {editMode ? <Input type="date" value={editDob} onChange={(e) => setEditDob(e.target.value)} className="h-8 text-sm" /> : <p className="text-sm font-medium">{emp.dateOfBirth ? format(new Date(emp.dateOfBirth + 'T00:00:00'), 'dd MMM yyyy') : '—'}</p>}
                     </div>
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">User Role</p>
-                      <p className="text-sm font-medium uppercase">{targetType === 'admin' ? 'Admin' : TYPE_LABELS[emp.consultantType] ?? emp.consultantType}</p>
+                      {editMode && canManageAllDocs ? (
+                        <Select value={editType} onValueChange={setEditType}>
+                          <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(TYPE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      ) : <p className="text-sm font-medium uppercase">{targetType === 'admin' ? 'Admin' : TYPE_LABELS[emp.consultantType] ?? emp.consultantType}</p>}
                     </div>
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Joined</p>
-                      <p className="text-sm font-medium">{emp.joiningDate ? format(new Date(emp.joiningDate + 'T00:00:00'), 'dd MMM yyyy') : emp.createdAt ? format(new Date(emp.createdAt), 'dd MMM yyyy') : '—'}</p>
+                      {editMode && canManageAllDocs ? (
+                        <Input type="date" value={editJoiningDate} onChange={(e) => setEditJoiningDate(e.target.value)} className="h-8 text-sm" />
+                      ) : <p className="text-sm font-medium">{emp.joiningDate ? format(new Date(emp.joiningDate + 'T00:00:00'), 'dd MMM yyyy') : emp.createdAt ? format(new Date(emp.createdAt), 'dd MMM yyyy') : '—'}</p>}
                     </div>
                     <div>
                       <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Employee Code</p>
                       <p className="text-sm font-medium font-mono">{emp.empCode ?? '—'}</p>
                     </div>
-                    {emp.reportsTo && (
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Reports To</p>
-                        <p className="text-sm font-medium">{emp.reportsTo.empName}</p>
-                      </div>
-                    )}
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Reports To</p>
+                      {editMode && canManageAllDocs ? (
+                        <SearchableSelect
+                          value={editReportsToId}
+                          onValueChange={setEditReportsToId}
+                          placeholder="Search employee..."
+                          className="h-8 text-sm"
+                          options={[
+                            { value: 'none', label: 'None' },
+                            ...allEmployees
+                              .filter((e: any) => e.id !== Number(id) && e.isActive !== false)
+                              .filter((e: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.id === e.id && x._type === e._type) === i)
+                              .map((e: any) => ({
+                                value: `${e._type === 'admin' ? 'adm' : 'emp'}-${e.id}`,
+                                label: `${e.empName}${e._type === 'admin' ? ' (Admin)' : ''} — ${e.empCode}`,
+                              })),
+                          ]}
+                        />
+                      ) : <p className="text-sm font-medium">
+                          {(emp as any).isReportToAdmin
+                            ? (emp as any).reportsToAdmin?.name ?? '—'
+                            : emp.reportsTo?.empName ?? '—'}
+                        </p>}
+                    </div>
                     {emp.assignedProject && (
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Assigned Project</p>
@@ -276,6 +384,12 @@ export default function EmployeeDetailPage() {
                         {emp.isActive ? 'Active' : 'Inactive'}
                       </Badge>
                     </div>
+                    {editMode && canManageAllDocs && (
+                      <div className="flex items-center gap-2">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">HR Access</p>
+                        <input type="checkbox" checked={editIsHr} onChange={(e) => setEditIsHr(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

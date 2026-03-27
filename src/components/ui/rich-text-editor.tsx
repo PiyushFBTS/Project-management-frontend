@@ -164,23 +164,12 @@ function FontFamilySelect({
 
 /* ── Build tiptap extensions outside component to avoid ref-during-render issues ── */
 type MentionStoreData = { employees: MentionUser[]; onMentionAdded?: (emp: MentionUser) => void };
-type MentionStore = { current: MentionStoreData };
 
-// Module-scoped mutable stores keyed by unique ID — completely outside React's ref/state system
-const mentionStores = new Map<number, MentionStoreData>();
-let _nextId = 0;
-function allocStore(data: MentionStoreData): number {
-  const id = ++_nextId;
-  mentionStores.set(id, data);
-  return id;
-}
-function getStore(id: number): MentionStore {
-  return { get current() { return mentionStores.get(id)!; } };
-}
-
+// Single global mutable store — updated by whichever RichTextEditor is currently mounted
+const mentionStore: MentionStoreData = { employees: [], onMentionAdded: undefined };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function buildExtensions(withMention: boolean, store: MentionStore): any[] {
+function buildExtensions(withMention: boolean): any[] {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const base: any[] = [
     StarterKit.configure({
@@ -200,13 +189,15 @@ function buildExtensions(withMention: boolean, store: MentionStore): any[] {
     base.push(
       Mention.configure({
         HTMLAttributes: { class: 'mention' },
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        renderLabel: ({ node }: any) => `@${node.attrs.label}`,
+        renderText: ({ node }) => `@${node.attrs.label ?? node.attrs.id}`,
         suggestion: {
+          char: '@',
+          allowSpaces: false,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           items: ({ query }: any) => {
-            const list = store.current.employees;
+            const list = mentionStore.employees ?? [];
             const deduped = list.filter((e, i, a) => a.findIndex((x) => x.id === e.id) === i);
+            if (!query) return deduped.slice(0, 8);
             return deduped.filter((e) => e.empName.toLowerCase().includes(query.toLowerCase())).slice(0, 8);
           },
           render: () => {
@@ -229,7 +220,7 @@ function buildExtensions(withMention: boolean, store: MentionStore): any[] {
                 btn.addEventListener('mousedown', (e) => {
                   e.preventDefault();
                   commandFn?.({ id: String(item.id), label: item.empName });
-                  store.current.onMentionAdded?.({ id: item.id, empName: item.empName });
+                  mentionStore.onMentionAdded?.({ id: item.id, empName: item.empName });
                 });
                 container!.appendChild(btn);
               });
@@ -279,7 +270,7 @@ function buildExtensions(withMention: boolean, store: MentionStore): any[] {
                 if (props.event.key === 'Enter') {
                   if (items[selectedIndex]) {
                     commandFn?.({ id: String(items[selectedIndex].id), label: items[selectedIndex].empName });
-                    store.current.onMentionAdded?.(items[selectedIndex]);
+                    mentionStore.onMentionAdded?.(items[selectedIndex]);
                   }
                   return true;
                 }
@@ -329,28 +320,32 @@ const EDITOR_STYLES = `
   color: #7c3aed;
   white-space: nowrap;
 }
-.rich-editor .mention-suggestions {
+.mention-suggestions {
   background: var(--popover, #fff);
   border: 1px solid var(--border, #e5e7eb);
   border-radius: 0.5rem;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   padding: 0.25rem 0;
-  max-height: 200px;
+  min-width: 180px;
+  max-height: 220px;
   overflow-y: auto;
-  z-index: 100;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
 }
-.rich-editor .mention-suggestions .mention-item {
+.mention-suggestions .mention-item {
   display: block;
   width: 100%;
   text-align: left;
-  padding: 0.375rem 0.75rem;
+  padding: 0.5rem 0.75rem;
   font-size: 0.8125rem;
   cursor: pointer;
   border: none;
   background: transparent;
+  white-space: nowrap;
 }
-.rich-editor .mention-suggestions .mention-item:hover,
-.rich-editor .mention-suggestions .mention-item.is-selected {
+.mention-suggestions .mention-item:hover,
+.mention-suggestions .mention-item.is-selected {
   background: rgba(139,92,246,0.1);
   color: #7c3aed;
 }
@@ -368,24 +363,12 @@ export function RichTextEditor({
 }: RichTextEditorProps) {
   const isInternalUpdate = useRef(false);
 
-  // Allocate a module-scoped mutable store (outside React's tracking)
-  const [storeId] = useState(() => allocStore({ employees: employees ?? [], onMentionAdded }));
-  const store = getStore(storeId);
-
-  // Keep store in sync with latest props
-  useEffect(() => {
-    const s = mentionStores.get(storeId);
-    if (s) {
-      s.employees = employees ?? [];
-      s.onMentionAdded = onMentionAdded;
-    }
-  });
-
-  // Cleanup on unmount
-  useEffect(() => () => { mentionStores.delete(storeId); }, [storeId]);
+  // Keep the global store in sync with latest props on every render
+  mentionStore.employees = employees ?? [];
+  mentionStore.onMentionAdded = onMentionAdded;
 
   const hasMentions = !!employees;
-  const [extensions] = useState(() => buildExtensions(hasMentions, store));
+  const [extensions] = useState(() => buildExtensions(hasMentions));
 
   const editor = useEditor({
     extensions,

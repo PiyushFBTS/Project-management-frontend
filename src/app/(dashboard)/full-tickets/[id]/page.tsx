@@ -291,8 +291,35 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
     }
   };
 
-  // ── Assignee display ──────────────────────────────────────────────────
-  const assigneeName = t?.assignee?.empName ?? (t as any)?.assignedAdmin?.name ?? (t as any)?.assignedClient?.fullName ?? 'Unassigned';
+  // ── Multi-Assignees ──────────────────────────────────────────────────
+  const { data: assigneesRaw = [], refetch: refetchAssignees } = useQuery({
+    queryKey: ['task-assignees', taskId],
+    queryFn: async () => {
+      const r = await ticketsApi.getAssignees!(taskId);
+      return (r.data?.data ?? r.data) as { id: number; userId: number; userType: string; userName: string }[];
+    },
+    enabled: !!t && !!ticketsApi.getAssignees,
+  });
+  const assignees = Array.isArray(assigneesRaw) ? assigneesRaw : [];
+  const assigneeName = assignees.length > 0
+    ? assignees.map(a => a.userName).join(', ')
+    : t?.assignee?.empName ?? (t as any)?.assignedAdmin?.name ?? (t as any)?.assignedClient?.fullName ?? 'Unassigned';
+
+  const [showAddAssignee, setShowAddAssignee] = useState(false);
+  const [assigneeSearch, setAssigneeSearch] = useState('');
+
+  const addAssigneeMut = useMutation({
+    mutationFn: ({ userId, userType }: { userId: number; userType: 'employee' | 'admin' | 'client' }) =>
+      ticketsApi.addAssignee!(taskId, userId, userType),
+    onSuccess: () => { refetchAssignees(); toast.success('Assignee added'); setShowAddAssignee(false); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to add assignee'),
+  });
+
+  const removeAssigneeMut = useMutation({
+    mutationFn: (assigneeId: number) => ticketsApi.removeAssignee!(taskId, assigneeId),
+    onSuccess: () => { refetchAssignees(); toast.success('Assignee removed'); },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to remove'),
+  });
 
   // ── Loading & error states ────────────────────────────────────────────
   if (authLoading || detailLoading) {
@@ -548,9 +575,65 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
           <div className="rounded-xl border bg-card p-4 space-y-3">
             <h3 className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Details</h3>
 
-            <div className="flex items-center justify-between py-1.5 border-b border-dashed">
-              <span className="text-xs text-muted-foreground flex items-center gap-1.5"><User className="h-3.5 w-3.5" /> Assignee</span>
-              <span className="text-sm font-medium">{assigneeName}</span>
+            <div className="py-1.5 border-b border-dashed">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5"><Users className="h-3.5 w-3.5" /> Assignees</span>
+                <Button size="sm" variant="ghost" className="h-6 px-1.5 text-xs" onClick={() => { setShowAddAssignee(!showAddAssignee); setAssigneeSearch(''); }}>
+                  <UserRoundPlus className="h-3 w-3 mr-1" /> Add
+                </Button>
+              </div>
+
+              {assignees.length === 0 && <p className="text-xs text-muted-foreground">No assignees</p>}
+
+              <div className="space-y-1">
+                {assignees.map((a) => (
+                  <div key={a.id} className="flex items-center justify-between group">
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-semibold text-primary">{a.userName.charAt(0)}</div>
+                      <span className="text-xs font-medium">{a.userName}</span>
+                      <Badge variant="outline" className="text-[9px] px-1 py-0">{a.userType}</Badge>
+                    </div>
+                    <Button size="sm" variant="ghost" className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-red-500"
+                      onClick={() => removeAssigneeMut.mutate(a.id)}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+
+              {showAddAssignee && (
+                <div className="mt-2 p-2 bg-muted/50 rounded-lg space-y-1.5">
+                  <input
+                    type="text"
+                    placeholder="Search by name..."
+                    value={assigneeSearch}
+                    onChange={(e) => setAssigneeSearch(e.target.value)}
+                    className="w-full text-xs px-2 py-1.5 rounded border bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+                    autoFocus
+                  />
+                  <div className="max-h-40 overflow-y-auto space-y-0.5">
+                    {(companyEmployees ?? [])
+                      .filter((e: any) => !assignees.some(a => a.userId === e.id && a.userType === (e._type || 'employee')))
+                      .filter((e: any) => !assigneeSearch || e.empName?.toLowerCase().includes(assigneeSearch.toLowerCase()))
+                      .map((emp: any) => {
+                        const uType = emp._type === 'admin' ? 'admin' : emp._type === 'client' ? 'client' : 'employee';
+                        return (
+                          <button key={`${uType}-${emp.id}`}
+                            className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-primary/10 flex items-center gap-2"
+                            onClick={() => addAssigneeMut.mutate({ userId: emp.id, userType: uType as any })}>
+                            <div className="h-4 w-4 rounded-full bg-primary/10 flex items-center justify-center text-[9px] font-semibold text-primary">{emp.empName?.charAt(0)}</div>
+                            {emp.empName}
+                            {uType !== 'employee' && <Badge variant="outline" className="text-[8px] px-1 py-0 ml-auto">{uType}</Badge>}
+                          </button>
+                        );
+                      })}
+                    {(companyEmployees ?? [])
+                      .filter((e: any) => !assignees.some(a => a.userId === e.id && a.userType === (e._type || 'employee')))
+                      .filter((e: any) => !assigneeSearch || e.empName?.toLowerCase().includes(assigneeSearch.toLowerCase()))
+                      .length === 0 && <p className="text-xs text-muted-foreground text-center py-2">No matches found</p>}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between py-1.5 border-b border-dashed">

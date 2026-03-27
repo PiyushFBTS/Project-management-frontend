@@ -218,7 +218,6 @@ export default function ProjectDetailPage() {
   };
 
   const startEdit = () => {
-    console.log("project",project);
     
     if (!project) return;
     setForm({

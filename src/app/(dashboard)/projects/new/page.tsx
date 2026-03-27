@@ -51,7 +51,7 @@ export default function NewProjectPage() {
   const [form, setForm] = useState({
     projectCode: '',
     projectName: '',
-    projectType: 'fresh_implement',
+    projectType: '',
     clientName: '',
     status: 'active',
     startDate: '',
@@ -227,7 +227,7 @@ export default function NewProjectPage() {
             <Clock className="h-3 w-3" /> Status
           </div>
           <Select value={form.status} onValueChange={(v) => setForm((p) => ({ ...p, status: v }))}>
-            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 text-sm w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
               {statusOptions.map((s) => <SelectItem key={s} value={s} className="capitalize">{s.replace('_', ' ')}</SelectItem>)}
             </SelectContent>
@@ -239,7 +239,7 @@ export default function NewProjectPage() {
             <FolderKanban className="h-3 w-3" /> Type
           </div>
           <Select value={form.projectType} onValueChange={(v) => setForm((p) => ({ ...p, projectType: v }))}>
-            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-8 text-sm w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
               {typeOptions.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
             </SelectContent>
@@ -263,7 +263,7 @@ export default function NewProjectPage() {
             <User className="h-3 w-3" /> Project Manager
           </div>
           <Select value={form.projectManagerId} onValueChange={(v) => setForm((p) => ({ ...p, projectManagerId: v }))}>
-            <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select manager" /></SelectTrigger>
+            <SelectTrigger className="h-8 text-sm w-full"><SelectValue placeholder="Select manager" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">None</SelectItem>
               {(managers ?? []).map((m: any) => (
