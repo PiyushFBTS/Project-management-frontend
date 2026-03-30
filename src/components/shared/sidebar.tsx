@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard, FolderKanban, Tags, Users,
+  LayoutDashboard, FolderKanban, Tags, Users, Receipt,
   ClipboardList, BarChart3, ChevronDown, TrendingUp, X,
   ChevronLeft, ChevronRight, CalendarDays, Building2, LogOut, Settings, ListTodo, Ticket, Mail,
 } from 'lucide-react';
@@ -45,6 +45,12 @@ const navItems: NavItem[] = [
     iconColor: 'text-cyan-400', iconBg: 'bg-cyan-500/20',
     activeBg: 'bg-cyan-500/20', hoverBg: 'hover:bg-cyan-500/10',
     borderColor: 'border-l-cyan-400', dotColor: 'bg-cyan-400',
+  },
+  {
+    label: 'Expenses', href: '/expenses', icon: Receipt,
+    iconColor: 'text-lime-400', iconBg: 'bg-lime-500/20',
+    activeBg: 'bg-lime-500/20', hoverBg: 'hover:bg-lime-500/10',
+    borderColor: 'border-l-lime-400', dotColor: 'bg-lime-400',
   },
   {
     label: 'Projects', href: '/projects', icon: FolderKanban,

@@ -189,7 +189,7 @@ export default function MyTasksPage() {
   // ── Employees list for reassign ─────────────────────────────────────
   const { data: companyEmployees } = useQuery({
     queryKey: ['company-employees-list'],
-    queryFn: () => employeesApi.employeeGetAll({ limit: 100, isActive: true }).then((r) => r.data.data),
+    queryFn: () => employeesApi.employeeGetAll({ limit: 100 }).then((r) => r.data.data),
   });
 
   const reassignMut = useMutation({

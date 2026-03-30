@@ -455,11 +455,11 @@ function FillTaskSheetPage() {
               <Label className="text-sm font-medium">Project Type</Label>
               <Input
                 readOnly
-                value={
-                  form.projectId && form.projectId !== 'other'
-                    ? projectTypeLabels[(projects ?? []).find((p: any) => String(p.id) === form.projectId)?.projectType] ?? (projects ?? []).find((p: any) => String(p.id) === form.projectId)?.projectType ?? '—'
-                    : '—'
-                }
+                value={(() => {
+                  if (!form.projectId || form.projectId === 'other') return '—';
+                  const pt = (projects ?? []).find((p: any) => String(p.id) === form.projectId)?.projectType as string | undefined;
+                  return pt ? ((projectTypeLabels as Record<string, string>)[pt] ?? pt) : '—';
+                })()}
                 className="bg-muted/50"
               />
             </div>

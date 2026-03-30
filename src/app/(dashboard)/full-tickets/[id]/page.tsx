@@ -144,7 +144,7 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
         return Array.isArray(d?.data) ? d.data : Array.isArray(d) ? d : [];
       }
       const fn = isAdmin ? employeesApi.getAll : employeesApi.employeeGetAll;
-      const r = await fn({ limit: 100, isActive: true });
+      const r = await fn({ limit: 100 });
       const d: any = r.data;
       return Array.isArray(d?.data) ? d.data : Array.isArray(d) ? d : [];
     },
@@ -227,15 +227,16 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
     mutationFn: ({ tId, target }: { tId: number; target: string }) => {
       const [type, ...rest] = target.split('-');
       const id = Number(rest.join('-'));
-      if (type === 'client' && (ticketsApi as any).reassignAny) return (ticketsApi as any).reassignAny(tId, { clientId: id });
-      if (type === 'admin' && (ticketsApi as any).reassignAny) return (ticketsApi as any).reassignAny(tId, { adminId: id });
-      if ((ticketsApi as any).reassignAny) return (ticketsApi as any).reassignAny(tId, { employeeId: id });
-      return ticketsApi.reassign(tId, id);
+      const api = isAdmin ? adminTicketsApi : isClient ? clientTicketsApi : projectTicketsApi;
+      if (type === 'client') return api.reassignAny(tId, { clientId: id });
+      if (type === 'admin') return api.reassignAny(tId, { adminId: id });
+      return api.reassignAny(tId, { employeeId: id });
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['project-ticket-detail', taskId] });
+    onSuccess: async () => {
+      await qc.refetchQueries({ queryKey: ['project-ticket-detail', taskId] });
       qc.invalidateQueries({ queryKey: ['project-tickets-all'] });
       qc.invalidateQueries({ queryKey: ['task-history', taskId] });
+      qc.invalidateQueries({ queryKey: ['task-assignees', taskId] });
       setReassignTo('');
       toast.success('Reassigned');
     },

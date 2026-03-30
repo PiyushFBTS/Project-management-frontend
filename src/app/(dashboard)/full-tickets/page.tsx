@@ -363,7 +363,7 @@ export default function FullTicketsPage() {
         return Array.isArray(d?.data) ? d.data : Array.isArray(d) ? d : [];
       }
       const fn = isAdmin ? employeesApi.getAll : employeesApi.employeeGetAll;
-      const r = await fn({ limit: 100, isActive: true });
+      const r = await fn({ limit: 100 });
       const d: any = r.data;
       return Array.isArray(d?.data) ? d.data : Array.isArray(d) ? d : [];
     },

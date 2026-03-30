@@ -331,7 +331,7 @@ export const adminTicketsApi = {
   reassign: (taskId: number, assigneeId: number) =>
     api.patch<ApiResponse<ProjectTask>>(`/admin/all-tickets/${taskId}/reassign`, { assigneeId }),
 
-  reassignAny: (taskId: number, body: { employeeId?: number; clientId?: number }) =>
+  reassignAny: (taskId: number, body: { employeeId?: number; clientId?: number; adminId?: number }) =>
     api.patch<ApiResponse<ProjectTask>>(`/admin/all-tickets/${taskId}/reassign-any`, body),
 
   getHistory: (taskId: number) =>
@@ -398,7 +398,7 @@ export const projectTicketsApi = {
   reassign: (taskId: number, assigneeId: number) =>
     api.patch<ApiResponse<ProjectTask>>(`/employee/project-tickets/${taskId}/reassign`, { assigneeId }),
 
-  reassignAny: (taskId: number, body: { employeeId?: number; clientId?: number }) =>
+  reassignAny: (taskId: number, body: { employeeId?: number; clientId?: number; adminId?: number }) =>
     api.patch<ApiResponse<ProjectTask>>(`/employee/project-tickets/${taskId}/reassign-any`, body),
 
   getHistory: (taskId: number) =>

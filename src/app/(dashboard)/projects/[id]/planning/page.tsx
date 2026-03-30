@@ -188,7 +188,7 @@ export default function ProjectPlanningPage() {
         return (Array.isArray(d) ? d : []) as Employee[];
       }
       const fn = isAdmin ? employeesApi.getAll : employeesApi.employeeGetAll;
-      const r = await fn({ isActive: true, limit: 100 });
+      const r = await fn({ limit: 100 });
       const d: any = r.data?.data;
       const list = (Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : []) as any[];
       return list as Employee[];
