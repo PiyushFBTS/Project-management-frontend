@@ -174,11 +174,11 @@ export default function ExpensesPage() {
       'Status': exp.status,
       'Description': exp.description ?? '',
       ...(exp.status === 'approved' ? {
-        'Approved By': exp.approvedByName ?? `Admin #${exp.approvedBy}` ?? '',
+        'Approved By': exp.approvedByName ?? (exp.approvedBy ? `Admin #${exp.approvedBy}` : ''),
         'Approved At': exp.approvedAt ? format(new Date(exp.approvedAt), 'dd MMM yyyy, hh:mm a') : '',
       } : {}),
       ...(exp.status === 'rejected' ? {
-        'Rejected By': exp.approvedByName ?? `Admin #${exp.approvedBy}` ?? '',
+        'Rejected By': exp.approvedByName ?? (exp.approvedBy ? `Admin #${exp.approvedBy}` : ''),
         'Rejected At': exp.approvedAt ? format(new Date(exp.approvedAt), 'dd MMM yyyy, hh:mm a') : '',
         'Rejection Reason': exp.remarks ?? '',
       } : {}),

@@ -217,6 +217,7 @@ export interface Employee {
   isActive: boolean;
   dateOfBirth?: string | null;
   joiningDate?: string | null;
+  fillDaysOverride?: number | null;
   createdAt: string;
 }
 

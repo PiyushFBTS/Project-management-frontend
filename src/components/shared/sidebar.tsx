@@ -84,6 +84,7 @@ const navItems: NavItem[] = [
     children: [
       { label: 'Leave Types', href: '/leave-types', dotColor: 'bg-rose-400' },
       { label: 'Leave Requests', href: '/leave-requests', dotColor: 'bg-orange-400' },
+      { label: 'Holidays', href: '/holidays', dotColor: 'bg-amber-400' },
     ],
   },
   {
@@ -155,7 +156,7 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isClient }: { onN
   const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     Reports: pathname.startsWith('/reports'),
-    'Leave Management': pathname.startsWith('/leave-r'),
+    'Leave Management': pathname.startsWith('/leave-r') || pathname.startsWith('/holidays'),
   });
   const toggleSection = (label: string) =>
     setOpenSections((prev) => ({ ...prev, [label]: !prev[label] }));

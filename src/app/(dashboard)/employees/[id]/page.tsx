@@ -73,6 +73,7 @@ export default function EmployeeDetailPage() {
   const [editType, setEditType] = useState('');
   const [editJoiningDate, setEditJoiningDate] = useState('');
   const [editIsHr, setEditIsHr] = useState(false);
+  const [editFillDays, setEditFillDays] = useState('');
   const [editReportsToId, setEditReportsToId] = useState<string>('');
   const canEdit = canManageAllDocs || isSelf; // admin, HR, or self
 
@@ -134,6 +135,7 @@ export default function EmployeeDetailPage() {
     setEditType(emp.consultantType ?? '');
     setEditJoiningDate(emp.joiningDate ?? '');
     setEditIsHr(!!emp.isHr);
+    setEditFillDays(emp.fillDaysOverride != null ? String(emp.fillDaysOverride) : '');
     setEditReportsToId(
       (emp as any).isReportToAdmin && (emp as any).reportsToAdminId
         ? `adm-${(emp as any).reportsToAdminId}`
@@ -153,7 +155,7 @@ export default function EmployeeDetailPage() {
       const isReportToAdmin = reportsType === 'adm';
       const reportsToId = reportsType === 'emp' ? Number(reportsIdStr) : null;
       const reportsToAdminId = reportsType === 'adm' ? Number(reportsIdStr) : null;
-      const dto: any = { empName: editName, email: editEmail, mobileNumber: editPhone, dateOfBirth: editDob || undefined, consultantType: editType, joiningDate: editJoiningDate || undefined, isHr: editIsHr, isReportToAdmin, reportsToId, reportsToAdminId };
+      const dto: any = { empName: editName, email: editEmail, mobileNumber: editPhone, dateOfBirth: editDob || undefined, consultantType: editType, joiningDate: editJoiningDate || undefined, isHr: editIsHr, isReportToAdmin, reportsToId, reportsToAdminId, fillDaysOverride: editFillDays ? Number(editFillDays) : null };
       return employeesApi.update(Number(id), dto);
     },
     onSuccess: () => {
@@ -385,9 +387,26 @@ export default function EmployeeDetailPage() {
                       </Badge>
                     </div>
                     {editMode && canManageAllDocs && (
-                      <div className="flex items-center gap-2">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">HR Access</p>
-                        <input type="checkbox" checked={editIsHr} onChange={(e) => setEditIsHr(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">HR Access : </p>
+                          <input type="checkbox" checked={editIsHr} onChange={(e) => setEditIsHr(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Fill Days : </p>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={365}
+                            placeholder="Default (3)"
+                            value={editFillDays}
+                            onChange={(e) => setEditFillDays(e.target.value)}
+                            className="h-7 w-1/2 text-xs"
+                          />
+                          {editFillDays && (
+                            <Button variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={() => setEditFillDays('')}>Reset</Button>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>

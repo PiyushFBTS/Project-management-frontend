@@ -4,7 +4,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
 import {
   ArrowLeft, Plus, Trash2, Send, Clock, CalendarDays, Pencil,
 } from 'lucide-react';
@@ -86,6 +86,9 @@ function FillTaskSheetPage() {
   const today = new Date().toISOString().split('T')[0];
   const sheetDate = dateParam || today;
   const isToday = sheetDate === today;
+
+  // Get employee's fill days override (default 3)
+  const fillDays = (user as any)?.fillDaysOverride ?? 3;
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TaskEntry | null>(null);
@@ -264,28 +267,52 @@ function FillTaskSheetPage() {
 
   if (!sheet) return <p className="text-muted-foreground">Could not load today&apos;s task sheet.</p>;
 
+  const dateOptions = Array.from({ length: fillDays }, (_, i) => i).map((daysAgo) => {
+    const d = subDays(new Date(), daysAgo);
+    const dateStr = format(d, 'yyyy-MM-dd');
+    return {
+      date: dateStr,
+      label: daysAgo === 0 ? 'Today' : daysAgo === 1 ? 'Yesterday' : format(d, 'EEE, dd MMM'),
+      dayLabel: format(d, 'dd'),
+      monthLabel: format(d, 'MMM'),
+      isSelected: sheetDate === dateStr,
+    };
+  });
+
   return (
     <div className="space-y-4">
-      {/* Gradient Header */}
-      {/* <div className="relative overflow-hidden rounded-2xl shadow-lg">
-        <div className="absolute inset-0 bg-linear-to-r from-violet-600 via-purple-600 to-indigo-600" />
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djZoLTZWMzRoNnptMC0zMHY2aC02VjRoNnptMCAzMHY2aC02di02aDZ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30" />
-        <div className="relative px-6 py-5 flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => router.push('/task-sheets')} className="text-white/70 hover:text-white hover:bg-white/10">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
-            <CalendarDays className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-white">Today&apos;s Task Sheet</h1>
-            <p className="text-sm text-white/60">{format(new Date(sheet.sheetDate), 'EEEE, MMMM d, yyyy')}</p>
-          </div>
-          <span className={`ml-auto rounded-full px-2.5 py-0.5 text-xs font-medium ${sheet.isSubmitted ? 'bg-white/20 text-white' : 'bg-amber-400/20 text-amber-100'}`}>
-            {sheet.isSubmitted ? 'Submitted' : 'Draft'}
-          </span>
+      {/* Date selector */}
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={() => router.push('/task-sheets')}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div>
+          <h1 className="text-lg font-bold">Task Sheet</h1>
+          <p className="text-xs text-muted-foreground">{format(new Date(sheet.sheetDate + 'T00:00:00'), 'EEEE, MMMM d, yyyy')}</p>
         </div>
-      </div> */}
+        <Badge variant={sheet.isSubmitted ? 'default' : 'outline'} className="ml-auto">
+          {sheet.isSubmitted ? 'Submitted' : 'Draft'}
+        </Badge>
+      </div>
+
+      {/* Day pills */}
+      <div className="flex gap-2">
+        {dateOptions.map((opt) => (
+          <button
+            key={opt.date}
+            onClick={() => router.replace(`/task-sheets/fill?date=${opt.date}`)}
+            className={`flex-1 flex flex-col items-center gap-0.5 rounded-xl border-2 py-2 transition-all ${
+              opt.isSelected
+                ? 'border-primary bg-primary/10 text-primary'
+                : 'border-transparent bg-muted/50 text-muted-foreground hover:bg-muted'
+            }`}
+          >
+            <span className="text-lg font-bold">{opt.dayLabel}</span>
+            <span className="text-[10px] uppercase">{opt.monthLabel}</span>
+            <span className="text-[10px] font-medium">{opt.label}</span>
+          </button>
+        ))}
+      </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4">

@@ -252,7 +252,7 @@ export default function MonthlyGridPage() {
                       </div>
                       <div className="mt-1">
                         {sun ? (
-                          <span className="text-xs text-gray-400">Holiday</span>
+                          <span className="text-xs text-gray-400">Sunday</span>
                         ) : entry.hours !== null ? (
                           <span className="text-lg font-bold">{entry.hours}h</span>
                         ) : (
