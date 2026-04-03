@@ -54,6 +54,16 @@ export default function ExpensesPage() {
   const [addOpen, setAddOpen] = useState(false);
   const [rejectId, setRejectId] = useState<number | null>(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [approveId, setApproveId] = useState<number | null>(null);
+  const [approveAmount, setApproveAmount] = useState('');
+  const [approveRemarks, setApproveRemarks] = useState('');
+  const [approveRequestedAmt, setApproveRequestedAmt] = useState(0);
+
+  // Excel import (supports multiple files: Excel + attachment images/docs)
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const [excelImporting, setExcelImporting] = useState(false);
+  const [importResults, setImportResults] = useState<{ row: number; date: string; type: string; amount: string; success: boolean; error?: string }[]>([]);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   // Add form state
   const [formDate, setFormDate] = useState(format(new Date(), 'yyyy-MM-dd'));
@@ -143,13 +153,16 @@ export default function ExpensesPage() {
 
   // Admin: approve/reject
   const statusMut = useMutation({
-    mutationFn: ({ id, status, remarks }: { id: number; status: 'approved' | 'rejected'; remarks?: string }) =>
-      adminExpensesApi.updateStatus(id, status, remarks),
+    mutationFn: ({ id, status, remarks, approvedAmount: amt }: { id: number; status: 'approved' | 'rejected'; remarks?: string; approvedAmount?: number }) =>
+      adminExpensesApi.updateStatus(id, status, remarks, amt),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expenses'] });
       toast.success('Status updated');
       setRejectId(null);
       setRejectReason('');
+      setApproveId(null);
+      setApproveAmount('');
+      setApproveRemarks('');
     },
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
   });
@@ -189,6 +202,101 @@ export default function ExpensesPage() {
     XLSX.writeFile(wb, `expenses_${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
   };
 
+  const handleImportFiles = async (fileList: FileList) => {
+    setExcelImporting(true);
+    console.log("Expense Import Results",importResults);
+    
+    const results: typeof importResults = [];
+    try {
+      const files = Array.from(fileList);
+      // Separate Excel from attachment files
+      const excelFile = files.find(f => /\.(xlsx?|csv)$/i.test(f.name));
+      const attachFiles = files.filter(f => !/\.(xlsx?|csv)$/i.test(f.name));
+
+      console.log('[Import] Files selected:', files.map(f => f.name));
+      console.log('[Import] Excel:', excelFile?.name, 'Attachments:', attachFiles.map(f => f.name));
+
+      if (!excelFile) {
+        toast.error('No Excel file found. Please include an .xlsx or .csv file.');
+        setExcelImporting(false);
+        return;
+      }
+
+      // Build a map of attachment files by name (lowercase)
+      const attachMap = new Map<string, File>();
+      attachFiles.forEach(f => attachMap.set(f.name.toLowerCase(), f));
+
+      const data = await excelFile.arrayBuffer();
+      const wb = XLSX.read(data);
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const expenseDate = r['expense date'] || r['Expense Date'] || r['date'] || r['Date'] || '';
+        const projectName = r['project name'] || r['Project Name'] || r['project'] || r['Project'] || '';
+        const expenseType = r['expense type'] || r['Expense Type'] || r['type'] || r['Type'] || 'Other';
+        const description = r['description'] || r['Description'] || '';
+        const amount = r['amount'] || r['Amount'] || 0;
+        const attachment = r['attachment'] || r['Attachment'] || r['file'] || r['File'] || '';
+
+        // Parse date
+        let dateStr = '';
+        if (expenseDate) {
+          if (typeof expenseDate === 'number') {
+            const d = new Date((expenseDate - 25569) * 86400 * 1000);
+            dateStr = format(d, 'yyyy-MM-dd');
+          } else {
+            try { dateStr = format(new Date(expenseDate), 'yyyy-MM-dd'); } catch { dateStr = String(expenseDate); }
+          }
+        }
+
+        if (!dateStr || !amount) {
+          results.push({ row: i + 2, date: dateStr, type: expenseType, amount: String(amount), success: false, error: 'Missing date or amount' });
+          continue;
+        }
+
+        // Find project by name
+        let projectId: string | undefined;
+        if (projectName) {
+          const match = projects.find((p: any) => (p.projectName ?? p.project_name ?? '').toLowerCase() === String(projectName).toLowerCase());
+          if (match) projectId = String(match.id);
+        }
+
+        // Find attachment file
+        const attachFile = attachment ? attachMap.get(String(attachment).toLowerCase()) : undefined;
+
+        console.log(`[Row ${i + 2}]`, { dateStr, projectName, projectId, expenseType, description, amount, attachment, attachFileFound: !!attachFile });
+
+        try {
+          const fd = new FormData();
+          fd.append('expenseDate', dateStr);
+          fd.append('expenseType', String(expenseType));
+          fd.append('amount', String(amount));
+          if (description) fd.append('description', String(description));
+          if (projectId) fd.append('projectId', projectId);
+          if (attachFile) fd.append('file', attachFile);
+
+          const createFn = isAdmin ? adminExpensesApi.create : expensesApi.create;
+          await createFn(fd);
+          results.push({ row: i + 2, date: dateStr, type: String(expenseType), amount: String(amount), success: true });
+        } catch (err: any) {
+          results.push({ row: i + 2, date: dateStr, type: String(expenseType), amount: String(amount), success: false, error: err?.response?.data?.message ?? 'Failed' });
+        }
+      }
+
+      setImportResults(results);
+      setImportDialogOpen(true);
+      qc.invalidateQueries({ queryKey: ['expenses'] });
+      const successCount = results.filter(r => r.success).length;
+      toast.success(`Imported ${successCount}/${rows.length} expenses`);
+    } catch (err) {
+      toast.error('Failed to read Excel file');
+    } finally {
+      setExcelImporting(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -213,6 +321,19 @@ export default function ExpensesPage() {
               <SelectItem value="rejected">Rejected</SelectItem>
             </SelectContent>
           </Select>
+          <Button size="sm" variant="outline" onClick={() => importInputRef.current?.click()} disabled={excelImporting}
+            title="Select Excel + attachment files together. In Excel, put the filename (e.g. receipt.jpg) in the Attachment column. Embedded images in Excel cells are not supported.">
+            {excelImporting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
+            Import
+          </Button>
+          <input
+            ref={importInputRef}
+            type="file"
+            className="hidden"
+            multiple
+            accept=".xls,.xlsx,.csv,.jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx"
+            onChange={(ev) => { if (ev.target.files?.length) handleImportFiles(ev.target.files); ev.target.value = ''; }}
+          />
           <Button size="sm" variant="outline" onClick={exportToExcel} disabled={expenses.length === 0}>
             <FileSpreadsheet className="h-4 w-4 mr-1" /> Export
           </Button>
@@ -281,7 +402,7 @@ export default function ExpensesPage() {
                         <div className="flex items-center justify-center gap-1">
                           {isAdmin && activeTab === 'team' && exp.status === 'pending' && !(exp.submitterType === 'admin' && exp.submitterName === (user as any)?.name) && (
                             <>
-                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-emerald-600" onClick={() => statusMut.mutate({ id: exp.id, status: 'approved' })} title="Approve">
+                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-emerald-600" onClick={() => { setApproveId(exp.id); setApproveAmount(String(Number(exp.amount || 0))); setApproveRequestedAmt(Number(exp.amount || 0)); setApproveRemarks(''); }} title="Approve">
                                 <Check className="h-3.5 w-3.5" />
                               </Button>
                               <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600" onClick={() => { setRejectId(exp.id); setRejectReason(''); }} title="Reject">
@@ -363,6 +484,63 @@ export default function ExpensesPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Approve Dialog */}
+      <Dialog open={!!approveId} onOpenChange={(open) => { if (!open) { setApproveId(null); setApproveAmount(''); setApproveRemarks(''); } }}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader><DialogTitle>Approve Expense</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between rounded-lg bg-muted/50 p-3">
+              <span className="text-xs text-muted-foreground">Requested Amount</span>
+              <span className="text-lg font-bold">{'\u20B9'}{approveRequestedAmt.toLocaleString('en-IN')}</span>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Approved Amount *</label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={approveAmount}
+                onChange={(e) => setApproveAmount(e.target.value)}
+                className="mt-1"
+                placeholder="Enter approved amount"
+              />
+              {Number(approveAmount) < approveRequestedAmt && Number(approveAmount) > 0 && (
+                <p className="text-xs text-amber-600 mt-1">
+                  Partial approval: {'\u20B9'}{(approveRequestedAmt - Number(approveAmount)).toLocaleString('en-IN')} less than requested
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Remarks {Number(approveAmount) < approveRequestedAmt ? '*' : '(optional)'}</label>
+              <textarea
+                value={approveRemarks}
+                onChange={(e) => setApproveRemarks(e.target.value)}
+                placeholder={Number(approveAmount) < approveRequestedAmt ? 'Reason for partial approval...' : 'Optional remarks...'}
+                rows={2}
+                className="mt-1 w-full rounded-md border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button size="sm" variant="outline" onClick={() => { setApproveId(null); setApproveAmount(''); setApproveRemarks(''); }}>Cancel</Button>
+              <Button
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                disabled={!approveAmount || Number(approveAmount) <= 0 || (Number(approveAmount) < approveRequestedAmt && !approveRemarks.trim()) || statusMut.isPending}
+                onClick={() => approveId && statusMut.mutate({
+                  id: approveId,
+                  status: 'approved',
+                  approvedAmount: Number(approveAmount),
+                  remarks: approveRemarks.trim() || undefined,
+                })}
+              >
+                {statusMut.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                Approve
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Reject Reason Dialog */}
       <Dialog open={!!rejectId} onOpenChange={(open) => { if (!open) { setRejectId(null); setRejectReason(''); } }}>
         <DialogContent className="sm:max-w-[400px]">
@@ -390,6 +568,48 @@ export default function ExpensesPage() {
                 Reject
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Results Dialog */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5 text-primary" />
+              Expense Import Results
+            </DialogTitle>
+          </DialogHeader>
+          <div className="text-sm mb-2">
+            <span className="text-emerald-600 font-semibold">{importResults.filter(r => r.success).length} success</span>
+            {' · '}
+            <span className="text-red-600 font-semibold">{importResults.filter(r => !r.success).length} failed</span>
+            {' · '}
+            <span className="text-muted-foreground">{importResults.length} total</span>
+          </div>
+          <div className="flex-1 overflow-y-auto -mx-6 px-6 space-y-1.5">
+            {importResults.map((r, i) => (
+              <div key={i} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm ${r.success ? 'bg-emerald-50 dark:bg-emerald-950/20' : 'bg-red-50 dark:bg-red-950/20'}`}>
+                {r.success
+                  ? <Check className="h-4 w-4 text-emerald-600 shrink-0" />
+                  : <X className="h-4 w-4 text-red-500 shrink-0" />
+                }
+                <span className="text-muted-foreground text-xs font-mono w-8 shrink-0">#{r.row}</span>
+                <span className="font-medium truncate">{r.type}</span>
+                <span className="text-xs text-muted-foreground">{r.date}</span>
+                <span className="ml-auto font-semibold whitespace-nowrap">{'\u20B9'}{r.amount}</span>
+                {!r.success && r.error && (
+                  <span className="text-[10px] text-red-500 truncate max-w-[120px]" title={r.error}>{r.error}</span>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between pt-3 border-t">
+            <p className="text-[10px] text-muted-foreground max-w-[280px]">
+              To attach files: put the filename (e.g. receipt.jpg) in the Attachment column, then select Excel + files together.
+            </p>
+            <Button onClick={() => setImportDialogOpen(false)}>Close</Button>
           </div>
         </DialogContent>
       </Dialog>

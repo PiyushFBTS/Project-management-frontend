@@ -2,9 +2,10 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Tags, Plus, Trash2, Loader2 } from 'lucide-react';
+import { Tags, Plus, Trash2, Loader2, FolderPlus } from 'lucide-react';
 import { projectsApi } from '@/lib/api/projects';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,6 +28,7 @@ const typeColors: Record<string, string> = {
 const defaultColor = 'bg-slate-100 text-slate-700 dark:bg-slate-500/15 dark:text-slate-400';
 
 export default function ProjectTypesPage() {
+  const router = useRouter();
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [label, setLabel] = useState('');
@@ -104,19 +106,31 @@ export default function ProjectTypesPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {((types ?? []) as any[]).map((type: any) => (
-            <div key={type.id} className="rounded-xl border bg-card p-4 hover:shadow-md transition-shadow group">
+            <div key={type.id} className="rounded-xl border bg-card p-4 hover:shadow-lg hover:-translate-y-1 hover:border-primary/30 transition-all duration-200 group cursor-pointer"
+              onClick={() => router.push(`/projects/new?type=${encodeURIComponent(type.value)}`)}>
               <div className="flex items-start justify-between gap-2">
                 <Badge className={`${typeColors[type.value] ?? defaultColor} text-xs font-semibold`}>
                   {type.label}
                 </Badge>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 w-6 p-0 text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                  onClick={() => { if (confirm(`Delete "${type.label}"?`)) deleteMut.mutate(type.id); }}
-                >
-                  <Trash2 className="h-3 w-3" />
-                </Button>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 text-primary opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Create project with this type"
+                    onClick={(ev) => { ev.stopPropagation(); router.push(`/projects/new?type=${encodeURIComponent(type.value)}`); }}
+                  >
+                    <FolderPlus className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(ev) => { ev.stopPropagation(); if (confirm(`Delete "${type.label}"?`)) deleteMut.mutate(type.id); }}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
               {type.description && <p className="text-sm text-muted-foreground mt-2">{type.description}</p>}
               <p className="text-[10px] text-muted-foreground/60 mt-2 font-mono">{type.value}</p>

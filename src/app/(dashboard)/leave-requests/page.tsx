@@ -2,7 +2,7 @@
 
 import { Suspense, useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { format } from 'date-fns';
 import { CalendarDays, Eye, CheckCircle2, XCircle, Ban, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -58,6 +58,7 @@ function LeaveRequestsContent() {
   const { user } = useAuth();
   const isEmployee = user?._type === 'employee';
   const queryClient = useQueryClient();
+  const router = useRouter();
   const searchParams = useSearchParams();
 
   const [search, setSearch] = useState('');
@@ -399,6 +400,16 @@ function LeaveRequestsContent() {
           <span className="text-muted-foreground text-sm">to</span>
           <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-36" />
         </div>
+        {(statusFilter !== 'all' || dateFrom || dateTo || search || teamEmployeeId) && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => { setStatusFilter('all'); setDateFrom(''); setDateTo(''); setSearch(''); setTeamEmployeeId(''); }}
+          >
+            <X className="h-3 w-3 mr-1" /> Clear Filters
+          </Button>
+        )}
       </div>
 
       {/* Table */}
@@ -442,7 +453,7 @@ function LeaveRequestsContent() {
                   </TableRow>
                 )
               : (data ?? []).map((lr) => (
-                  <TableRow key={lr.id} className="cursor-pointer hover:bg-accent/50" onClick={() => setSelected(lr)}>
+                  <TableRow key={lr.id} className="cursor-pointer hover:bg-accent/50" onClick={() => router.push(`/leave-requests/${lr.id}`)}>
                     {showEmployeeCol && (
                       <TableCell className="font-medium text-sm">
                         {lr.employee?.empName ?? `#${lr.employeeId}`}
@@ -471,7 +482,7 @@ function LeaveRequestsContent() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); setSelected(lr); }}>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); router.push(`/leave-requests/${lr.id}`); }}>
                         <Eye className="h-3.5 w-3.5" />
                       </Button>
                     </TableCell>

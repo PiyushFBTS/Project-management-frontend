@@ -29,8 +29,8 @@ export const adminExpensesApi = {
   create: (data: FormData) =>
     api.post('/admin/expenses', data),
 
-  updateStatus: (id: number, status: 'approved' | 'rejected', remarks?: string) =>
-    api.patch(`/admin/expenses/${id}/status`, { status, remarks }),
+  updateStatus: (id: number, status: 'approved' | 'rejected', remarks?: string, approvedAmount?: number) =>
+    api.patch(`/admin/expenses/${id}/status`, { status, ...(approvedAmount !== undefined ? { approvedAmount } : {}), ...(remarks ? { remarks } : {}) }),
 
   delete: (id: number) =>
     api.delete(`/admin/expenses/${id}`),

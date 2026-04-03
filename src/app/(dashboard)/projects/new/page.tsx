@@ -2,12 +2,13 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ArrowLeft, FolderKanban, Loader2, CheckCircle2, User, Calendar, Clock, FileText, Check, X, Paperclip, Upload, File, Trash2, Milestone, Plus } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { projectsApi } from '@/lib/api/projects';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { CreateProjectDto } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,15 +18,7 @@ import {
 } from '@/components/ui/select';
 
 const statusOptions = ['active', 'inactive', 'completed'];
-const typeOptions = [
-  { value: 'fresh_implement', label: 'Fresh Implement' },
-  { value: 'migration', label: 'Migration' },
-  { value: 'change_request', label: 'Change Request' },
-  { value: 'support', label: 'Support' },
-  { value: 'development', label: 'Development' },
-  { value: 'consulting', label: 'Consulting' },
-  { value: 'maintenance', label: 'Maintenance' },
-];
+// Type options loaded from API (see useQuery below)
 
 const statusColors: Record<string, string> = {
   active: 'bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/30',
@@ -35,6 +28,7 @@ const statusColors: Record<string, string> = {
 
 export default function NewProjectPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const qc = useQueryClient();
   const [createStatus, setCreateStatus] = useState<'idle' | 'loading' | 'success'>('idle');
   const [docFiles, setDocFiles] = useState<{ file: File; category: string }[]>([]);
@@ -48,10 +42,12 @@ export default function NewProjectPage() {
   const [msExpectedPct, setMsExpectedPct] = useState('');
   const [msExpectedAmt, setMsExpectedAmt] = useState('');
 
+  const typeFromUrl = searchParams.get('type') ?? '';
+
   const [form, setForm] = useState({
     projectCode: '',
     projectName: '',
-    projectType: '',
+    projectType: typeFromUrl,
     clientName: '',
     status: 'active',
     startDate: '',
@@ -64,6 +60,15 @@ export default function NewProjectPage() {
     queryKey: ['project-managers'],
     queryFn: () => projectsApi.getManagers().then((r) => r.data.data),
   });
+
+  const { data: projectTypesRaw } = useQuery({
+    queryKey: ['project-types'],
+    queryFn: () => projectsApi.getProjectTypes().then((r: any) => r.data?.data ?? r.data ?? []),
+  });
+  const typeOptions: { value: string; label: string }[] = ((projectTypesRaw ?? []) as any[]).map((t: any) => ({
+    value: t.value ?? t.slug ?? t.name?.toLowerCase().replace(/\s+/g, '_') ?? '',
+    label: t.label ?? t.name ?? '',
+  }));
 
   const createMutation = useMutation({
     mutationFn: (dto: CreateProjectDto) => projectsApi.create(dto),
@@ -111,8 +116,10 @@ export default function NewProjectPage() {
   };
 
   const handleSave = () => {
-    if (!form.projectCode.trim() || !form.projectName.trim() || !form.clientName.trim() || !form.startDate) {
-      toast.error('Please fill in all required fields (Code, Name, Client, Start Date)');
+    console.log("form",form);
+    
+    if (!form.projectCode.trim() || !form.projectName.trim() || !form.projectType || !form.startDate) {
+      toast.error('Please fill in all required fields (Code, Name, Type, Start Date)');
       return;
     }
     if (milestones.length === 0) {
@@ -262,15 +269,16 @@ export default function NewProjectPage() {
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-emerald-600 dark:text-emerald-400 mb-1.5">
             <User className="h-3 w-3" /> Project Manager
           </div>
-          <Select value={form.projectManagerId} onValueChange={(v) => setForm((p) => ({ ...p, projectManagerId: v }))}>
-            <SelectTrigger className="h-8 text-sm w-full"><SelectValue placeholder="Select manager" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              {(managers ?? []).map((m: any) => (
-                <SelectItem key={m.id} value={String(m.id)}>{m.empName}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            value={form.projectManagerId}
+            onValueChange={(v) => setForm((p) => ({ ...p, projectManagerId: v }))}
+            placeholder="Search manager..."
+            options={[
+              { value: 'none', label: 'None' },
+              ...(managers ?? []).map((m: any) => ({ value: String(m.id), label: m.empName })),
+            ]}
+            className="h-8 text-sm"
+          />
         </div>
 
         <div className="rounded-xl border bg-card p-4">

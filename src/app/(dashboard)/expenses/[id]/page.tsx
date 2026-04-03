@@ -37,6 +37,9 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
 
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [approveOpen, setApproveOpen] = useState(false);
+  const [approveAmount, setApproveAmount] = useState('');
+  const [approveRemarks, setApproveRemarks] = useState('');
 
   const { data: expense, isLoading } = useQuery({
     queryKey: ['expense-detail', expenseId],
@@ -49,14 +52,17 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
   });
 
   const statusMut = useMutation({
-    mutationFn: ({ status, remarks }: { status: 'approved' | 'rejected'; remarks?: string }) =>
-      adminExpensesApi.updateStatus(expenseId, status, remarks),
+    mutationFn: ({ status, remarks, approvedAmount: amt }: { status: 'approved' | 'rejected'; remarks?: string; approvedAmount?: number }) =>
+      adminExpensesApi.updateStatus(expenseId, status, remarks, amt),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expense-detail', expenseId] });
       qc.invalidateQueries({ queryKey: ['expenses'] });
       toast.success('Status updated');
       setRejectOpen(false);
       setRejectReason('');
+      setApproveOpen(false);
+      setApproveAmount('');
+      setApproveRemarks('');
     },
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
   });
@@ -123,17 +129,10 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left: Main content */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Amount hero card */}
-          <Card className="overflow-hidden">
-            <div className="bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-600 p-8 text-center text-white">
-              <p className="text-xs uppercase tracking-widest opacity-80 mb-1">Expense Amount</p>
-              <p className="text-5xl font-bold">₹{Number(e.amount).toLocaleString('en-IN')}</p>
-            </div>
-          </Card>
+        {/* Row 1: Expense Details (col-span-2) | Status (col-span-1) */}
 
-          {/* Details grid */}
+        {/* 3. Expense Details */}
+        <div className="lg:col-span-2">
           <Card>
             <CardContent className="p-6">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-5">Expense Details</h3>
@@ -155,7 +154,6 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
                   <p className="text-sm font-semibold">{e.employee?.empName ?? '—'}</p>
                 </div>
               </div>
-
               {e.description && (
                 <div className="mt-6 pt-5 border-t">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-1 mb-2"><AlignLeft className="h-3 w-3 text-primary" /> Description</p>
@@ -164,9 +162,70 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
               )}
             </CardContent>
           </Card>
+        </div>
 
-          {/* Attachment */}
-          {e.attachmentPath && (
+        {/* 2. Status */}
+        <div>
+          <Card>
+            <CardContent className="p-5 space-y-4">
+              <h3 className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Status</h3>
+              <div className={`rounded-xl p-4 border ${sc.bg} ${sc.border}`}>
+                <div className="flex items-center gap-2.5">
+                  <div className={`h-8 w-8 rounded-full ${sc.bg} flex items-center justify-center`}>
+                    <StatusIcon className={`h-4 w-4 ${sc.color}`} />
+                  </div>
+                  <span className={`text-lg font-bold ${sc.color}`}>{sc.label}</span>
+                </div>
+              </div>
+              {e.status === 'approved' && (
+                <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Requested</span>
+                    <span className="text-sm font-semibold">{'\u20B9'}{Number(e.amount || 0).toLocaleString('en-IN')}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Approved</span>
+                    <span className="text-lg font-bold text-emerald-700 dark:text-emerald-400">{'\u20B9'}{Number(e.approvedAmount ?? e.amount ?? 0).toLocaleString('en-IN')}</span>
+                  </div>
+                  {e.approvedAmount != null && Number(e.approvedAmount) < Number(e.amount) && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">Partial: {'\u20B9'}{(Number(e.amount) - Number(e.approvedAmount)).toLocaleString('en-IN')} deducted</p>
+                  )}
+                  {e.approvedByName && <p className="text-xs text-muted-foreground">By: {e.approvedByName}</p>}
+                  {e.remarks && <p className="text-xs text-muted-foreground italic">&quot;{e.remarks}&quot;</p>}
+                </div>
+              )}
+              {e.status === 'rejected' && (
+                <div className="rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 p-4 space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-red-600 dark:text-red-400">Rejected</p>
+                  {e.approvedByName && <p className="text-xs text-muted-foreground">By: {e.approvedByName}</p>}
+                  {e.remarks && <p className="text-sm text-red-700 dark:text-red-400">&quot;{e.remarks}&quot;</p>}
+                </div>
+              )}
+              <div className="space-y-2 text-xs text-muted-foreground">
+                {e.approvedAt && <p>{e.status === 'approved' ? 'Approved' : 'Reviewed'}: {format(new Date(e.approvedAt), 'dd MMM yyyy, hh:mm a')}</p>}
+                <p>Created: {format(new Date(e.createdAt), 'dd MMM yyyy, hh:mm a')}</p>
+              </div>
+              {isAdmin && e.status === 'pending' && (
+                <>
+                  <h3 className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Admin Actions</h3>
+                  <Button className="w-full bg-emerald-600 hover:bg-emerald-700"
+                    onClick={() => { setApproveAmount(String(Number(e.amount || 0))); setApproveRemarks(''); setApproveOpen(true); }}>
+                    <Check className="h-4 w-4 mr-1.5" /> Approve
+                  </Button>
+                  <Button variant="destructive" className="w-full" onClick={() => { setRejectReason(''); setRejectOpen(true); }}>
+                    <X className="h-4 w-4 mr-1.5" /> Reject
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Row 2: Document (col-span-2) | Amount + Actions (col-span-1) */}
+
+        {/* 4. Document */}
+        <div className="lg:col-span-2">
+          {e.attachmentPath ? (
             <Card>
               <CardContent className="p-6">
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Receipt / Proof</h3>
@@ -189,66 +248,92 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
                 )}
               </CardContent>
             </Card>
-          )}
-        </div>
-
-        {/* Right sidebar */}
-        <div className="space-y-6">
-          {/* Status card */}
-          <Card>
-            <CardContent className="p-5 space-y-4">
-              <h3 className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Status</h3>
-              <div className={`rounded-xl p-4 border ${sc.bg} ${sc.border}`}>
-                <div className="flex items-center gap-2.5">
-                  <div className={`h-8 w-8 rounded-full ${sc.bg} flex items-center justify-center`}>
-                    <StatusIcon className={`h-4 w-4 ${sc.color}`} />
-                  </div>
-                  <span className={`text-lg font-bold ${sc.color}`}>{sc.label}</span>
-                </div>
-              </div>
-
-              {e.status === 'rejected' && e.remarks && (
-                <div className="rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 p-4">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-red-600 dark:text-red-400 mb-2">Rejection Reason</p>
-                  <p className="text-sm text-red-700 dark:text-red-400 leading-relaxed">{e.remarks}</p>
-                </div>
-              )}
-
-              <div className="space-y-2 text-xs text-muted-foreground">
-                {e.approvedAt && (
-                  <p>{e.status === 'approved' ? 'Approved' : 'Reviewed'}: {format(new Date(e.approvedAt), 'dd MMM yyyy, hh:mm a')}</p>
-                )}
-                <p>Created: {format(new Date(e.createdAt), 'dd MMM yyyy, hh:mm a')}</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Admin actions */}
-          {isAdmin && e.status === 'pending' && (
+          ) : (
             <Card>
-              <CardContent className="p-5 space-y-3">
-                <h3 className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Admin Actions</h3>
-                <Button className="w-full bg-emerald-600 hover:bg-emerald-700" disabled={statusMut.isPending}
-                  onClick={() => statusMut.mutate({ status: 'approved' })}>
-                  {statusMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Check className="h-4 w-4 mr-1.5" />}
-                  Approve Expense
-                </Button>
-                <Button variant="destructive" className="w-full" onClick={() => { setRejectReason(''); setRejectOpen(true); }}>
-                  <X className="h-4 w-4 mr-1.5" /> Reject Expense
-                </Button>
+              <CardContent className="p-6 text-center text-muted-foreground">
+                <FileText className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">No receipt attached</p>
               </CardContent>
             </Card>
           )}
+        </div>
 
-          {/* Delete */}
+        {/* 1. Amount + Actions */}
+        <div className="space-y-4">
+          <Card className="overflow-hidden">
+            <div className="bg-linear-to-r from-violet-600 via-purple-600 to-indigo-600 p-8 text-center text-white">
+              <p className="text-xs uppercase tracking-widest opacity-80 mb-1">Expense Amount</p>
+              <p className="text-4xl font-bold">{'\u20B9'}{Number(e.amount).toLocaleString('en-IN')}</p>
+            </div>
+          </Card>
+
+
+
           {(isAdmin || (isEmployee && e.status === 'pending')) && (
             <Button variant="outline" className="w-full text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
               onClick={() => { if (confirm('Delete this expense?')) deleteMut.mutate(); }}>
-              <Trash2 className="h-4 w-4 mr-1.5" /> Delete Expense
+              <Trash2 className="h-4 w-4 mr-1.5" /> Delete
             </Button>
           )}
         </div>
       </div>
+
+      {/* Approve Dialog */}
+      <Dialog open={approveOpen} onOpenChange={setApproveOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Check className="h-5 w-5 text-emerald-500" /> Approve Expense</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between rounded-lg bg-muted/50 p-3">
+              <span className="text-xs text-muted-foreground">Requested Amount</span>
+              <span className="text-lg font-bold">{'\u20B9'}{Number(expense?.amount || 0).toLocaleString('en-IN')}</span>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground mb-1 block">Approved Amount *</label>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={approveAmount}
+                onChange={(ev) => setApproveAmount(ev.target.value)}
+                className="w-full rounded-md border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500"
+                placeholder="Enter approved amount"
+              />
+              {Number(approveAmount) > 0 && Number(approveAmount) < Number(expense?.amount || 0) && (
+                <p className="text-xs text-amber-600 mt-1">
+                  Partial approval: {'\u20B9'}{(Number(expense?.amount || 0) - Number(approveAmount)).toLocaleString('en-IN')} less than requested
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground mb-1 block">
+                Remarks {Number(approveAmount) < Number(expense?.amount || 0) ? <span className="text-red-500">*</span> : '(optional)'}
+              </label>
+              <textarea
+                value={approveRemarks}
+                onChange={(ev) => setApproveRemarks(ev.target.value)}
+                placeholder={Number(approveAmount) < Number(expense?.amount || 0) ? 'Reason for partial approval...' : 'Optional remarks...'}
+                rows={2}
+                className="w-full rounded-md border px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 resize-none"
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setApproveOpen(false)}>Cancel</Button>
+              <Button
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                disabled={!approveAmount || Number(approveAmount) <= 0 || (Number(approveAmount) < Number(expense?.amount || 0) && !approveRemarks.trim()) || statusMut.isPending}
+                onClick={() => statusMut.mutate({
+                  status: 'approved',
+                  approvedAmount: Number(approveAmount),
+                  remarks: approveRemarks.trim() || undefined,
+                })}
+              >
+                {statusMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                Approve
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Reject Dialog */}
       <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>

@@ -46,12 +46,7 @@ const navItems: NavItem[] = [
     activeBg: 'bg-cyan-500/20', hoverBg: 'hover:bg-cyan-500/10',
     borderColor: 'border-l-cyan-400', dotColor: 'bg-cyan-400',
   },
-  {
-    label: 'Expenses', href: '/expenses', icon: Receipt,
-    iconColor: 'text-lime-400', iconBg: 'bg-lime-500/20',
-    activeBg: 'bg-lime-500/20', hoverBg: 'hover:bg-lime-500/10',
-    borderColor: 'border-l-lime-400', dotColor: 'bg-lime-400',
-  },
+
   {
     label: 'Projects', href: '/projects', icon: FolderKanban,
     iconColor: 'text-blue-400', iconBg: 'bg-blue-500/20',
@@ -84,7 +79,7 @@ const navItems: NavItem[] = [
     children: [
       { label: 'Leave Types', href: '/leave-types', dotColor: 'bg-rose-400' },
       { label: 'Leave Requests', href: '/leave-requests', dotColor: 'bg-orange-400' },
-      { label: 'Holidays', href: '/holidays', dotColor: 'bg-amber-400' },
+      { label: 'Holiday Calendar', href: '/holidays', dotColor: 'bg-amber-400' },
     ],
   },
   {
@@ -92,6 +87,12 @@ const navItems: NavItem[] = [
     iconColor: 'text-violet-400', iconBg: 'bg-violet-500/20',
     activeBg: 'bg-violet-500/20', hoverBg: 'hover:bg-violet-500/10',
     borderColor: 'border-l-violet-400', dotColor: 'bg-violet-400',
+  },
+  {
+    label: 'Expenses', href: '/expenses', icon: Receipt,
+    iconColor: 'text-lime-400', iconBg: 'bg-lime-500/20',
+    activeBg: 'bg-lime-500/20', hoverBg: 'hover:bg-lime-500/10',
+    borderColor: 'border-l-lime-400', dotColor: 'bg-lime-400',
   },
   {
     label: 'Reports', icon: BarChart3,
