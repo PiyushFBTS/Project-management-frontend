@@ -218,6 +218,7 @@ export interface Employee {
   dateOfBirth?: string | null;
   joiningDate?: string | null;
   fillDaysOverride?: number | null;
+  monthlyCTC?: number | null;
   createdAt: string;
 }
 

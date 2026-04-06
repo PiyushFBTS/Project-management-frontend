@@ -578,12 +578,16 @@ export default function ProjectDetailPage() {
                           <td className="py-2 pr-2 text-right">₹{Number(ms.expectedAmount ?? 0).toLocaleString('en-IN')}</td>
                           {editingMsId === ms.id ? (
                             <>
-                              <td className="py-2 pr-1"><Input type="number" min="0" max="100" step="0.01" value={editRecvPct} onChange={(e) => setEditRecvPct(e.target.value)} className="h-7 text-xs w-20 text-right ml-auto" /></td>
-                              <td className="py-2 pr-1"><Input type="number" min="0" step="0.01" value={editRecvAmt} onChange={(e) => setEditRecvAmt(e.target.value)} className="h-7 text-xs w-28 text-right ml-auto" /></td>
+                              <td className="py-2 pr-2">
+                                <Input type="number" min="0" max="100" step="0.01" value={editRecvPct} onChange={(e) => setEditRecvPct(e.target.value)} className="h-7 text-xs text-right w-full" />
+                              </td>
+                              <td className="py-2 pr-2">
+                                <Input type="number" min="0" step="0.01" value={editRecvAmt} onChange={(e) => setEditRecvAmt(e.target.value)} className="h-7 text-xs text-right w-full" />
+                              </td>
                               <td className="py-2 text-center">
-                                <div className="flex justify-center gap-0.5">
-                                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => updateMsMut.mutate({ msId: ms.id, dto: { receivedPercentage: Number(editRecvPct), receivedAmount: Number(editRecvAmt) } })}><Check className="h-3 w-3 text-emerald-600" /></Button>
-                                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setEditingMsId(null)}><X className="h-3 w-3" /></Button>
+                                <div className="flex justify-center gap-1">
+                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => updateMsMut.mutate({ msId: ms.id, dto: { receivedPercentage: Number(editRecvPct), receivedAmount: Number(editRecvAmt) } })}><Check className="h-3.5 w-3.5 text-emerald-600" /></Button>
+                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditingMsId(null)}><X className="h-3.5 w-3.5" /></Button>
                                 </div>
                               </td>
                             </>

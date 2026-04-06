@@ -141,7 +141,7 @@ function FillTaskSheetPage() {
         fromTime,
         toTime,
         taskDescription: data.taskDescription,
-        status: data.status,
+        status: data.status as TaskStatus,
       });
     },
     onSuccess: () => {
@@ -171,7 +171,7 @@ function FillTaskSheetPage() {
         fromTime: origFrom,
         toTime,
         taskDescription: data.taskDescription,
-        status: data.status,
+        status: data.status as TaskStatus,
       });
     },
     onSuccess: () => {
