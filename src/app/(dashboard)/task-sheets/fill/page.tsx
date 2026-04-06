@@ -11,7 +11,9 @@ import {
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/auth-provider';
 import { taskSheetsApi } from '@/lib/api/task-sheets';
+import { api } from '@/lib/api/axios-instance';
 import { TaskEntry, TaskStatus } from '@/types';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { AxiosError } from 'axios';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,9 +32,10 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
 
-const statusOptions: { value: TaskStatus; label: string }[] = [
+const statusOptions: { value: string; label: string }[] = [
   { value: 'in_progress', label: 'In Progress' },
-  { value: 'finished', label: 'Finished' },
+  { value: 'finished', label: 'Completed' },
+  { value: 'awaiting_response', label: 'Awaiting Response from Client' },
   { value: 'failed', label: 'Failed' },
 ];
 
@@ -45,9 +48,10 @@ const projectTypeLabels: Record<string, string> = {
 const emptyForm = {
   projectId: '',
   otherProjectName: '',
+  ticketId: '', // 'meeting' or ticket ID
   hoursSpent: '',
   taskDescription: '',
-  status: 'in_progress' as TaskStatus,
+  status: 'in_progress' as string,
 };
 
 /**
@@ -109,6 +113,19 @@ function FillTaskSheetPage() {
   const { data: projects } = useQuery({
     queryKey: ['employee-projects'],
     queryFn: () => taskSheetsApi.getProjects().then((r) => r.data.data),
+  });
+
+  // Tickets for selected project (for ticket selector in form)
+  const { data: projectTickets } = useQuery({
+    queryKey: ['project-tickets-for-sheet', form.projectId],
+    queryFn: async () => {
+      if (!form.projectId || form.projectId === 'other') return [];
+      const r = await api.get('/employee/project-tickets', { params: { projectId: form.projectId, limit: 100 } });
+      const body = r.data;
+      const list = Array.isArray(body?.data) ? body.data : Array.isArray(body?.data?.data) ? body.data.data : [];
+      return list as Array<{ id: number; ticketNumber: string; title: string }>;
+    },
+    enabled: !!form.projectId && form.projectId !== 'other',
   });
 
   // Add entry
@@ -215,6 +232,7 @@ function FillTaskSheetPage() {
     setForm({
       projectId: entry.projectId ? String(entry.projectId) : 'other',
       otherProjectName: entry.otherProjectName ?? '',
+      ticketId: (entry as any).ticketId ? String((entry as any).ticketId) : '',
       hoursSpent: String(Number(entry.durationHours).toFixed(2)),
       taskDescription: entry.taskDescription,
       status: entry.status,
@@ -454,10 +472,10 @@ function FillTaskSheetPage() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            {/* Project (required) */}
+            {/* 1. Project (required) */}
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">Project <span className="text-destructive">*</span></Label>
-              <Select value={form.projectId} onValueChange={(v) => setForm((p) => ({ ...p, projectId: v, otherProjectName: v === 'other' ? p.otherProjectName : '' }))}>
+              <Select value={form.projectId} onValueChange={(v) => setForm((p) => ({ ...p, projectId: v, otherProjectName: v === 'other' ? p.otherProjectName : '', ticketId: '' }))}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select project" />
                 </SelectTrigger>
@@ -477,7 +495,7 @@ function FillTaskSheetPage() {
               )}
             </div>
 
-            {/* Project Type (auto from selected project) */}
+            {/* 2. Project Type (auto from selected project) */}
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">Project Type</Label>
               <Input
@@ -491,7 +509,24 @@ function FillTaskSheetPage() {
               />
             </div>
 
-            {/* Description */}
+            {/* 3. Ticket (searchable select with Meeting on top) */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Ticket / Activity</Label>
+              <SearchableSelect
+                value={form.ticketId}
+                onValueChange={(v) => setForm((p) => ({ ...p, ticketId: v }))}
+                placeholder="Search ticket or select Meeting..."
+                options={[
+                  { value: 'meeting', label: 'Meeting' },
+                  ...((projectTickets ?? []) as any[]).map((t: any) => ({
+                    value: String(t.id),
+                    label: `${t.ticketNumber ?? ''} — ${t.title}`,
+                  })),
+                ]}
+              />
+            </div>
+
+            {/* 4. Description */}
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">Description <span className="text-destructive">*</span></Label>
               <Textarea
@@ -503,7 +538,7 @@ function FillTaskSheetPage() {
               <p className="text-xs text-muted-foreground">{form.taskDescription.length}/10 min characters</p>
             </div>
 
-            {/* Hours Spent */}
+            {/* 5. Time Taken */}
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">Time Taken (hours) <span className="text-destructive">*</span></Label>
               <Input
@@ -518,10 +553,10 @@ function FillTaskSheetPage() {
               <p className="text-xs text-muted-foreground">Enter time in hours (e.g. 1, 1.5, 2.25)</p>
             </div>
 
-            {/* Status */}
+            {/* 6. Status */}
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">Status</Label>
-              <Select value={form.status} onValueChange={(v) => setForm((p) => ({ ...p, status: v as TaskStatus }))}>
+              <Select value={form.status} onValueChange={(v) => setForm((p) => ({ ...p, status: v }))}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>

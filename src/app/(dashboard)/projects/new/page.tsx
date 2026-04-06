@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -26,7 +26,11 @@ const statusColors: Record<string, string> = {
   completed: 'bg-blue-500/15 text-blue-600 ring-1 ring-blue-500/30',
 };
 
-export default function NewProjectPage() {
+export default function NewProjectPageWrapper() {
+  return <Suspense fallback={null}><NewProjectPage /></Suspense>;
+}
+
+function NewProjectPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const qc = useQueryClient();
