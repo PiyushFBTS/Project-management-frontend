@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import Link from 'next/link';
@@ -10,7 +11,7 @@ import {
   Users, FolderKanban, CalendarCheck, TrendingUp,
   ClipboardList, Clock, FileCheck, BarChart3, ArrowRight,
   CheckCircle2, XCircle, ListTodo, PlayCircle, Eye, CircleCheckBig, Ticket,
-  Cake, CalendarHeart,
+  Cake, CalendarHeart, Award,
 } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { useCompany } from '@/providers/company-provider';
@@ -119,86 +120,142 @@ function EventsChart({
 }
 
 function TodayEventsWidget({ isEmployee }: { isEmployee?: boolean }) {
-  const { data, isLoading } = useQuery({
+  const [evtTab, setEvtTab] = useState<'birthdays' | 'anniversaries'>('birthdays');
+  const { data: todayData, isLoading: todayLoading } = useQuery({
     queryKey: ['today-events'],
     queryFn: () =>
       (isEmployee ? employeesApi.employeeGetTodayEvents() : employeesApi.getTodayEvents())
         .then((r) => r.data.data),
   });
 
-  const birthdays = (data ?? []).filter((e) => e.type === 'birthday');
-  const anniversaries = (data ?? []).filter((e) => e.type === 'anniversary');
+  const { data: upcomingData } = useQuery({
+    queryKey: ['upcoming-events'],
+    queryFn: () =>
+      (isEmployee ? employeesApi.employeeGetUpcomingEvents() : employeesApi.getUpcomingEvents())
+        .then((r) => r.data.data),
+  });
+
+  const birthdays = (todayData ?? []).filter((e) => e.type === 'birthday');
+  const anniversaries = (todayData ?? []).filter((e) => e.type === 'anniversary');
+
+  // Filter upcoming to current month only
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  const daysLeftInMonth = new Date(currentYear, currentMonth + 1, 0).getDate() - now.getDate();
+
+  const upcomingBirthdays = (upcomingData ?? []).filter((e: any) => e.type === 'birthday' && e.daysUntil > 0 && e.daysUntil <= daysLeftInMonth);
+  const upcomingAnniversaries = (upcomingData ?? []).filter((e: any) => e.type === 'anniversary' && e.daysUntil > 0 && e.daysUntil <= daysLeftInMonth);
+
+  const renderPersonRow = (events: TodayEvent[], emoji: string, color: string) => (
+    <div className="flex flex-wrap gap-5">
+      {events.map((e) => {
+        const gradient = AVATAR_GRADIENTS[e.id % AVATAR_GRADIENTS.length];
+        return (
+          <Link key={e.id} href={e._type === 'employee' ? `/employees/${e.id}?type=employee` : '#'}>
+            <div className="group flex flex-col items-center gap-1.5">
+              <div className={`relative flex h-14 w-14 items-center justify-center rounded-full bg-linear-to-br ${gradient} text-white font-bold ring-2 ring-background shadow-lg group-hover:scale-110 transition-all`}>
+                {getInitials(e.name)}
+                <span className="absolute -bottom-0.5 -right-0.5 text-base">{emoji}</span>
+              </div>
+              <p className={`text-xs font-medium text-center max-w-[70px] truncate`}>{e.name.split(' ')[0]}</p>
+              <span className={`text-[10px] text-${color}-500 font-medium`}>Wish</span>
+            </div>
+          </Link>
+        );
+      })}
+    </div>
+  );
+
+  const renderUpcomingRow = (events: any[]) => (
+    <div className="flex flex-wrap gap-5">
+      {events.map((e: any) => {
+        const gradient = AVATAR_GRADIENTS[e.id % AVATAR_GRADIENTS.length];
+        const label = e.daysUntil === 1 ? 'Tomorrow' : e.daysUntil <= 7 ? (e.date ? format(new Date(e.date), 'EEE') : `${e.daysUntil}d`) : e.date ? format(new Date(e.date), 'dd MMM') : `${e.daysUntil}d`;
+        return (
+          <Link key={`up-${e.id}`} href={e._type === 'employee' ? `/employees/${e.id}?type=employee` : '#'}>
+            <div className="group flex flex-col items-center gap-1">
+              <div className={`flex h-12 w-12 items-center justify-center rounded-full bg-linear-to-br ${gradient} text-white text-sm font-bold ring-2 ring-background shadow group-hover:scale-110 transition-all`}>
+                {getInitials(e.name)}
+              </div>
+              <p className="text-[11px] font-medium text-center max-w-[60px] truncate">{e.name.split(' ')[0]}</p>
+              <span className="text-[10px] text-muted-foreground">{label}</span>
+            </div>
+          </Link>
+        );
+      })}
+    </div>
+  );
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-      {/* Birthdays */}
-      <Card className="shadow-sm">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-            <Cake className="h-4 w-4 text-pink-500" />
-            Today&apos;s Birthdays
-            {!isLoading && (
-              <span className="ml-1 rounded-full bg-pink-100 dark:bg-pink-500/20 px-1.5 py-0.5 text-[10px] font-bold text-pink-600 dark:text-pink-400">
-                {birthdays.length}
-              </span>
+    <Card className="shadow-sm">
+      <CardHeader className="pb-2">
+        <div className="flex gap-1 p-0.5 bg-muted rounded-lg w-fit">
+          <button onClick={() => setEvtTab('birthdays')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${evtTab === 'birthdays' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+            <Cake className="h-3.5 w-3.5 text-pink-500" />
+            {birthdays.length} Birthday{birthdays.length !== 1 ? 's' : ''}
+          </button>
+          <button onClick={() => setEvtTab('anniversaries')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${evtTab === 'anniversaries' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+            <Award className="h-3.5 w-3.5 text-amber-500" />
+            {anniversaries.length} Anniversar{anniversaries.length !== 1 ? 'ies' : 'y'}
+          </button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        {todayLoading ? (
+          <div className="flex gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="flex flex-col items-center gap-1.5">
+                <Skeleton className="h-14 w-14 rounded-full" />
+                <Skeleton className="h-3 w-12" />
+              </div>
+            ))}
+          </div>
+        ) : evtTab === 'birthdays' ? (
+          <>
+            {birthdays.length > 0 ? (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Birthdays Today</p>
+                {renderPersonRow(birthdays, '🎂', 'pink')}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center py-4 gap-2">
+                <Cake className="h-8 w-8 text-pink-200" />
+                <p className="text-xs text-muted-foreground">No birthdays today</p>
+              </div>
             )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex gap-3">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="flex flex-col items-center gap-1.5">
-                  <Skeleton className="h-12 w-12 rounded-full" />
-                  <Skeleton className="h-3 w-10 rounded" />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EventsChart
-              events={birthdays}
-              emptyMsg="No birthdays today"
-              accentColor="text-pink-500"
-              Icon={Cake}
-            />
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Anniversaries */}
-      <Card className="shadow-sm">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-            <CalendarHeart className="h-4 w-4 text-rose-500" />
-            Today&apos;s Work Anniversaries
-            {!isLoading && (
-              <span className="ml-1 rounded-full bg-rose-100 dark:bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400">
-                {anniversaries.length}
-              </span>
+            {upcomingBirthdays.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Upcoming This Month</p>
+                {renderUpcomingRow(upcomingBirthdays)}
+              </div>
             )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="flex gap-3">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="flex flex-col items-center gap-1.5">
-                  <Skeleton className="h-12 w-12 rounded-full" />
-                  <Skeleton className="h-3 w-10 rounded" />
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EventsChart
-              events={anniversaries}
-              emptyMsg="No work anniversaries today"
-              accentColor="text-rose-500"
-              Icon={CalendarHeart}
-            />
-          )}
-        </CardContent>
-      </Card>
-    </div>
+          </>
+        ) : (
+          <>
+            {anniversaries.length > 0 ? (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Work Anniversaries Today</p>
+                {renderPersonRow(anniversaries, '🏆', 'amber')}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center py-4 gap-2">
+                <Award className="h-8 w-8 text-amber-200" />
+                <p className="text-xs text-muted-foreground">No work anniversaries today</p>
+              </div>
+            )}
+            {upcomingAnniversaries.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Upcoming This Month</p>
+                {renderUpcomingRow(upcomingAnniversaries)}
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

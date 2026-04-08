@@ -218,7 +218,9 @@ export interface Employee {
   dateOfBirth?: string | null;
   joiningDate?: string | null;
   fillDaysOverride?: number | null;
-  monthlyCTC?: number | null;
+  annualCTC?: number | null;
+  bloodGroup?: string | null;
+  maritalStatus?: string | null;
   createdAt: string;
 }
 

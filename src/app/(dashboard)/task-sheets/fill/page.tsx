@@ -472,20 +472,18 @@ function FillTaskSheetPage() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            {/* 1. Project (required) */}
+            {/* 1. Project (required - searchable) */}
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">Project <span className="text-destructive">*</span></Label>
-              <Select value={form.projectId} onValueChange={(v) => setForm((p) => ({ ...p, projectId: v, otherProjectName: v === 'other' ? p.otherProjectName : '', ticketId: '' }))}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select project" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(projects ?? []).map((p) => (
-                    <SelectItem key={p.id} value={String(p.id)}>{p.projectName}</SelectItem>
-                  ))}
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={form.projectId}
+                onValueChange={(v) => setForm((p) => ({ ...p, projectId: v, otherProjectName: v === 'other' ? p.otherProjectName : '', ticketId: '' }))}
+                placeholder="Search project..."
+                options={[
+                  ...(projects ?? []).map((p) => ({ value: String(p.id), label: p.projectName })),
+                  { value: 'other', label: 'Other' },
+                ]}
+              />
               {form.projectId === 'other' && (
                 <Input
                   placeholder="Enter project name"
@@ -515,9 +513,11 @@ function FillTaskSheetPage() {
               <SearchableSelect
                 value={form.ticketId}
                 onValueChange={(v) => setForm((p) => ({ ...p, ticketId: v }))}
-                placeholder="Search ticket or select Meeting..."
+                placeholder="Search ticket or select activity..."
                 options={[
-                  { value: 'meeting', label: 'Meeting' },
+                  { value: 'internal_meeting', label: 'Internal Meeting' },
+                  { value: 'client_meeting', label: 'Client Meeting' },
+                  { value: 'others', label: 'Others' },
                   ...((projectTickets ?? []) as any[]).map((t: any) => ({
                     value: String(t.id),
                     label: `${t.ticketNumber ?? ''} — ${t.title}`,

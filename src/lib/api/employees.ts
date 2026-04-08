@@ -20,6 +20,11 @@ export const employeesApi = {
 
   remove: (id: number) => api.delete<ApiResponse<null>>(`/employees/${id}`),
 
+  toggleActive: (id: number) => api.patch(`/employees/${id}/toggle-active`),
+
+  resetPassword: (id: number, newPassword: string) =>
+    api.patch(`/employees/${id}/reset-password`, { newPassword }),
+
   assignProject: (id: number, projectId: number | null) =>
     api.patch<ApiResponse<Employee>>(`/employees/${id}/assign`, { projectId }),
 

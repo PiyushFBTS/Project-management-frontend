@@ -3,8 +3,8 @@
 import { Suspense, useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { format } from 'date-fns';
-import { CalendarDays, Eye, CheckCircle2, XCircle, Ban, Plus, X } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isWithinInterval, addMonths, subMonths, getDay } from 'date-fns';
+import { CalendarDays, Eye, CheckCircle2, XCircle, Ban, Plus, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/auth-provider';
 import { leaveRequestsApi } from '@/lib/api/leave-requests';
@@ -44,7 +44,7 @@ function StatusBadge({ status }: { status: LeaveRequestStatus }) {
   );
 }
 
-type Tab = 'my-leaves' | 'pending-approvals' | 'team-leaves';
+type Tab = 'my-leaves' | 'pending-approvals' | 'team-leaves' | 'calendar';
 
 export default function LeaveRequestsPage() {
   return (
@@ -57,6 +57,7 @@ export default function LeaveRequestsPage() {
 function LeaveRequestsContent() {
   const { user } = useAuth();
   const isEmployee = user?._type === 'employee';
+  const isAdmin = user?._type === 'admin';
   const queryClient = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -67,6 +68,8 @@ function LeaveRequestsContent() {
   const [dateTo, setDateTo] = useState('');
   const [selected, setSelected] = useState<LeaveRequest | null>(null);
   const [tab, setTab] = useState<Tab>('my-leaves');
+  const [calMonth, setCalMonth] = useState(() => new Date());
+  const [showCalendar, setShowCalendar] = useState(false);
   const [teamEmployeeId, setTeamEmployeeId] = useState<string>('');
   const [actionRemarks, setActionRemarks] = useState('');
   const [acting, setActing] = useState(false);
@@ -344,7 +347,7 @@ function LeaveRequestsContent() {
       {/* Employee tabs */}
       {isEmployee && (
         <div className="flex rounded-lg border border-border bg-muted/50 p-1 w-fit">
-          {(['my-leaves', 'pending-approvals', 'team-leaves'] as Tab[]).map((t) => (
+          {(['my-leaves', 'pending-approvals', 'team-leaves', 'calendar'] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => { setTab(t); if (t !== 'team-leaves') setTeamEmployeeId(''); }}
@@ -354,9 +357,23 @@ function LeaveRequestsContent() {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {t === 'my-leaves' ? 'My Leaves' : t === 'pending-approvals' ? 'Pending Approvals' : 'Team Leave'}
+              {t === 'my-leaves' ? 'My Leaves' : t === 'pending-approvals' ? 'Pending Approvals' : t === 'team-leaves' ? 'Team Leave' : 'Calendar'}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Calendar toggle for admin */}
+      {isAdmin && (
+        <div className="flex rounded-lg border border-border bg-muted/50 p-1 w-fit">
+          <button onClick={() => setShowCalendar(false)}
+            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${!showCalendar ? 'bg-white dark:bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+            Table
+          </button>
+          <button onClick={() => setShowCalendar(true)}
+            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${showCalendar ? 'bg-white dark:bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+            Calendar
+          </button>
         </div>
       )}
 
@@ -412,8 +429,163 @@ function LeaveRequestsContent() {
         )}
       </div>
 
+      {/* Calendar View */}
+      {(tab === 'calendar' || (isAdmin && showCalendar)) && (() => {
+        const allLeaves: LeaveRequest[] = isAdmin ? (data ?? []) : [...(myLeaves ?? []), ...(teamData ?? [])];
+        const monthStart = startOfMonth(calMonth);
+        const monthEnd = endOfMonth(calMonth);
+        const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+        const dayNames = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+        // Only approved/manager_approved leaves
+        const approvedLeaves = allLeaves.filter((l) => ['hr_approved', 'manager_approved', 'pending'].includes(l.status));
+
+        // Group by employee
+        const empMap: Record<string, { name: string; code: string; leaves: LeaveRequest[] }> = {};
+        approvedLeaves.forEach((l) => {
+          const empId = String(l.employeeId);
+          const name = (l as any).employee?.empName ?? `Employee #${empId}`;
+          const code = (l as any).employee?.empCode ?? '';
+          if (!empMap[empId]) empMap[empId] = { name, code, leaves: [] };
+          empMap[empId].leaves.push(l);
+        });
+        const employees = Object.entries(empMap);
+
+        // Color per leave type (full + light pairs)
+        const leaveColors: Record<string, string> = {};
+        const leaveColorsLight: Record<string, string> = {};
+        const colorPalette = [
+          'bg-violet-500', 'bg-orange-500', 'bg-emerald-500', 'bg-blue-500',
+          'bg-pink-500', 'bg-amber-500', 'bg-cyan-500', 'bg-red-500', 'bg-indigo-500',
+        ];
+        const colorPaletteLight = [
+          'bg-violet-200', 'bg-orange-200', 'bg-emerald-200', 'bg-blue-200',
+          'bg-pink-200', 'bg-amber-200', 'bg-cyan-200', 'bg-red-200', 'bg-indigo-200',
+        ];
+        let ci = 0;
+        approvedLeaves.forEach((l) => {
+          const reasonName = l.leaveReason?.reasonName ?? 'Other';
+          if (!leaveColors[reasonName]) {
+            const idx = ci++ % colorPalette.length;
+            leaveColors[reasonName] = colorPalette[idx];
+            leaveColorsLight[reasonName] = colorPaletteLight[idx];
+          }
+        });
+
+        return (
+          <div className="rounded-lg border bg-card shadow-sm overflow-hidden">
+            <div className="h-1.5 bg-linear-to-r from-orange-500 via-rose-500 to-violet-500" />
+            {/* Month nav */}
+            <div className="flex items-center justify-between px-4 py-3 border-b">
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setCalMonth(subMonths(calMonth, 1))}><ChevronLeft className="h-4 w-4" /></Button>
+              <h3 className="text-sm font-bold">{format(calMonth, 'MMMM yyyy')}</h3>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setCalMonth(addMonths(calMonth, 1))}><ChevronRight className="h-4 w-4" /></Button>
+            </div>
+            {/* Legend */}
+            <div className="flex flex-wrap gap-3 px-4 py-2 border-b bg-muted/30">
+              {Object.entries(leaveColors).map(([name, color]) => (
+                <div key={name} className="flex items-center gap-1.5">
+                  <span className={`h-3 w-3 rounded-full ${color}`} />
+                  <span className="text-[10px] font-medium text-muted-foreground">{name}</span>
+                </div>
+              ))}
+              <div className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded-full bg-blue-200" />
+                <span className="text-[10px] font-medium text-muted-foreground">Saturday (WFH)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded-full bg-red-200" />
+                <span className="text-[10px] font-medium text-muted-foreground">Sunday (Off)</span>
+              </div>
+            </div>
+            {/* Grid */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs min-w-[700px]">
+                <thead>
+                  <tr className="border-b bg-muted/20">
+                    <th className="sticky left-0 bg-card z-10 px-3 py-2 text-left font-semibold text-muted-foreground w-36">Employee</th>
+                    {days.map((d) => {
+                      const isSun = getDay(d) === 0;
+                      const isSat = getDay(d) === 6;
+                      return (
+                        <th key={d.toISOString()} className={`px-0.5 py-1 text-center font-medium w-8 ${isSun ? 'bg-red-50 dark:bg-red-900/20 text-red-400' : isSat ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-400' : ''}`}>
+                          <div className="text-[9px]">{dayNames[getDay(d)]}</div>
+                          <div className="text-xs">{format(d, 'd')}</div>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {employees.length === 0 ? (
+                    <tr><td colSpan={days.length + 1} className="text-center text-muted-foreground py-8">No leaves found for this month</td></tr>
+                  ) : employees.map(([empId, emp]) => (
+                    <tr key={empId} className="border-b hover:bg-muted/20">
+                      <td className="sticky left-0 bg-card z-10 px-3 py-2 font-medium whitespace-nowrap">
+                        <div>{emp.name}</div>
+                      </td>
+                      {days.map((d, dayIdx) => {
+                        const isSun = getDay(d) === 0;
+                        const isSat = getDay(d) === 6;
+                        const leave = emp.leaves.find((l) => {
+                          const from = new Date(l.dateFrom + 'T00:00:00');
+                          const to = new Date(l.dateTo + 'T00:00:00');
+                          return isWithinInterval(d, { start: from, end: to });
+                        });
+                        const reasonName = leave?.leaveReason?.reasonName ?? 'Other';
+                        const color = leave ? leaveColors[reasonName] : '';
+
+                        // Check prev/next day for same leave (for connected bar)
+                        const prevDay = dayIdx > 0 ? days[dayIdx - 1] : null;
+                        const nextDay = dayIdx < days.length - 1 ? days[dayIdx + 1] : null;
+                        const prevHasLeave = prevDay && leave && emp.leaves.some((l) => {
+                          const from = new Date(l.dateFrom + 'T00:00:00');
+                          const to = new Date(l.dateTo + 'T00:00:00');
+                          return isWithinInterval(prevDay, { start: from, end: to }) && (l.leaveReason?.reasonName ?? 'Other') === reasonName;
+                        });
+                        const nextHasLeave = nextDay && leave && emp.leaves.some((l) => {
+                          const from = new Date(l.dateFrom + 'T00:00:00');
+                          const to = new Date(l.dateTo + 'T00:00:00');
+                          return isWithinInterval(nextDay, { start: from, end: to }) && (l.leaveReason?.reasonName ?? 'Other') === reasonName;
+                        });
+
+                        const lightColor = leave ? (leaveColorsLight[reasonName] ?? 'bg-gray-200') : '';
+
+                        return (
+                          <td key={d.toISOString()} className="px-0 py-1 text-center relative">
+                            {leave ? (
+                              <div className="relative flex items-center justify-center h-6">
+                                {/* Light connecting line behind */}
+                                {prevHasLeave && <div className={`absolute left-0 top-1/2 -translate-y-1/2 h-3 w-1/2 ${lightColor}`} />}
+                                {nextHasLeave && <div className={`absolute right-0 top-1/2 -translate-y-1/2 h-3 w-1/2 ${lightColor}`} />}
+                                {/* Full color circle on top */}
+                                <div className={`relative z-10 h-6 w-6 rounded-full ${color} flex items-center justify-center text-white text-[10px] font-bold cursor-default`} title={`${reasonName} (${leave.status})`}>
+                                  {format(d, 'd')}
+                                </div>
+                              </div>
+                            ) : isSun ? (
+                              <div className="h-6 bg-red-100 dark:bg-red-900/30 rounded-full mx-0.5 flex items-center justify-center text-red-400 text-[10px] font-medium" title="Sunday - Off">
+                                {format(d, 'd')}
+                              </div>
+                            ) : isSat ? (
+                              <div className="h-6 bg-blue-100 dark:bg-blue-900/30 rounded-full mx-0.5 flex items-center justify-center text-blue-400 text-[10px] font-medium" title="Saturday - WFH">
+                                {format(d, 'd')}
+                              </div>
+                            ) : null}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Table */}
-      <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
+      {tab !== 'calendar' && !(isAdmin && showCalendar) && <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
         <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-orange-500 via-rose-500 to-violet-500" />
         <Table>
           <TableHeader>
@@ -490,7 +662,7 @@ function LeaveRequestsContent() {
                 ))}
           </TableBody>
         </Table>
-      </div>
+      </div>}
 
       {/* Apply for Leave Dialog */}
       {isEmployee && (
