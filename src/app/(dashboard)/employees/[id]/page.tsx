@@ -109,7 +109,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
   const isHr = isEmployee && !!(user as any)?.isHr;
   const canManageAllDocs = isAdmin || isHr;
   const isSelf = isSelfProfile || (targetType === 'employee' && isEmployee && Number(id) === user?.id) ||
-                 (targetType === 'admin' && isAdmin && Number(id) === user?.id);
+    (targetType === 'admin' && isAdmin && Number(id) === user?.id);
   const canUploadDocs = canManageAllDocs || isSelf;
   const canEdit = canManageAllDocs || isSelf;
 
@@ -401,7 +401,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
   const tabs: { key: Tab; label: string; icon: any }[] = [
     { key: 'profile', label: 'Profile', icon: User },
     ...(canViewDocs ? [{ key: 'documents' as Tab, label: 'Docs', icon: Paperclip }] : []),
-    { key: 'goals' as Tab, label: 'Goals', icon: Target },
+    ...((canManageAllDocs || isSelf) ? [{ key: 'goals' as Tab, label: 'Goals', icon: Target }] : []),
     ...((canManageAllDocs || isSelf) ? [{ key: 'pip' as Tab, label: 'PIP', icon: AlertTriangle }] : []),
     ...((isSelf || canManageAllDocs) ? [{ key: 'security' as Tab, label: 'Security', icon: Shield }] : []),
   ];
@@ -449,11 +449,10 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
               <button
                 key={key}
                 onClick={() => setActiveTab(key)}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
-                  activeTab === key
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30'
-                }`}
+                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === key
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30'
+                  }`}
               >
                 <Icon className="h-4 w-4" />
                 {label}
@@ -463,164 +462,199 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
 
           {/* ── Content ─────────────────────── */}
 
-            {/* ── Profile tab ───────────────────────── */}
-            {activeTab === 'profile' && (<>
-              <Card className="shadow-sm">
-                <CardContent className="px-5 py-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-base font-semibold">Personal Information</h2>
-                    {canEdit && targetType !== 'admin' && !editMode && (
-                      <Button size="sm" variant="outline" onClick={startEdit}>Edit</Button>
-                    )}
-                    {editMode && (
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="ghost" onClick={() => setEditMode(false)}>Cancel</Button>
-                        <Button size="sm" onClick={() => saveProfileMut.mutate()} disabled={saveProfileMut.isPending}>
-                          {saveProfileMut.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null} Save
-                        </Button>
+          {/* ── Profile tab ───────────────────────── */}
+          {activeTab === 'profile' && (
+            <>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_300px]">
+                <Card className="shadow-sm">
+                  <CardContent className="px-5 py-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-base font-semibold">Personal Information</h2>
+                      {canEdit && targetType !== 'admin' && !editMode && (
+                        <Button size="sm" variant="outline" onClick={startEdit}>Edit</Button>
+                      )}
+                      {editMode && (
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="ghost" onClick={() => setEditMode(false)}>Cancel</Button>
+                          <Button size="sm" onClick={() => saveProfileMut.mutate()} disabled={saveProfileMut.isPending}>
+                            {saveProfileMut.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null} Save
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-5 gap-x-8">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Full Name</p>
+                        {editMode ? <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="h-8 text-sm" /> : <p className="text-sm font-medium">{emp.empName}</p>}
                       </div>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-5 gap-x-8">
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Full Name</p>
-                      {editMode ? <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="h-8 text-sm" /> : <p className="text-sm font-medium">{emp.empName}</p>}
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Email Address</p>
-                      {editMode && canManageAllDocs ? <Input value={editEmail} onChange={(e) => setEditEmail(e.target.value)} className="h-8 text-sm" /> : <p className="text-sm font-medium">{emp.email}</p>}
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Phone Number</p>
-                      {editMode ? <Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} className="h-8 text-sm" /> : <p className="text-sm font-medium">{emp.mobileNumber || '—'}</p>}
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Date of Birth</p>
-                      {editMode ? <Input type="date" value={editDob} onChange={(e) => setEditDob(e.target.value)} className="h-8 text-sm" /> : <p className="text-sm font-medium">{emp.dateOfBirth ? format(new Date(emp.dateOfBirth + 'T00:00:00'), 'dd MMM yyyy') : '—'}</p>}
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">User Role</p>
-                      {editMode && canManageAllDocs ? (
-                        <Select value={editType} onValueChange={setEditType}>
-                          <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {Object.entries(TYPE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      ) : <p className="text-sm font-medium uppercase">{targetType === 'admin' ? 'Admin' : TYPE_LABELS[emp.consultantType] ?? emp.consultantType}</p>}
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Joined</p>
-                      {editMode && canManageAllDocs ? (
-                        <Input type="date" value={editJoiningDate} onChange={(e) => setEditJoiningDate(e.target.value)} className="h-8 text-sm" />
-                      ) : <p className="text-sm font-medium">{emp.joiningDate ? format(new Date(emp.joiningDate + 'T00:00:00'), 'dd MMM yyyy') : emp.createdAt ? format(new Date(emp.createdAt), 'dd MMM yyyy') : '—'}</p>}
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Employee Code</p>
-                      <p className="text-sm font-medium font-mono">{emp.empCode ?? '—'}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Reports To</p>
-                      {editMode && canManageAllDocs ? (
-                        <SearchableSelect
-                          value={editReportsToId}
-                          onValueChange={setEditReportsToId}
-                          placeholder="Search employee..."
-                          className="h-8 text-sm"
-                          options={[
-                            { value: 'none', label: 'None' },
-                            ...allEmployees
-                              .filter((e: any) => e.id !== Number(id) && e.isActive !== false)
-                              .filter((e: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.id === e.id && x._type === e._type) === i)
-                              .map((e: any) => ({
-                                value: `${e._type === 'admin' ? 'adm' : 'emp'}-${e.id}`,
-                                label: `${e.empName}${e._type === 'admin' ? ' (Admin)' : ''} — ${e.empCode}`,
-                              })),
-                          ]}
-                        />
-                      ) : <p className="text-sm font-medium">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Email Address</p>
+                        {editMode && canManageAllDocs ? <Input value={editEmail} onChange={(e) => setEditEmail(e.target.value)} className="h-8 text-sm" /> : <p className="text-sm font-medium">{emp.email}</p>}
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Phone Number</p>
+                        {editMode ? <Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} className="h-8 text-sm" /> : <p className="text-sm font-medium">{emp.mobileNumber || '—'}</p>}
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Date of Birth</p>
+                        {editMode ? <Input type="date" value={editDob} onChange={(e) => setEditDob(e.target.value)} className="h-8 text-sm" /> : <p className="text-sm font-medium">{emp.dateOfBirth ? format(new Date(emp.dateOfBirth + 'T00:00:00'), 'dd MMM yyyy') : '—'}</p>}
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">User Role</p>
+                        {editMode && canManageAllDocs ? (
+                          <Select value={editType} onValueChange={setEditType}>
+                            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {Object.entries(TYPE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        ) : <p className="text-sm font-medium uppercase">{targetType === 'admin' ? 'Admin' : TYPE_LABELS[emp.consultantType] ?? emp.consultantType}</p>}
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Joined</p>
+                        {editMode && canManageAllDocs ? (
+                          <Input type="date" value={editJoiningDate} onChange={(e) => setEditJoiningDate(e.target.value)} className="h-8 text-sm" />
+                        ) : <p className="text-sm font-medium">{emp.joiningDate ? format(new Date(emp.joiningDate + 'T00:00:00'), 'dd MMM yyyy') : emp.createdAt ? format(new Date(emp.createdAt), 'dd MMM yyyy') : '—'}</p>}
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Employee Code</p>
+                        <p className="text-sm font-medium font-mono">{emp.empCode ?? '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Reports To</p>
+                        {editMode && canManageAllDocs ? (
+                          <SearchableSelect
+                            value={editReportsToId}
+                            onValueChange={setEditReportsToId}
+                            placeholder="Search employee..."
+                            className="h-8 text-sm"
+                            options={[
+                              { value: 'none', label: 'None' },
+                              ...allEmployees
+                                .filter((e: any) => e.id !== Number(id) && e.isActive !== false)
+                                .filter((e: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.id === e.id && x._type === e._type) === i)
+                                .map((e: any) => ({
+                                  value: `${e._type === 'admin' ? 'adm' : 'emp'}-${e.id}`,
+                                  label: `${e.empName}${e._type === 'admin' ? ' (Admin)' : ''} — ${e.empCode}`,
+                                })),
+                            ]}
+                          />
+                        ) : <p className="text-sm font-medium">
                           {(emp as any).isReportToAdmin
                             ? (emp as any).reportsToAdmin?.name ?? '—'
                             : emp.reportsTo?.empName ?? '—'}
                         </p>}
-                    </div>
-                    {emp.assignedProject && (
+                      </div>
+                      {emp.assignedProject && (
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Assigned Project</p>
+                          <p className="text-sm font-medium">{emp.assignedProject.projectName}</p>
+                        </div>
+                      )}
                       <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Assigned Project</p>
-                        <p className="text-sm font-medium">{emp.assignedProject.projectName}</p>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Status</p>
+                        <Badge className={`text-xs border-0 ${emp.isActive ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
+                          {emp.isActive ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">HR Access</p>
+                        {editMode && canManageAllDocs ? (
+                          <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                            <input type="checkbox" checked={editIsHr} onChange={(e) => setEditIsHr(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+                            {editIsHr ? 'Yes' : 'No'}
+                          </label>
+                        ) : (
+                          <p className="text-sm font-medium">{emp.isHr ? 'Yes' : 'No'}</p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Fill Days</p>
+                        {editMode && canManageAllDocs ? (
+                          <div className="flex items-center gap-1.5">
+                            <Input type="number" min={1} max={365} placeholder="Default (3)" value={editFillDays} onChange={(e) => setEditFillDays(e.target.value)} className="h-8 text-sm w-24" />
+                            {editFillDays && <Button variant="ghost" size="sm" className="h-8 text-xs px-2" onClick={() => setEditFillDays('')}>Reset</Button>}
+                          </div>
+                        ) : (
+                          <p className="text-sm font-medium">{emp.fillDaysOverride ?? 'Default (3)'}</p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Blood Group</p>
+                        {editMode ? (
+                          <Select value={editBloodGroup || 'none'} onValueChange={(v) => setEditBloodGroup(v === 'none' ? '' : v)}>
+                            <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Not set</SelectItem>
+                              {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((bg) => (
+                                <SelectItem key={bg} value={bg}>{bg}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <p className="text-sm font-medium">{emp.bloodGroup || '—'}</p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Marital Status</p>
+                        {editMode ? (
+                          <Select value={editMaritalStatus || 'none'} onValueChange={(v) => setEditMaritalStatus(v === 'none' ? '' : v)}>
+                            <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Not set</SelectItem>
+                              {['Single', 'Married', 'Divorced', 'Widowed'].map((ms) => (
+                                <SelectItem key={ms} value={ms}>{ms}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <p className="text-sm font-medium">{emp.maritalStatus || '—'}</p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Annual CTC</p>
+                        {editMode && canManageAllDocs ? (
+                          <Input type="number" min={0} step="1000" placeholder="e.g. 600000" value={editAnnualCTC} onChange={(e) => setEditAnnualCTC(e.target.value)} className="h-8 text-sm" />
+                        ) : (
+                          <p className="text-sm font-medium">{emp.annualCTC ? `₹${Number(emp.annualCTC).toLocaleString('en-IN')}` : '—'}</p>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                {/* Praise / Recognition */}
+                <Card className="shadow-sm">
+                  <CardContent className="px-5 py-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h2 className="text-base font-semibold">Praise</h2>
+                      {canEdit && !isSelf && (
+                        <Button size="sm" variant="outline" className="text-xs" onClick={() => { setPraiseType(''); setPraiseDesc(''); setPraiseDialogOpen(true); }}>
+                          + Give Praise
+                        </Button>
+                      )}
+                    </div>
+                    {praises.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-4">No praises yet</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-4">
+                        {praises.map((p: any) => {
+                          const pt = PRAISE_TYPES.find((t) => t.value === p.praiseType);
+                          return (
+                            <button key={p.id} type="button" onClick={() => setViewPraise(p)}
+                              className="group flex flex-col items-center gap-1.5 cursor-pointer hover:scale-105 transition-transform">
+                              <div className={`flex h-12 w-12 items-center justify-center rounded-full ${pt?.color ?? 'bg-gray-100 dark:bg-gray-800'} text-xl shadow-sm group-hover:shadow-md transition-shadow`}>
+                                {pt?.icon ?? '⭐'}
+                              </div>
+                              <p className="text-[10px] font-medium text-muted-foreground text-center max-w-[70px] truncate">{pt?.label ?? p.praiseType}</p>
+                              <p className="text-[8px] text-muted-foreground/60">by {p.givenByName?.split(' ')[0]}</p>
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Status</p>
-                      <Badge className={`text-xs border-0 ${emp.isActive ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
-                        {emp.isActive ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">HR Access</p>
-                      {editMode && canManageAllDocs ? (
-                        <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-                          <input type="checkbox" checked={editIsHr} onChange={(e) => setEditIsHr(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
-                          {editIsHr ? 'Yes' : 'No'}
-                        </label>
-                      ) : (
-                        <p className="text-sm font-medium">{emp.isHr ? 'Yes' : 'No'}</p>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Fill Days</p>
-                      {editMode && canManageAllDocs ? (
-                        <div className="flex items-center gap-1.5">
-                          <Input type="number" min={1} max={365} placeholder="Default (3)" value={editFillDays} onChange={(e) => setEditFillDays(e.target.value)} className="h-8 text-sm w-24" />
-                          {editFillDays && <Button variant="ghost" size="sm" className="h-8 text-xs px-2" onClick={() => setEditFillDays('')}>Reset</Button>}
-                        </div>
-                      ) : (
-                        <p className="text-sm font-medium">{emp.fillDaysOverride ?? 'Default (3)'}</p>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Blood Group</p>
-                      {editMode ? (
-                        <Select value={editBloodGroup || 'none'} onValueChange={(v) => setEditBloodGroup(v === 'none' ? '' : v)}>
-                          <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Not set</SelectItem>
-                            {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((bg) => (
-                              <SelectItem key={bg} value={bg}>{bg}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <p className="text-sm font-medium">{emp.bloodGroup || '—'}</p>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Marital Status</p>
-                      {editMode ? (
-                        <Select value={editMaritalStatus || 'none'} onValueChange={(v) => setEditMaritalStatus(v === 'none' ? '' : v)}>
-                          <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">Not set</SelectItem>
-                            {['Single', 'Married', 'Divorced', 'Widowed'].map((ms) => (
-                              <SelectItem key={ms} value={ms}>{ms}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <p className="text-sm font-medium">{emp.maritalStatus || '—'}</p>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Annual CTC</p>
-                      {editMode && canManageAllDocs ? (
-                        <Input type="number" min={0} step="1000" placeholder="e.g. 600000" value={editAnnualCTC} onChange={(e) => setEditAnnualCTC(e.target.value)} className="h-8 text-sm" />
-                      ) : (
-                        <p className="text-sm font-medium">{emp.annualCTC ? `₹${Number(emp.annualCTC).toLocaleString('en-IN')}` : '—'}</p>
-                      )}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
 
               {/* Reporting Team */}
               {reportingTeam.length > 0 && (
@@ -646,141 +680,110 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                 </Card>
               )}
 
-              {/* Praise / Recognition */}
-              <Card className="shadow-sm">
-                <CardContent className="px-5 py-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-base font-semibold">Praise</h2>
-                    {canEdit && !isSelf && (
-                      <Button size="sm" variant="outline" className="text-xs" onClick={() => { setPraiseType(''); setPraiseDesc(''); setPraiseDialogOpen(true); }}>
-                        + Give Praise
-                      </Button>
-                    )}
-                  </div>
-                  {praises.length === 0 ? (
-                    <p className="text-xs text-muted-foreground text-center py-4">No praises yet</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-4">
-                      {praises.map((p: any) => {
-                        const pt = PRAISE_TYPES.find((t) => t.value === p.praiseType);
-                        return (
-                          <button key={p.id} type="button" onClick={() => setViewPraise(p)}
-                            className="group flex flex-col items-center gap-1.5 cursor-pointer hover:scale-105 transition-transform">
-                            <div className={`flex h-12 w-12 items-center justify-center rounded-full ${pt?.color ?? 'bg-gray-100 dark:bg-gray-800'} text-xl shadow-sm group-hover:shadow-md transition-shadow`}>
-                              {pt?.icon ?? '⭐'}
-                            </div>
-                            <p className="text-[10px] font-medium text-muted-foreground text-center max-w-[70px] truncate">{pt?.label ?? p.praiseType}</p>
-                            <p className="text-[8px] text-muted-foreground/60">by {p.givenByName?.split(' ')[0]}</p>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+
             </>)}
 
-            {/* ── Documents tab ─────────────────────── */}
-            {activeTab === 'documents' && (
-              <Card className="shadow-sm">
-                <CardContent className="px-5 py-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-base font-semibold">Documents</h2>
-                    {canUploadDocs && (
-                      <div className="flex items-center gap-2">
-                        <Select value={docCategory} onValueChange={setDocCategory}>
-                          <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="aadhaar">Aadhaar Card</SelectItem>
-                            <SelectItem value="pan">PAN Card</SelectItem>
-                            {canManageAllDocs && (
-                              <>
-                                <SelectItem value="joining">Joining Doc</SelectItem>
-                                <SelectItem value="exit">Exit Doc</SelectItem>
-                                <SelectItem value="other">Other</SelectItem>
-                              </>
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <input
-                          ref={fileInputRef} type="file" className="hidden"
-                          accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.txt"
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) uploadMut.mutate(f);
-                            if (fileInputRef.current) fileInputRef.current.value = '';
-                          }}
-                        />
-                        <Button size="sm" variant="outline" disabled={uploadMut.isPending} onClick={() => fileInputRef.current?.click()}>
-                          {uploadMut.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
-                          Upload
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-
-                  {docsLoading ? (
-                    <div className="space-y-2">{[...Array(2)].map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}</div>
-                  ) : !(docs as any[])?.length ? (
-                    <p className="text-sm text-muted-foreground text-center py-8">No documents uploaded yet.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {(docs as any[]).map((doc: any) => (
-                        <div key={doc.id} className="flex items-center gap-3 rounded-lg border p-3 hover:bg-accent/30 transition-colors">
-                          <div className="h-10 w-10 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
-                            <FileText className="h-5 w-5 text-violet-500" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{doc.originalName}</p>
-                            <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
-                              <span className="capitalize rounded bg-violet-500/10 px-1.5 py-0.5 text-violet-600 dark:text-violet-400">
-                                {CATEGORY_LABELS[doc.category] ?? doc.category}
-                              </span>
-                              <span>{(doc.fileSize / 1024).toFixed(0)} KB</span>
-                              <span>by {doc.uploadedByName}</span>
-                            </div>
-                          </div>
-                          <div className="flex gap-1 shrink-0">
-                            <a href={`${apiBase}${doc.filePath}`} target="_blank" rel="noopener noreferrer">
-                              <Button variant="ghost" size="icon" className="h-8 w-8"><Download className="h-4 w-4" /></Button>
-                            </a>
-                            {canManageAllDocs && (
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600"
-                                disabled={deleteMut.isPending}
-                                onClick={() => { if (confirm(`Delete "${doc.originalName}"?`)) deleteMut.mutate(doc.id); }}>
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+          {/* ── Documents tab ─────────────────────── */}
+          {activeTab === 'documents' && (
+            <Card className="shadow-sm">
+              <CardContent className="px-5 py-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-base font-semibold">Documents</h2>
+                  {canUploadDocs && (
+                    <div className="flex items-center gap-2">
+                      <Select value={docCategory} onValueChange={setDocCategory}>
+                        <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="aadhaar">Aadhaar Card</SelectItem>
+                          <SelectItem value="pan">PAN Card</SelectItem>
+                          {canManageAllDocs && (
+                            <>
+                              <SelectItem value="joining">Joining Doc</SelectItem>
+                              <SelectItem value="exit">Exit Doc</SelectItem>
+                              <SelectItem value="other">Other</SelectItem>
+                            </>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <input
+                        ref={fileInputRef} type="file" className="hidden"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.txt"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) uploadMut.mutate(f);
+                          if (fileInputRef.current) fileInputRef.current.value = '';
+                        }}
+                      />
+                      <Button size="sm" variant="outline" disabled={uploadMut.isPending} onClick={() => fileInputRef.current?.click()}>
+                        {uploadMut.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
+                        Upload
+                      </Button>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* ── Goals tab ───── */}
-            {activeTab === 'goals' && (
-              <div className="space-y-4">
-                {/* Summary + add button */}
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base font-semibold flex items-center gap-2">
-                    <Target className="h-4 w-4 text-emerald-500" /> Goals & Objectives
-                  </h2>
-                  {canEditGoals && (
-                    <Button
-                      size="sm"
-                      className="bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white shadow-md"
-                      onClick={() => router.push(isSelfProfile ? '/profile/goals/new' : `/employees/${id}/goals/new`)}
-                    >
-                      <Plus className="h-3.5 w-3.5 mr-1" /> Add Goal
-                    </Button>
                   )}
                 </div>
 
-                {/* Summary cards */}
-                {/* {goals.length > 0 && (() => {
+                {docsLoading ? (
+                  <div className="space-y-2">{[...Array(2)].map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}</div>
+                ) : !(docs as any[])?.length ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">No documents uploaded yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {(docs as any[]).map((doc: any) => (
+                      <div key={doc.id} className="flex items-center gap-3 rounded-lg border p-3 hover:bg-accent/30 transition-colors">
+                        <div className="h-10 w-10 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+                          <FileText className="h-5 w-5 text-violet-500" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{doc.originalName}</p>
+                          <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+                            <span className="capitalize rounded bg-violet-500/10 px-1.5 py-0.5 text-violet-600 dark:text-violet-400">
+                              {CATEGORY_LABELS[doc.category] ?? doc.category}
+                            </span>
+                            <span>{(doc.fileSize / 1024).toFixed(0)} KB</span>
+                            <span>by {doc.uploadedByName}</span>
+                          </div>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <a href={`${apiBase}${doc.filePath}`} target="_blank" rel="noopener noreferrer">
+                            <Button variant="ghost" size="icon" className="h-8 w-8"><Download className="h-4 w-4" /></Button>
+                          </a>
+                          {canManageAllDocs && (
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600"
+                              disabled={deleteMut.isPending}
+                              onClick={() => { if (confirm(`Delete "${doc.originalName}"?`)) deleteMut.mutate(doc.id); }}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ── Goals tab ───── */}
+          {activeTab === 'goals' && (
+            <div className="space-y-4">
+              {/* Summary + add button */}
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-semibold flex items-center gap-2">
+                  <Target className="h-4 w-4 text-emerald-500" /> Goals & Objectives
+                </h2>
+                {canEditGoals && (
+                  <Button
+                    size="sm"
+                    className="bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white shadow-md"
+                    onClick={() => router.push(isSelfProfile ? '/profile/goals/new' : `/employees/${id}/goals/new`)}
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Add Goal
+                  </Button>
+                )}
+              </div>
+
+              {/* Summary cards */}
+              {/* {goals.length > 0 && (() => {
                   const isFinished = (g: any) => g.status === 'finished' || (Number(g.progressPercent) || 0) >= 100;
                   const active = goals.filter((g) => !isFinished(g)).length;
                   const completed = goals.filter(isFinished).length;
@@ -824,495 +827,493 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                   );
                 })()} */}
 
-                {/* Goals list */}
-                {goals.length === 0 ? (
-                  <Card className="shadow-sm ">
-                    <CardContent className="px-5 py-12 text-center">
-                      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-950/30 mb-3">
-                        <Target className="h-8 w-8 text-emerald-500/60" />
-                      </div>
-                      <p className="text-sm font-semibold">No goals yet</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {canEditGoals ? 'Click "Add Goal" to create your first goal' : 'Goals will appear here once created'}
-                      </p>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <div className="space-y-3">
-                    {goals.map((g: any) => {
-                      const timeframeMeta: Record<string, { label: string; gradient: string; textColor: string; bg: string }> = {
-                        monthly: { label: 'Monthly', gradient: 'from-indigo-500 to-indigo-700', textColor: 'text-indigo-700 dark:text-indigo-400', bg: 'bg-indigo-100 dark:bg-indigo-900/30' },
-                        quarterly: { label: 'Quarterly', gradient: 'from-teal-500 to-teal-700', textColor: 'text-teal-700 dark:text-teal-400', bg: 'bg-teal-100 dark:bg-teal-900/30' },
-                        half_yearly: { label: 'Half-Yearly', gradient: 'from-amber-500 to-orange-600', textColor: 'text-amber-700 dark:text-amber-400', bg: 'bg-amber-100 dark:bg-amber-900/30' },
-                        yearly: { label: 'Yearly', gradient: 'from-pink-500 to-rose-600', textColor: 'text-pink-700 dark:text-pink-400', bg: 'bg-pink-100 dark:bg-pink-900/30' },
-                      };
-                      const tf = timeframeMeta[g.timeframe ?? 'monthly'] ?? timeframeMeta.monthly;
-                      const progress = Math.max(0, Math.min(100, Number(g.progressPercent) || 0));
-                      const goalStatus = (GOAL_STATUS_META[g.status as GoalStatus] ? g.status : (progress >= 100 ? 'finished' : progress > 0 ? 'in_progress' : 'not_started')) as GoalStatus;
-                      const statusMeta = GOAL_STATUS_META[goalStatus];
-                      const isCompleted = goalStatus === 'finished';
-                      let progColor = 'bg-red-500';
-                      let progText = 'text-red-600 dark:text-red-400';
-                      if (isCompleted) { progColor = 'bg-emerald-500'; progText = 'text-emerald-600 dark:text-emerald-400'; }
-                      else if (progress >= 75) { progColor = 'bg-blue-500'; progText = 'text-blue-600 dark:text-blue-400'; }
-                      else if (progress >= 50) { progColor = 'bg-amber-500'; progText = 'text-amber-600 dark:text-amber-400'; }
-                      else if (progress >= 25) { progColor = 'bg-pink-500'; progText = 'text-pink-600 dark:text-pink-400'; }
-
-                      const expanded = expandedGoalIds.has(g.id);
-                      return (
-                        <Card key={g.id} className="shadow-sm overflow-hidden gap-4 py-4">
-                          <div className="h-1 bg-gradient-to-r from-blue-500 to-blue-700" />
-                          <CardContent className="px-5 py-4">
-                            {/* Header */}
-                            <div
-                              className="flex items-start gap-3 cursor-pointer select-none"
-                              onClick={() => toggleGoalExpanded(g.id)}
-                            >
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap mb-2">
-                                  <Badge className="border-0 text-white bg-gradient-to-r from-blue-500 to-blue-700 shadow-sm">
-                                    {tf.label}
-                                  </Badge>
-                                  <Badge className={`border-0 ${statusMeta.badge}`}>
-                                    <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${statusMeta.dot}`} />
-                                    {statusMeta.label}
-                                  </Badge>
-                                </div>
-                                <h3 className="text-sm font-bold leading-snug">{g.title}</h3>
-                                {g.description && (
-                                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{g.description}</p>
-                                )}
-                              </div>
-                              <div className="flex gap-1 shrink-0 items-center" onClick={(e) => e.stopPropagation()}>
-                                {canEditGoals && (
-                                  <>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-7 w-7 text-muted-foreground hover:text-blue-600"
-                                      onClick={() => router.push(isSelfProfile ? `/profile/goals/${g.id}/edit` : `/employees/${id}/goals/${g.id}/edit`)}
-                                    >
-                                      <KeyRound className="h-3.5 w-3.5 rotate-180" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-7 w-7 text-muted-foreground hover:text-red-600"
-                                      onClick={() => deleteGoal(g.id)}
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </Button>
-                                  </>
-                                )}
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 text-muted-foreground"
-                                  onClick={() => toggleGoalExpanded(g.id)}
-                                  aria-label={expanded ? 'Collapse' : 'Expand'}
-                                >
-                                  <ChevronDown
-                                    className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`}
-                                  />
-                                </Button>
-                              </div>
-                            </div>
-
-                            {expanded && (
-                            <>
-                            {/* Progress bar */}
-                            <div className="mt-3 flex items-center gap-3">
-                              <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full transition-all ${progColor}`}
-                                  style={{ width: `${progress}%` }}
-                                />
-                              </div>
-                              <span className={`text-sm font-bold ${progText} tabular-nums`}>{progress}%</span>
-                            </div>
-
-                            {/* Meta */}
-                            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-                              {g.createdByName && (
-                                <span className="flex items-center gap-1">
-                                  <User className="h-3 w-3" /> by {g.createdByName}
-                                </span>
-                              )}
-                              {g.targetDate && (
-                                <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
-                                  <Target className="h-3 w-3" /> Target: {format(new Date(g.targetDate), 'MMM d, yyyy')}
-                                </span>
-                              )}
-                              {g.createdAt && (
-                                <span>Created {format(new Date(g.createdAt), 'MMM d')}</span>
-                              )}
-                            </div>
-
-                            {/* Quick update */}
-                            {canEditGoals && (
-                              <div className="mt-3 pt-3 border-t space-y-2">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground w-14 shrink-0">
-                                    Status:
-                                  </span>
-                                  {(['not_started', 'started', 'in_progress', 'finished'] as GoalStatus[]).map((s) => {
-                                    const meta = GOAL_STATUS_META[s];
-                                    const selected = goalStatus === s;
-                                    return (
-                                      <button
-                                        key={s}
-                                        onClick={() => quickUpdateStatus(g.id, s)}
-                                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${
-                                          selected
-                                            ? meta.pill
-                                            : 'text-muted-foreground border-border hover:bg-muted'
-                                        }`}
-                                      >
-                                        {meta.label}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                                {!isCompleted && (
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground w-14 shrink-0">
-                                      Progress:
-                                    </span>
-                                    {[25, 50, 75, 100].map((step) => (
-                                      <button
-                                        key={step}
-                                        onClick={() => quickUpdateProgress(g.id, step)}
-                                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${
-                                          progress >= step
-                                            ? `${progText} border-current bg-opacity-10`
-                                            : 'text-muted-foreground border-border hover:bg-muted'
-                                        }`}
-                                      >
-                                        {step}%
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            </>
-                            )}
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* ── PIP tab (admin/HR only) ───── */}
-            {activeTab === 'pip' && (canManageAllDocs || isSelf) && (
-              <div className="space-y-4">
-                <Card className="shadow-sm">
-                  <CardContent className="px-5 py-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-base font-semibold flex items-center gap-2">
-                        <AlertTriangle className="h-4 w-4 text-amber-500" /> Performance Improvement Plans
-                      </h2>
-                      {canManageAllDocs && !isSelf && (
-                        <Button size="sm" onClick={() => { setPipForm({ reason: '', improvementAreas: '', startDate: format(new Date(), 'yyyy-MM-dd'), endDate: '', goals: '' }); setPipDialogOpen(true); }}>
-                          <Plus className="h-3.5 w-3.5 mr-1" /> Initiate PIP
-                        </Button>
-                      )}
+              {/* Goals list */}
+              {goals.length === 0 ? (
+                <Card className="shadow-sm ">
+                  <CardContent className="px-5 py-12 text-center">
+                    <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-950/30 mb-3">
+                      <Target className="h-8 w-8 text-emerald-500/60" />
                     </div>
-
-                    {pips.length === 0 ? (
-                      <div className="text-center py-8">
-                        <AlertTriangle className="h-10 w-10 text-muted-foreground/20 mx-auto mb-3" />
-                        <p className="text-sm text-muted-foreground">No PIPs on record</p>
-                        <p className="text-xs text-muted-foreground mt-1">Performance improvement plans will appear here</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {pips.map((pip: any) => {
-                          const statusColors: Record<string, string> = {
-                            active: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-                            extended: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-                            completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-                            terminated: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-                          };
-                          const daysLeft = pip.endDate ? Math.ceil((new Date(pip.endDate + 'T00:00:00').getTime() - Date.now()) / 86400000) : 0;
-                          return (
-                            <Card key={pip.id} className={`border-l-4 cursor-pointer hover:shadow-md transition-shadow ${pip.status === 'active' ? 'border-l-amber-500' : pip.status === 'completed' ? 'border-l-emerald-500' : pip.status === 'terminated' ? 'border-l-red-500' : 'border-l-orange-500'}`} onClick={() => setViewPip(pip)}>
-                              <CardContent className="px-4 py-3 space-y-2">
-                                <div className="flex items-start justify-between gap-2">
-                                  <div>
-                                    <Badge className={`text-[10px] border-0 ${statusColors[pip.status] ?? ''}`}>{pip.status.charAt(0).toUpperCase() + pip.status.slice(1)}</Badge>
-                                    {pip.status === 'active' && daysLeft > 0 && <span className="text-[10px] text-muted-foreground ml-2">{daysLeft} days remaining</span>}
-                                    {pip.status === 'active' && daysLeft <= 0 && <span className="text-[10px] text-red-500 ml-2 font-medium">Overdue</span>}
-                                  </div>
-                                  <div className="flex gap-1">
-                                    {canManageAllDocs && (
-                                      <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2" onClick={(ev) => { ev.stopPropagation(); setPipUpdateId(pip.id); setPipUpdateStatus(pip.status); setPipUpdateNotes(pip.reviewNotes ?? ''); setPipUpdateOutcome(pip.outcome ?? ''); }}>
-                                        Review
-                                      </Button>
-                                    )}
-                                    {isSelf && pip.status === 'active' && !(pip.reviewNotes ?? '').includes('Acknowledged by') && (
-                                      <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 text-amber-600 border-amber-300"
-                                        onClick={(ev) => { ev.stopPropagation(); setPipAckId(pip.id); setPipAckNote(''); }}>
-                                        <CheckCircle2 className="h-3 w-3 mr-1" /> Acknowledge
-                                      </Button>
-                                    )}
-                                  </div>
-                                </div>
-                                <div>
-                                  <p className="text-sm font-medium">{pip.reason}</p>
-                                  <p className="text-xs text-muted-foreground mt-1">{pip.improvementAreas}</p>
-                                </div>
-                                <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-                                  <span>Start: {pip.startDate ? format(new Date(pip.startDate + 'T00:00:00'), 'dd MMM yyyy') : '—'}</span>
-                                  <span>End: {pip.endDate ? format(new Date(pip.endDate + 'T00:00:00'), 'dd MMM yyyy') : '—'}</span>
-                                  <span>By: {pip.initiatedByName}</span>
-                                </div>
-                                {pip.goals && <p className="text-xs"><span className="font-medium">Goals:</span> {pip.goals}</p>}
-                                {pip.outcome && <p className="text-xs"><span className="font-medium">Outcome:</span> {pip.outcome}</p>}
-                                {pip.reviewNotes && <p className="text-xs text-muted-foreground italic">&quot;{pip.reviewNotes}&quot;</p>}
-                              </CardContent>
-                            </Card>
-                          );
-                        })}
-                      </div>
-                    )}
+                    <p className="text-sm font-semibold">No goals yet</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {canEditGoals ? 'Click "Add Goal" to create your first goal' : 'Goals will appear here once created'}
+                    </p>
                   </CardContent>
                 </Card>
-              </div>
-            )}
-
-            {/* PIP Create Dialog */}
-            <Dialog open={pipDialogOpen} onOpenChange={setPipDialogOpen}>
-              <DialogContent className="sm:max-w-lg">
-                <DialogHeader><DialogTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-amber-500" /> Initiate PIP</DialogTitle></DialogHeader>
+              ) : (
                 <div className="space-y-3">
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Reason for PIP *</label>
-                    <Textarea value={pipForm.reason} onChange={(e) => setPipForm(p => ({ ...p, reason: e.target.value }))} placeholder="Why is this PIP being initiated?" rows={2} className="mt-1" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Areas for Improvement *</label>
-                    <Textarea value={pipForm.improvementAreas} onChange={(e) => setPipForm(p => ({ ...p, improvementAreas: e.target.value }))} placeholder="Specific areas the employee needs to improve..." rows={2} className="mt-1" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Goals / Expectations</label>
-                    <Textarea value={pipForm.goals} onChange={(e) => setPipForm(p => ({ ...p, goals: e.target.value }))} placeholder="What does successful improvement look like?" rows={2} className="mt-1" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground">Start Date *</label>
-                      <Input type="date" value={pipForm.startDate} onChange={(e) => setPipForm(p => ({ ...p, startDate: e.target.value }))} className="mt-1" />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground">End Date *</label>
-                      <Input type="date" value={pipForm.endDate} onChange={(e) => setPipForm(p => ({ ...p, endDate: e.target.value }))} className="mt-1" min={pipForm.startDate} />
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-2 pt-2">
-                    <Button variant="outline" size="sm" onClick={() => setPipDialogOpen(false)}>Cancel</Button>
-                    <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white" disabled={!pipForm.reason || !pipForm.improvementAreas || !pipForm.startDate || !pipForm.endDate}
-                      onClick={async () => {
-                        try {
-                          await (await import('@/lib/api/axios-instance')).api.post(`/employees/${id}/pips`, pipForm);
-                          toast.success('PIP initiated');
-                          qc.invalidateQueries({ queryKey: ['employee-pips', id] });
-                          setPipDialogOpen(false);
-                        } catch (e: any) { toast.error(e?.response?.data?.message ?? 'Failed'); }
-                      }}>
-                      Initiate PIP
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+                  {goals.map((g: any) => {
+                    const timeframeMeta: Record<string, { label: string; gradient: string; textColor: string; bg: string }> = {
+                      monthly: { label: 'Monthly', gradient: 'from-indigo-500 to-indigo-700', textColor: 'text-indigo-700 dark:text-indigo-400', bg: 'bg-indigo-100 dark:bg-indigo-900/30' },
+                      quarterly: { label: 'Quarterly', gradient: 'from-teal-500 to-teal-700', textColor: 'text-teal-700 dark:text-teal-400', bg: 'bg-teal-100 dark:bg-teal-900/30' },
+                      half_yearly: { label: 'Half-Yearly', gradient: 'from-amber-500 to-orange-600', textColor: 'text-amber-700 dark:text-amber-400', bg: 'bg-amber-100 dark:bg-amber-900/30' },
+                      yearly: { label: 'Yearly', gradient: 'from-pink-500 to-rose-600', textColor: 'text-pink-700 dark:text-pink-400', bg: 'bg-pink-100 dark:bg-pink-900/30' },
+                    };
+                    const tf = timeframeMeta[g.timeframe ?? 'monthly'] ?? timeframeMeta.monthly;
+                    const progress = Math.max(0, Math.min(100, Number(g.progressPercent) || 0));
+                    const goalStatus = (GOAL_STATUS_META[g.status as GoalStatus] ? g.status : (progress >= 100 ? 'finished' : progress > 0 ? 'in_progress' : 'not_started')) as GoalStatus;
+                    const statusMeta = GOAL_STATUS_META[goalStatus];
+                    const isCompleted = goalStatus === 'finished';
+                    let progColor = 'bg-red-500';
+                    let progText = 'text-red-600 dark:text-red-400';
+                    if (isCompleted) { progColor = 'bg-emerald-500'; progText = 'text-emerald-600 dark:text-emerald-400'; }
+                    else if (progress >= 75) { progColor = 'bg-blue-500'; progText = 'text-blue-600 dark:text-blue-400'; }
+                    else if (progress >= 50) { progColor = 'bg-amber-500'; progText = 'text-amber-600 dark:text-amber-400'; }
+                    else if (progress >= 25) { progColor = 'bg-pink-500'; progText = 'text-pink-600 dark:text-pink-400'; }
 
-            {/* PIP Detail Dialog */}
-            <Dialog open={!!viewPip} onOpenChange={(v) => { if (!v) setViewPip(null); }}>
-              <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <AlertTriangle className="h-5 w-5 text-amber-500" /> PIP Details
-                  </DialogTitle>
-                </DialogHeader>
-                {viewPip && (() => {
-                  const pip = viewPip;
-                  const isAcknowledged = (pip.reviewNotes ?? '').includes('Acknowledged by');
-                  const statusColors: Record<string, string> = {
-                    active: 'bg-amber-100 text-amber-700', extended: 'bg-orange-100 text-orange-700',
-                    completed: 'bg-emerald-100 text-emerald-700', terminated: 'bg-red-100 text-red-700',
-                  };
-                  const daysLeft = pip.endDate ? Math.ceil((new Date(pip.endDate + 'T00:00:00').getTime() - Date.now()) / 86400000) : 0;
-                  return (
-                    <div className="space-y-4">
-                      {/* Status + Timeline */}
-                      <div className="flex items-center gap-3">
-                        <Badge className={`text-xs border-0 ${statusColors[pip.status] ?? ''}`}>{pip.status.charAt(0).toUpperCase() + pip.status.slice(1)}</Badge>
-                        {pip.status === 'active' && daysLeft > 0 && <span className="text-xs text-muted-foreground">{daysLeft} days remaining</span>}
-                        {pip.status === 'active' && daysLeft <= 0 && <span className="text-xs text-red-500 font-medium">Overdue</span>}
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          {isAcknowledged ? <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-300">Acknowledged</Badge> : <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">Not Acknowledged</Badge>}
-                        </span>
-                      </div>
-
-                      {/* Dates */}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="rounded-lg bg-muted/50 p-3">
-                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Start Date</p>
-                          <p className="text-sm font-medium mt-1">{pip.startDate ? format(new Date(pip.startDate + 'T00:00:00'), 'dd MMM yyyy') : '—'}</p>
-                        </div>
-                        <div className="rounded-lg bg-muted/50 p-3">
-                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">End Date</p>
-                          <p className="text-sm font-medium mt-1">{pip.endDate ? format(new Date(pip.endDate + 'T00:00:00'), 'dd MMM yyyy') : '—'}</p>
-                        </div>
-                      </div>
-
-                      {/* Reason */}
-                      <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Reason for PIP</p>
-                        <p className="text-sm bg-red-50 dark:bg-red-950/20 rounded-lg p-3 border border-red-200 dark:border-red-800">{pip.reason}</p>
-                      </div>
-
-                      {/* Improvement Areas */}
-                      <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Areas for Improvement</p>
-                        <p className="text-sm bg-amber-50 dark:bg-amber-950/20 rounded-lg p-3 border border-amber-200 dark:border-amber-800">{pip.improvementAreas}</p>
-                      </div>
-
-                      {/* Goals */}
-                      {pip.goals && (
-                        <div>
-                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Goals / Expectations</p>
-                          <p className="text-sm bg-blue-50 dark:bg-blue-950/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">{pip.goals}</p>
-                        </div>
-                      )}
-
-                      {/* Outcome */}
-                      {pip.outcome && (
-                        <div>
-                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Outcome</p>
-                          <p className="text-sm bg-emerald-50 dark:bg-emerald-950/20 rounded-lg p-3 border border-emerald-200 dark:border-emerald-800">{pip.outcome}</p>
-                        </div>
-                      )}
-
-                      {/* Review Notes / Acknowledgment */}
-                      {pip.reviewNotes && (
-                        <div>
-                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Notes & Acknowledgment</p>
-                          <div className="space-y-2">
-                            {pip.reviewNotes.split('\n').filter(Boolean).map((note: string, i: number) => {
-                              const isAck = note.includes('Acknowledged by');
-                              return (
-                                <div key={i} className={`text-sm rounded-lg p-3 border ${isAck ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800' : 'bg-muted/50 border-border'}`}>
-                                  {isAck && <CheckCircle2 className="inline h-3.5 w-3.5 text-emerald-500 mr-1.5" />}
-                                  {note}
-                                </div>
-                              );
-                            })}
+                    const expanded = expandedGoalIds.has(g.id);
+                    return (
+                      <Card key={g.id} className="shadow-sm overflow-hidden gap-4 py-4">
+                        <div className="h-1 bg-gradient-to-r from-blue-500 to-blue-700" />
+                        <CardContent className="px-5 py-4">
+                          {/* Header */}
+                          <div
+                            className="flex items-start gap-3 cursor-pointer select-none"
+                            onClick={() => toggleGoalExpanded(g.id)}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap mb-2">
+                                <Badge className="border-0 text-white bg-gradient-to-r from-blue-500 to-blue-700 shadow-sm">
+                                  {tf.label}
+                                </Badge>
+                                <Badge className={`border-0 ${statusMeta.badge}`}>
+                                  <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${statusMeta.dot}`} />
+                                  {statusMeta.label}
+                                </Badge>
+                              </div>
+                              <h3 className="text-sm font-bold leading-snug">{g.title}</h3>
+                              {g.description && (
+                                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{g.description}</p>
+                              )}
+                            </div>
+                            <div className="flex gap-1 shrink-0 items-center" onClick={(e) => e.stopPropagation()}>
+                              {canEditGoals && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-muted-foreground hover:text-blue-600"
+                                    onClick={() => router.push(isSelfProfile ? `/profile/goals/${g.id}/edit` : `/employees/${id}/goals/${g.id}/edit`)}
+                                  >
+                                    <KeyRound className="h-3.5 w-3.5 rotate-180" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-7 w-7 text-muted-foreground hover:text-red-600"
+                                    onClick={() => deleteGoal(g.id)}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-muted-foreground"
+                                onClick={() => toggleGoalExpanded(g.id)}
+                                aria-label={expanded ? 'Collapse' : 'Expand'}
+                              >
+                                <ChevronDown
+                                  className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`}
+                                />
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      )}
 
-                      {/* Initiated by */}
-                      <div className="text-xs text-muted-foreground border-t pt-3">
-                        <p>Initiated by <span className="font-semibold text-foreground">{pip.initiatedByName}</span> ({pip.initiatedByType})</p>
-                        <p>Created: {pip.createdAt ? format(new Date(pip.createdAt), 'dd MMM yyyy, hh:mm a') : '—'}</p>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </DialogContent>
-            </Dialog>
+                          {expanded && (
+                            <>
+                              {/* Progress bar */}
+                              <div className="mt-3 flex items-center gap-3">
+                                <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all ${progColor}`}
+                                    style={{ width: `${progress}%` }}
+                                  />
+                                </div>
+                                <span className={`text-sm font-bold ${progText} tabular-nums`}>{progress}%</span>
+                              </div>
 
-            {/* PIP Acknowledge Dialog */}
-            <Dialog open={!!pipAckId} onOpenChange={(v) => { if (!v) { setPipAckId(null); setPipAckNote(''); } }}>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 text-amber-500" /> Acknowledge PIP
-                  </DialogTitle>
-                </DialogHeader>
-                <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground">
-                    By acknowledging, you confirm that you have read and understood the Performance Improvement Plan.
-                  </p>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Your Response / Comments *</label>
-                    <Textarea
-                      value={pipAckNote}
-                      onChange={(e) => setPipAckNote(e.target.value)}
-                      placeholder="Write your acknowledgment, questions, or commitment plan..."
-                      rows={4}
-                      className="mt-1"
-                    />
+                              {/* Meta */}
+                              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                                {g.createdByName && (
+                                  <span className="flex items-center gap-1">
+                                    <User className="h-3 w-3" /> by {g.createdByName}
+                                  </span>
+                                )}
+                                {g.targetDate && (
+                                  <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                                    <Target className="h-3 w-3" /> Target: {format(new Date(g.targetDate), 'MMM d, yyyy')}
+                                  </span>
+                                )}
+                                {g.createdAt && (
+                                  <span>Created {format(new Date(g.createdAt), 'MMM d')}</span>
+                                )}
+                              </div>
+
+                              {/* Quick update */}
+                              {canEditGoals && (
+                                <div className="mt-3 pt-3 border-t space-y-2">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground w-14 shrink-0">
+                                      Status:
+                                    </span>
+                                    {(['not_started', 'started', 'in_progress', 'finished'] as GoalStatus[]).map((s) => {
+                                      const meta = GOAL_STATUS_META[s];
+                                      const selected = goalStatus === s;
+                                      return (
+                                        <button
+                                          key={s}
+                                          onClick={() => quickUpdateStatus(g.id, s)}
+                                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${selected
+                                            ? meta.pill
+                                            : 'text-muted-foreground border-border hover:bg-muted'
+                                            }`}
+                                        >
+                                          {meta.label}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  {!isCompleted && (
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground w-14 shrink-0">
+                                        Progress:
+                                      </span>
+                                      {[25, 50, 75, 100].map((step) => (
+                                        <button
+                                          key={step}
+                                          onClick={() => quickUpdateProgress(g.id, step)}
+                                          className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${progress >= step
+                                            ? `${progText} border-current bg-opacity-10`
+                                            : 'text-muted-foreground border-border hover:bg-muted'
+                                            }`}
+                                        >
+                                          {step}%
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── PIP tab (admin/HR only) ───── */}
+          {activeTab === 'pip' && (canManageAllDocs || isSelf) && (
+            <div className="space-y-4">
+              <Card className="shadow-sm">
+                <CardContent className="px-5 py-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-base font-semibold flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-500" /> Performance Improvement Plans
+                    </h2>
+                    {canManageAllDocs && !isSelf && (
+                      <Button size="sm" onClick={() => { setPipForm({ reason: '', improvementAreas: '', startDate: format(new Date(), 'yyyy-MM-dd'), endDate: '', goals: '' }); setPipDialogOpen(true); }}>
+                        <Plus className="h-3.5 w-3.5 mr-1" /> Initiate PIP
+                      </Button>
+                    )}
                   </div>
-                  <div className="flex justify-end gap-2 pt-2">
-                    <Button variant="outline" size="sm" onClick={() => { setPipAckId(null); setPipAckNote(''); }}>Cancel</Button>
-                    <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white" disabled={!pipAckNote.trim()}
-                      onClick={async () => {
-                        try {
-                          await (await import('@/lib/api/axios-instance')).api.patch(`/employee/employees/pips/${pipAckId}/acknowledge`, { note: pipAckNote.trim() });
-                          toast.success('PIP acknowledged');
-                          qc.invalidateQueries({ queryKey: ['employee-pips', id] });
-                          setPipAckId(null);
-                          setPipAckNote('');
-                        } catch (e: any) { toast.error(e?.response?.data?.message ?? 'Failed'); }
-                      }}>
-                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Acknowledge
-                    </Button>
+
+                  {pips.length === 0 ? (
+                    <div className="text-center py-8">
+                      <AlertTriangle className="h-10 w-10 text-muted-foreground/20 mx-auto mb-3" />
+                      <p className="text-sm text-muted-foreground">No PIPs on record</p>
+                      <p className="text-xs text-muted-foreground mt-1">Performance improvement plans will appear here</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {pips.map((pip: any) => {
+                        const statusColors: Record<string, string> = {
+                          active: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+                          extended: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+                          completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+                          terminated: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+                        };
+                        const daysLeft = pip.endDate ? Math.ceil((new Date(pip.endDate + 'T00:00:00').getTime() - Date.now()) / 86400000) : 0;
+                        return (
+                          <Card key={pip.id} className={`border-l-4 cursor-pointer hover:shadow-md transition-shadow ${pip.status === 'active' ? 'border-l-amber-500' : pip.status === 'completed' ? 'border-l-emerald-500' : pip.status === 'terminated' ? 'border-l-red-500' : 'border-l-orange-500'}`} onClick={() => setViewPip(pip)}>
+                            <CardContent className="px-4 py-3 space-y-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <Badge className={`text-[10px] border-0 ${statusColors[pip.status] ?? ''}`}>{pip.status.charAt(0).toUpperCase() + pip.status.slice(1)}</Badge>
+                                  {pip.status === 'active' && daysLeft > 0 && <span className="text-[10px] text-muted-foreground ml-2">{daysLeft} days remaining</span>}
+                                  {pip.status === 'active' && daysLeft <= 0 && <span className="text-[10px] text-red-500 ml-2 font-medium">Overdue</span>}
+                                </div>
+                                <div className="flex gap-1">
+                                  {canManageAllDocs && (
+                                    <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2" onClick={(ev) => { ev.stopPropagation(); setPipUpdateId(pip.id); setPipUpdateStatus(pip.status); setPipUpdateNotes(pip.reviewNotes ?? ''); setPipUpdateOutcome(pip.outcome ?? ''); }}>
+                                      Review
+                                    </Button>
+                                  )}
+                                  {isSelf && pip.status === 'active' && !(pip.reviewNotes ?? '').includes('Acknowledged by') && (
+                                    <Button size="sm" variant="outline" className="h-6 text-[10px] px-2 text-amber-600 border-amber-300"
+                                      onClick={(ev) => { ev.stopPropagation(); setPipAckId(pip.id); setPipAckNote(''); }}>
+                                      <CheckCircle2 className="h-3 w-3 mr-1" /> Acknowledge
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium">{pip.reason}</p>
+                                <p className="text-xs text-muted-foreground mt-1">{pip.improvementAreas}</p>
+                              </div>
+                              <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                                <span>Start: {pip.startDate ? format(new Date(pip.startDate + 'T00:00:00'), 'dd MMM yyyy') : '—'}</span>
+                                <span>End: {pip.endDate ? format(new Date(pip.endDate + 'T00:00:00'), 'dd MMM yyyy') : '—'}</span>
+                                <span>By: {pip.initiatedByName}</span>
+                              </div>
+                              {pip.goals && <p className="text-xs"><span className="font-medium">Goals:</span> {pip.goals}</p>}
+                              {pip.outcome && <p className="text-xs"><span className="font-medium">Outcome:</span> {pip.outcome}</p>}
+                              {pip.reviewNotes && <p className="text-xs text-muted-foreground italic">&quot;{pip.reviewNotes}&quot;</p>}
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* PIP Create Dialog */}
+          <Dialog open={pipDialogOpen} onOpenChange={setPipDialogOpen}>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader><DialogTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-amber-500" /> Initiate PIP</DialogTitle></DialogHeader>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Reason for PIP *</label>
+                  <Textarea value={pipForm.reason} onChange={(e) => setPipForm(p => ({ ...p, reason: e.target.value }))} placeholder="Why is this PIP being initiated?" rows={2} className="mt-1" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Areas for Improvement *</label>
+                  <Textarea value={pipForm.improvementAreas} onChange={(e) => setPipForm(p => ({ ...p, improvementAreas: e.target.value }))} placeholder="Specific areas the employee needs to improve..." rows={2} className="mt-1" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Goals / Expectations</label>
+                  <Textarea value={pipForm.goals} onChange={(e) => setPipForm(p => ({ ...p, goals: e.target.value }))} placeholder="What does successful improvement look like?" rows={2} className="mt-1" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">Start Date *</label>
+                    <Input type="date" value={pipForm.startDate} onChange={(e) => setPipForm(p => ({ ...p, startDate: e.target.value }))} className="mt-1" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground">End Date *</label>
+                    <Input type="date" value={pipForm.endDate} onChange={(e) => setPipForm(p => ({ ...p, endDate: e.target.value }))} className="mt-1" min={pipForm.startDate} />
                   </div>
                 </div>
-              </DialogContent>
-            </Dialog>
-
-            {/* PIP Review Dialog */}
-            <Dialog open={!!pipUpdateId} onOpenChange={(v) => { if (!v) setPipUpdateId(null); }}>
-              <DialogContent className="sm:max-w-md">
-                <DialogHeader><DialogTitle>Review PIP</DialogTitle></DialogHeader>
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Status</label>
-                    <Select value={pipUpdateStatus} onValueChange={setPipUpdateStatus}>
-                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="extended">Extended</SelectItem>
-                        <SelectItem value="completed">Completed (Improved)</SelectItem>
-                        <SelectItem value="terminated">Terminated (No Improvement)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Review Notes</label>
-                    <Textarea value={pipUpdateNotes} onChange={(e) => setPipUpdateNotes(e.target.value)} placeholder="Manager's review notes..." rows={2} className="mt-1" />
-                  </div>
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground">Outcome</label>
-                    <Textarea value={pipUpdateOutcome} onChange={(e) => setPipUpdateOutcome(e.target.value)} placeholder="Final outcome / next steps..." rows={2} className="mt-1" />
-                  </div>
-                  <div className="flex justify-end gap-2 pt-2">
-                    <Button variant="outline" size="sm" onClick={() => setPipUpdateId(null)}>Cancel</Button>
-                    <Button size="sm" onClick={async () => {
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" size="sm" onClick={() => setPipDialogOpen(false)}>Cancel</Button>
+                  <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white" disabled={!pipForm.reason || !pipForm.improvementAreas || !pipForm.startDate || !pipForm.endDate}
+                    onClick={async () => {
                       try {
-                        await (await import('@/lib/api/axios-instance')).api.patch(`/employees/pips/${pipUpdateId}`, { status: pipUpdateStatus, reviewNotes: pipUpdateNotes || undefined, outcome: pipUpdateOutcome || undefined });
-                        toast.success('PIP updated');
+                        await (await import('@/lib/api/axios-instance')).api.post(`/employees/${id}/pips`, pipForm);
+                        toast.success('PIP initiated');
                         qc.invalidateQueries({ queryKey: ['employee-pips', id] });
-                        setPipUpdateId(null);
+                        setPipDialogOpen(false);
                       } catch (e: any) { toast.error(e?.response?.data?.message ?? 'Failed'); }
                     }}>
-                      Update PIP
-                    </Button>
-                  </div>
+                    Initiate PIP
+                  </Button>
                 </div>
-              </DialogContent>
-            </Dialog>
+              </div>
+            </DialogContent>
+          </Dialog>
 
-            {/* ── Security tab ───── */}
-            {activeTab === 'security' && (isSelf || canManageAllDocs) && (<>
-              {/* Password change (self only) */}
-              {isSelf && (
+          {/* PIP Detail Dialog */}
+          <Dialog open={!!viewPip} onOpenChange={(v) => { if (!v) setViewPip(null); }}>
+            <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-amber-500" /> PIP Details
+                </DialogTitle>
+              </DialogHeader>
+              {viewPip && (() => {
+                const pip = viewPip;
+                const isAcknowledged = (pip.reviewNotes ?? '').includes('Acknowledged by');
+                const statusColors: Record<string, string> = {
+                  active: 'bg-amber-100 text-amber-700', extended: 'bg-orange-100 text-orange-700',
+                  completed: 'bg-emerald-100 text-emerald-700', terminated: 'bg-red-100 text-red-700',
+                };
+                const daysLeft = pip.endDate ? Math.ceil((new Date(pip.endDate + 'T00:00:00').getTime() - Date.now()) / 86400000) : 0;
+                return (
+                  <div className="space-y-4">
+                    {/* Status + Timeline */}
+                    <div className="flex items-center gap-3">
+                      <Badge className={`text-xs border-0 ${statusColors[pip.status] ?? ''}`}>{pip.status.charAt(0).toUpperCase() + pip.status.slice(1)}</Badge>
+                      {pip.status === 'active' && daysLeft > 0 && <span className="text-xs text-muted-foreground">{daysLeft} days remaining</span>}
+                      {pip.status === 'active' && daysLeft <= 0 && <span className="text-xs text-red-500 font-medium">Overdue</span>}
+                      <span className="ml-auto text-xs text-muted-foreground">
+                        {isAcknowledged ? <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-300">Acknowledged</Badge> : <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-300">Not Acknowledged</Badge>}
+                      </span>
+                    </div>
+
+                    {/* Dates */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-lg bg-muted/50 p-3">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Start Date</p>
+                        <p className="text-sm font-medium mt-1">{pip.startDate ? format(new Date(pip.startDate + 'T00:00:00'), 'dd MMM yyyy') : '—'}</p>
+                      </div>
+                      <div className="rounded-lg bg-muted/50 p-3">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">End Date</p>
+                        <p className="text-sm font-medium mt-1">{pip.endDate ? format(new Date(pip.endDate + 'T00:00:00'), 'dd MMM yyyy') : '—'}</p>
+                      </div>
+                    </div>
+
+                    {/* Reason */}
+                    <div>
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Reason for PIP</p>
+                      <p className="text-sm bg-red-50 dark:bg-red-950/20 rounded-lg p-3 border border-red-200 dark:border-red-800">{pip.reason}</p>
+                    </div>
+
+                    {/* Improvement Areas */}
+                    <div>
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Areas for Improvement</p>
+                      <p className="text-sm bg-amber-50 dark:bg-amber-950/20 rounded-lg p-3 border border-amber-200 dark:border-amber-800">{pip.improvementAreas}</p>
+                    </div>
+
+                    {/* Goals */}
+                    {pip.goals && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Goals / Expectations</p>
+                        <p className="text-sm bg-blue-50 dark:bg-blue-950/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">{pip.goals}</p>
+                      </div>
+                    )}
+
+                    {/* Outcome */}
+                    {pip.outcome && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Outcome</p>
+                        <p className="text-sm bg-emerald-50 dark:bg-emerald-950/20 rounded-lg p-3 border border-emerald-200 dark:border-emerald-800">{pip.outcome}</p>
+                      </div>
+                    )}
+
+                    {/* Review Notes / Acknowledgment */}
+                    {pip.reviewNotes && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Notes & Acknowledgment</p>
+                        <div className="space-y-2">
+                          {pip.reviewNotes.split('\n').filter(Boolean).map((note: string, i: number) => {
+                            const isAck = note.includes('Acknowledged by');
+                            return (
+                              <div key={i} className={`text-sm rounded-lg p-3 border ${isAck ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800' : 'bg-muted/50 border-border'}`}>
+                                {isAck && <CheckCircle2 className="inline h-3.5 w-3.5 text-emerald-500 mr-1.5" />}
+                                {note}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Initiated by */}
+                    <div className="text-xs text-muted-foreground border-t pt-3">
+                      <p>Initiated by <span className="font-semibold text-foreground">{pip.initiatedByName}</span> ({pip.initiatedByType})</p>
+                      <p>Created: {pip.createdAt ? format(new Date(pip.createdAt), 'dd MMM yyyy, hh:mm a') : '—'}</p>
+                    </div>
+                  </div>
+                );
+              })()}
+            </DialogContent>
+          </Dialog>
+
+          {/* PIP Acknowledge Dialog */}
+          <Dialog open={!!pipAckId} onOpenChange={(v) => { if (!v) { setPipAckId(null); setPipAckNote(''); } }}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-amber-500" /> Acknowledge PIP
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  By acknowledging, you confirm that you have read and understood the Performance Improvement Plan.
+                </p>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Your Response / Comments *</label>
+                  <Textarea
+                    value={pipAckNote}
+                    onChange={(e) => setPipAckNote(e.target.value)}
+                    placeholder="Write your acknowledgment, questions, or commitment plan..."
+                    rows={4}
+                    className="mt-1"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" size="sm" onClick={() => { setPipAckId(null); setPipAckNote(''); }}>Cancel</Button>
+                  <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white" disabled={!pipAckNote.trim()}
+                    onClick={async () => {
+                      try {
+                        await (await import('@/lib/api/axios-instance')).api.patch(`/employee/employees/pips/${pipAckId}/acknowledge`, { note: pipAckNote.trim() });
+                        toast.success('PIP acknowledged');
+                        qc.invalidateQueries({ queryKey: ['employee-pips', id] });
+                        setPipAckId(null);
+                        setPipAckNote('');
+                      } catch (e: any) { toast.error(e?.response?.data?.message ?? 'Failed'); }
+                    }}>
+                    <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Acknowledge
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* PIP Review Dialog */}
+          <Dialog open={!!pipUpdateId} onOpenChange={(v) => { if (!v) setPipUpdateId(null); }}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader><DialogTitle>Review PIP</DialogTitle></DialogHeader>
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Status</label>
+                  <Select value={pipUpdateStatus} onValueChange={setPipUpdateStatus}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="extended">Extended</SelectItem>
+                      <SelectItem value="completed">Completed (Improved)</SelectItem>
+                      <SelectItem value="terminated">Terminated (No Improvement)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Review Notes</label>
+                  <Textarea value={pipUpdateNotes} onChange={(e) => setPipUpdateNotes(e.target.value)} placeholder="Manager's review notes..." rows={2} className="mt-1" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Outcome</label>
+                  <Textarea value={pipUpdateOutcome} onChange={(e) => setPipUpdateOutcome(e.target.value)} placeholder="Final outcome / next steps..." rows={2} className="mt-1" />
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" size="sm" onClick={() => setPipUpdateId(null)}>Cancel</Button>
+                  <Button size="sm" onClick={async () => {
+                    try {
+                      await (await import('@/lib/api/axios-instance')).api.patch(`/employees/pips/${pipUpdateId}`, { status: pipUpdateStatus, reviewNotes: pipUpdateNotes || undefined, outcome: pipUpdateOutcome || undefined });
+                      toast.success('PIP updated');
+                      qc.invalidateQueries({ queryKey: ['employee-pips', id] });
+                      setPipUpdateId(null);
+                    } catch (e: any) { toast.error(e?.response?.data?.message ?? 'Failed'); }
+                  }}>
+                    Update PIP
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* ── Security tab ───── */}
+          {activeTab === 'security' && (isSelf || canManageAllDocs) && (<>
+            {/* Password change (self only) */}
+            {isSelf && (
               <Card className="shadow-sm">
                 <CardContent className="px-5 py-4">
                   <h2 className="text-base font-semibold mb-4 flex items-center gap-2">
@@ -1372,44 +1373,44 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                   </form>
                 </CardContent>
               </Card>
-              )}
+            )}
 
-              {/* Block / Deactivate (admin/HR only) */}
-              {canManageAllDocs && !isSelf && (
-                <Card className="shadow-sm border-red-200 dark:border-red-800">
-                  <CardContent className="px-5 py-4 space-y-3">
-                    <h2 className="text-base font-semibold text-red-600">Danger Zone</h2>
-                    <p className="text-xs text-muted-foreground">These actions affect the employee&apos;s account access.</p>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-950/30"
-                        onClick={async () => {
-                          if (!confirm(emp.isActive ? 'Deactivate this employee? They will lose access.' : 'Reactivate this employee?')) return;
-                          try {
-                            await employeesApi.toggleActive(Number(id));
-                            toast.success(emp.isActive ? 'Account deactivated' : 'Account reactivated');
-                            qc.invalidateQueries({ queryKey: ['employee-detail', id] });
-                          } catch (e: any) { toast.error(e?.response?.data?.message ?? 'Failed'); }
-                        }}>
-                        <Ban className="h-3.5 w-3.5 mr-1.5" />
-                        {emp.isActive ? 'Deactivate Account' : 'Reactivate Account'}
-                      </Button>
-                      <Button variant="outline" size="sm" className="text-amber-600 border-amber-200 hover:bg-amber-50 dark:hover:bg-amber-950/30"
-                        onClick={async () => {
-                          const pwd = prompt('Enter new password for this employee (min 8 chars):');
-                          if (!pwd || pwd.length < 8) { if (pwd) toast.error('Password must be at least 8 characters'); return; }
-                          try {
-                            await employeesApi.resetPassword(Number(id), pwd);
-                            toast.success('Password reset successfully');
-                          } catch (e: any) { toast.error(e?.response?.data?.message ?? 'Failed'); }
-                        }}>
-                        <Lock className="h-3.5 w-3.5 mr-1.5" />
-                        Reset Password
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </>)}
+            {/* Block / Deactivate (admin/HR only) */}
+            {canManageAllDocs && !isSelf && (
+              <Card className="shadow-sm border-red-200 dark:border-red-800">
+                <CardContent className="px-5 py-4 space-y-3">
+                  <h2 className="text-base font-semibold text-red-600">Danger Zone</h2>
+                  <p className="text-xs text-muted-foreground">These actions affect the employee&apos;s account access.</p>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-950/30"
+                      onClick={async () => {
+                        if (!confirm(emp.isActive ? 'Deactivate this employee? They will lose access.' : 'Reactivate this employee?')) return;
+                        try {
+                          await employeesApi.toggleActive(Number(id));
+                          toast.success(emp.isActive ? 'Account deactivated' : 'Account reactivated');
+                          qc.invalidateQueries({ queryKey: ['employee-detail', id] });
+                        } catch (e: any) { toast.error(e?.response?.data?.message ?? 'Failed'); }
+                      }}>
+                      <Ban className="h-3.5 w-3.5 mr-1.5" />
+                      {emp.isActive ? 'Deactivate Account' : 'Reactivate Account'}
+                    </Button>
+                    <Button variant="outline" size="sm" className="text-amber-600 border-amber-200 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                      onClick={async () => {
+                        const pwd = prompt('Enter new password for this employee (min 8 chars):');
+                        if (!pwd || pwd.length < 8) { if (pwd) toast.error('Password must be at least 8 characters'); return; }
+                        try {
+                          await employeesApi.resetPassword(Number(id), pwd);
+                          toast.success('Password reset successfully');
+                        } catch (e: any) { toast.error(e?.response?.data?.message ?? 'Failed'); }
+                      }}>
+                      <Lock className="h-3.5 w-3.5 mr-1.5" />
+                      Reset Password
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </>)}
         </div>
       )}
 

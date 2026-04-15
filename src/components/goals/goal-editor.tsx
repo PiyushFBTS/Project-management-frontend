@@ -12,6 +12,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 type Timeframe = 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
 type Status = 'not_started' | 'started' | 'in_progress' | 'finished';
@@ -181,25 +182,21 @@ export function GoalEditor({ context, goalId }: Props) {
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
               Timeframe
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {TIMEFRAMES.map((opt) => {
-                const selected = form.timeframe === opt.key;
-                return (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    onClick={() => setForm({ ...form, timeframe: opt.key })}
-                    className={`relative rounded-lg border-2 px-3 py-2.5 text-sm font-semibold transition-all ${
-                      selected
-                        ? `border-transparent bg-gradient-to-br ${opt.grad} text-white shadow-md`
-                        : 'border-border bg-background hover:border-muted-foreground/40'
-                    }`}
-                  >
+            <Select
+              value={form.timeframe}
+              onValueChange={(v) => setForm({ ...form, timeframe: v as Timeframe })}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select timeframe" />
+              </SelectTrigger>
+              <SelectContent>
+                {TIMEFRAMES.map((opt) => (
+                  <SelectItem key={opt.key} value={opt.key}>
                     {opt.label}
-                  </button>
-                );
-              })}
-            </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {isEditing && (
