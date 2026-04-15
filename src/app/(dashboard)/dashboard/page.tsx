@@ -34,23 +34,72 @@ const thisMonthLabel = format(new Date(), 'MMMM yyyy');
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'];
 
+/**
+ * Map the legacy `gradient` prop (Tailwind gradient class) to:
+ *   - a tinted icon-bubble background (`bubbleBg`)
+ *   - a bold icon foreground color (`iconFg`)
+ * Returns sensible defaults for unknown gradients.
+ */
+function _gradientToAccent(gradient: string): { bubbleBg: string; iconFg: string; trendFg: string } {
+  const g = gradient.toLowerCase();
+  if (g.includes('slate')) return { bubbleBg: 'bg-slate-100 dark:bg-slate-800/60', iconFg: 'text-slate-600 dark:text-slate-300', trendFg: 'text-slate-600 dark:text-slate-300' };
+  if (g.includes('blue') || g.includes('indigo')) return { bubbleBg: 'bg-blue-50 dark:bg-blue-950/40', iconFg: 'text-blue-600 dark:text-blue-400', trendFg: 'text-blue-600 dark:text-blue-400' };
+  if (g.includes('emerald') || g.includes('teal') || g.includes('green')) return { bubbleBg: 'bg-emerald-50 dark:bg-emerald-950/40', iconFg: 'text-emerald-600 dark:text-emerald-400', trendFg: 'text-emerald-600 dark:text-emerald-400' };
+  if (g.includes('amber') || g.includes('orange')) return { bubbleBg: 'bg-amber-50 dark:bg-amber-950/40', iconFg: 'text-amber-600 dark:text-amber-400', trendFg: 'text-amber-600 dark:text-amber-400' };
+  if (g.includes('violet') || g.includes('purple') || g.includes('fuchsia')) return { bubbleBg: 'bg-violet-50 dark:bg-violet-950/40', iconFg: 'text-violet-600 dark:text-violet-400', trendFg: 'text-violet-600 dark:text-violet-400' };
+  if (g.includes('rose') || g.includes('pink') || g.includes('red')) return { bubbleBg: 'bg-rose-50 dark:bg-rose-950/40', iconFg: 'text-rose-600 dark:text-rose-400', trendFg: 'text-rose-600 dark:text-rose-400' };
+  if (g.includes('cyan') || g.includes('sky')) return { bubbleBg: 'bg-cyan-50 dark:bg-cyan-950/40', iconFg: 'text-cyan-600 dark:text-cyan-400', trendFg: 'text-cyan-600 dark:text-cyan-400' };
+  return { bubbleBg: 'bg-slate-100 dark:bg-slate-800/60', iconFg: 'text-slate-600 dark:text-slate-300', trendFg: 'text-slate-600 dark:text-slate-300' };
+}
+
 function KpiCard({
-  title, value, sub, icon: Icon, gradient, textColor,
+  title, value, sub, icon: Icon, gradient, trendValue, trendLabel, trendPositive,
 }: {
-  title: string; value: string | number; sub?: string;
-  icon: React.ElementType; gradient: string; textColor: string;
+  title: string;
+  value: string | number;
+  sub?: string;
+  icon: React.ElementType;
+  gradient: string;
+  /** Optional trend indicator (e.g. "16%", "-1%") */
+  trendValue?: string | number;
+  /** Optional trend caption (e.g. "this month", "vs last week") */
+  trendLabel?: string;
+  /** Whether the trend is positive (green ↑) or negative (red ↓) */
+  trendPositive?: boolean;
+  /** Kept for backward compat — no longer used */
+  textColor?: string;
 }) {
+  const { bubbleBg, iconFg, trendFg } = _gradientToAccent(gradient);
+  const hasTrend = trendValue !== undefined && trendValue !== null && `${trendValue}`.length > 0;
+  const isNeg = trendPositive === false;
   return (
-    <Card className={`relative overflow-hidden border-0 ${gradient}`}>
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-white/70">{title}</p>
-            <p className={`mt-1 text-3xl font-bold ${textColor}`}>{value}</p>
-            {sub && <p className="mt-1 text-xs text-white/60">{sub}</p>}
+    <Card className="group relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 dark:border-slate-800/60 dark:bg-slate-900">
+      <CardContent className="px-5 py-4">
+        <div className="flex items-center gap-4">
+          {/* Circular tinted icon */}
+          <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full ${bubbleBg}`}>
+            <Icon className={`h-6 w-6 ${iconFg}`} />
           </div>
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
-            <Icon className="h-5 w-5 text-white" />
+          {/* Text content */}
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-medium text-slate-500 dark:text-slate-400">
+              {title}
+            </p>
+            <p className="mt-0.5 truncate text-2xl font-bold text-slate-900 dark:text-slate-50">
+              {value}
+            </p>
+            {hasTrend ? (
+              <p className="mt-0.5 flex items-center gap-1 text-xs">
+                <span className={isNeg ? 'text-rose-500' : `${trendFg}`}>
+                  {isNeg ? '↓' : '↑'} {trendValue}
+                </span>
+                {trendLabel && (
+                  <span className="text-slate-500 dark:text-slate-400">{trendLabel}</span>
+                )}
+              </p>
+            ) : sub ? (
+              <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">{sub}</p>
+            ) : null}
           </div>
         </div>
       </CardContent>
@@ -324,7 +373,7 @@ function EmployeeDashboard() {
       </div>
 
       {/* KPI Cards */}
-      {isLoading ? (
+      {/* {isLoading ? (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
         </div>
@@ -363,7 +412,7 @@ function EmployeeDashboard() {
             textColor="text-white"
           />
         </div>
-      )}
+      )} */}
 
       {/* Task / Ticket Stats */}
       {taskLoading ? (
@@ -371,7 +420,7 @@ function EmployeeDashboard() {
           {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <KpiCard
             title="Total Tickets"
             value={taskSummary?.totalTasks ?? 0}
@@ -400,180 +449,81 @@ function EmployeeDashboard() {
             gradient="bg-gradient-to-br from-purple-500 to-fuchsia-600"
             textColor="text-white"
           />
-          <KpiCard
-            title="Done"
-            value={taskSummary?.doneCount ?? 0}
-            icon={CircleCheckBig}
-            gradient="bg-gradient-to-br from-emerald-500 to-green-600"
-            textColor="text-white"
-          />
         </div>
       )}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Last 7 Days Chart */}
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-indigo-500" />
+              Last 7 Days — Hours Logged
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-50 w-full rounded-lg" />
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="hoursGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#6366f1" stopOpacity={0.3} />
+                      <stop offset="100%" stopColor="#6366f1" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.07} />
+                  <XAxis
+                    dataKey="day"
+                    tick={{ fontSize: 12, fill: 'currentColor', opacity: 0.6 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: 'currentColor', opacity: 0.6 }}
+                    axisLine={false}
+                    tickLine={false}
+                    unit="h"
+                  />
+                  <Tooltip
+                    contentStyle={{ borderRadius: 10, fontSize: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}
+                    labelFormatter={(_, payload) => payload?.[0]?.payload?.date ?? ''}
+                    formatter={(v: any) => [`${Number(v).toFixed(1)}h`, 'Hours']}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="hours"
+                    stroke="#6366f1"
+                    strokeWidth={2.5}
+                    fill="url(#hoursGrad)"
+                    dot={(props: any) => {
+                      const { cx, cy, payload } = props;
+                      return (
+                        <circle
+                          key={props.index}
+                          cx={cx}
+                          cy={cy}
+                          r={5}
+                          fill={payload.submitted ? '#6366f1' : '#e5e7eb'}
+                          stroke={payload.submitted ? '#4f46e5' : '#d1d5db'}
+                          strokeWidth={2}
+                        />
+                      );
+                    }}
+                    activeDot={{ r: 7, fill: '#6366f1', stroke: '#fff', strokeWidth: 2 }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
 
-      {/* Last 7 Days Chart */}
-      <Card className="shadow-sm">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-            <BarChart3 className="h-4 w-4 text-indigo-500" />
-            Last 7 Days — Hours Logged
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <Skeleton className="h-50 w-full rounded-lg" />
-          ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="hoursGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#6366f1" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="#6366f1" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.07} />
-                <XAxis
-                  dataKey="day"
-                  tick={{ fontSize: 12, fill: 'currentColor', opacity: 0.6 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 11, fill: 'currentColor', opacity: 0.6 }}
-                  axisLine={false}
-                  tickLine={false}
-                  unit="h"
-                />
-                <Tooltip
-                  contentStyle={{ borderRadius: 10, fontSize: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}
-                  labelFormatter={(_, payload) => payload?.[0]?.payload?.date ?? ''}
-                  formatter={(v: any) => [`${Number(v).toFixed(1)}h`, 'Hours']}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="hours"
-                  stroke="#6366f1"
-                  strokeWidth={2.5}
-                  fill="url(#hoursGrad)"
-                  dot={(props: any) => {
-                    const { cx, cy, payload } = props;
-                    return (
-                      <circle
-                        key={props.index}
-                        cx={cx}
-                        cy={cy}
-                        r={5}
-                        fill={payload.submitted ? '#6366f1' : '#e5e7eb'}
-                        stroke={payload.submitted ? '#4f46e5' : '#d1d5db'}
-                        strokeWidth={2}
-                      />
-                    );
-                  }}
-                  activeDot={{ r: 7, fill: '#6366f1', stroke: '#fff', strokeWidth: 2 }}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* Last 7 Days Status Grid */}
-      <Card className="shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-            <CalendarCheck className="h-4 w-4 text-emerald-500" />
-            Last 7 Days — Submission Status
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="grid grid-cols-7 gap-2">
-              {[...Array(7)].map((_, i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
-            </div>
-          ) : (
-            <div className="grid grid-cols-7 gap-2">
-              {chartData.map((d: any, i: number) => {
-                const isToday = i === chartData.length - 1;
-                return (
-                  <div
-                    key={i}
-                    className={`flex flex-col items-center justify-center rounded-xl p-3 transition-all ${d.submitted
-                        ? 'bg-emerald-50 dark:bg-emerald-500/10 ring-1 ring-emerald-200 dark:ring-emerald-500/20'
-                        : d.hours > 0
-                          ? 'bg-amber-50 dark:bg-amber-500/10 ring-1 ring-amber-200 dark:ring-amber-500/20'
-                          : 'bg-gray-50 dark:bg-gray-500/5 ring-1 ring-gray-200 dark:ring-gray-500/10'
-                      } ${isToday ? 'ring-2 ring-indigo-400 dark:ring-indigo-500' : ''}`}
-                  >
-                    <p className={`text-[10px] font-bold uppercase tracking-wider ${isToday ? 'text-indigo-600 dark:text-indigo-400' : 'text-muted-foreground'}`}>
-                      {d.day}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{d.date.split(' ')[0]}</p>
-                    {d.submitted ? (
-                      <CheckCircle2 className="h-5 w-5 text-emerald-500 mt-1.5" />
-                    ) : d.hours > 0 ? (
-                      <Clock className="h-5 w-5 text-amber-500 mt-1.5" />
-                    ) : (
-                      <XCircle className="h-5 w-5 text-gray-300 dark:text-gray-600 mt-1.5" />
-                    )}
-                    <p className={`text-xs font-semibold mt-1 ${d.submitted ? 'text-emerald-600 dark:text-emerald-400' : d.hours > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400'
-                      }`}>
-                      {d.hours > 0 ? `${Number(d.hours).toFixed(1)}h` : '--'}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Today's Birthdays & Anniversaries */}
-      <TodayEventsWidget isEmployee />
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Link href="/task-sheets/fill" className="group">
-          <Card className="shadow-sm transition-all hover:shadow-md hover:ring-1 hover:ring-indigo-500/20 cursor-pointer">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/10 group-hover:bg-indigo-500/20 transition-colors">
-                <ClipboardList className="h-5 w-5 text-indigo-500" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground">Fill Today&apos;s Sheet</p>
-                <p className="text-xs text-muted-foreground">Log your daily tasks</p>
-              </div>
-              <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground group-hover:text-indigo-500 transition-colors" />
-            </CardContent>
-          </Card>
-        </Link>
-        <Link href="/task-sheets" className="group">
-          <Card className="shadow-sm transition-all hover:shadow-md hover:ring-1 hover:ring-violet-500/20 cursor-pointer">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/10 group-hover:bg-violet-500/20 transition-colors">
-                <FileCheck className="h-5 w-5 text-violet-500" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground">Task Sheet History</p>
-                <p className="text-xs text-muted-foreground">View past submissions</p>
-              </div>
-              <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground group-hover:text-violet-500 transition-colors" />
-            </CardContent>
-          </Card>
-        </Link>
-        <Link href="/reports/employee-wise" className="group">
-          <Card className="shadow-sm transition-all hover:shadow-md hover:ring-1 hover:ring-amber-500/20 cursor-pointer">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10 group-hover:bg-amber-500/20 transition-colors">
-                <BarChart3 className="h-5 w-5 text-amber-500" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground">My Report</p>
-                <p className="text-xs text-muted-foreground">View your work summary</p>
-              </div>
-              <ArrowRight className="ml-auto h-4 w-4 text-muted-foreground group-hover:text-amber-500 transition-colors" />
-            </CardContent>
-          </Card>
-        </Link>
+        {/* Today's Birthdays & Anniversaries */}
+        <TodayEventsWidget isEmployee />
       </div>
+
+
     </div>
   );
 }
@@ -663,7 +613,7 @@ function AdminDashboard() {
       )}
 
       {/* Task / Ticket Stats */}
-      {taskLoading ? (
+      {/* {taskLoading ? (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
           {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
         </div>
@@ -705,10 +655,10 @@ function AdminDashboard() {
             textColor="text-white"
           />
         </div>
-      )}
+      )} */}
 
       {/* Charts row 1 */}
-      {/* <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold text-muted-foreground">
@@ -752,10 +702,32 @@ function AdminDashboard() {
             </ResponsiveContainer>
           </CardContent>
         </Card>
-      </div> */}
+      </div>
 
-      {/* Today's Birthdays & Anniversaries */}
-      <TodayEventsWidget />
+
+      {/* Top Employees */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold text-muted-foreground">
+            Employees by Hours — {thisMonth}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={(topEmps ?? []).map((d) => ({
+              name: d.emp_name.split(' ')[0],
+              hours: Number(d.total_hours),
+            }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.07} />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'currentColor', opacity: 0.6 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: 'currentColor', opacity: 0.6 }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />
+              <Bar dataKey="hours" name="Hours" fill="#f59e0b" radius={[6, 6, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
 
       {/* Charts row 2 */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -781,54 +753,11 @@ function AdminDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold text-muted-foreground">Type Share</CardTitle>
-          </CardHeader>
-          <CardContent className="flex items-center justify-center">
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie
-                  data={(byType ?? []).map((d) => ({
-                    name: typeLabels[d.consultant_type] ?? d.consultant_type,
-                    value: Number(d.total_man_days),
-                  }))}
-                  cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={4} dataKey="value"
-                >
-                  {(byType ?? []).map((_, i) => (
-                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} formatter={(v) => `${Number(v).toFixed(1)} MD`} />
-                <Legend iconSize={9} iconType="circle" wrapperStyle={{ fontSize: 11 }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        {/* Today's Birthdays & Anniversaries */}
+        <TodayEventsWidget />
       </div>
 
-      {/* Top Employees */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold text-muted-foreground">
-            Top Employees by Hours — {thisMonth}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={(topEmps ?? []).map((d) => ({
-              name: d.emp_name.split(' ')[0],
-              hours: Number(d.total_hours),
-            }))}>
-              <CartesianGrid strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.07} />
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'currentColor', opacity: 0.6 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: 'currentColor', opacity: 0.6 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />
-              <Bar dataKey="hours" name="Hours" fill="#f59e0b" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
+
     </div>
   );
 }

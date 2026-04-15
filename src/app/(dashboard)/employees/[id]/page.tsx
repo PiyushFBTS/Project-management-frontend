@@ -8,7 +8,7 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import {
   ArrowLeft, Mail, Phone, FileText, Download, Paperclip, Upload, Trash2, Loader2,
-  User, Shield, KeyRound, Eye, EyeOff, CheckCircle2, Target, Lock, Ban, AlertTriangle, Plus,
+  User, Shield, KeyRound, Eye, EyeOff, CheckCircle2, Target, Lock, Ban, AlertTriangle, Plus, ChevronDown,
 } from 'lucide-react';
 import { employeesApi } from '@/lib/api/employees';
 import { authApi } from '@/lib/api/auth';
@@ -63,6 +63,34 @@ function getInitials(name: string) {
 }
 
 type Tab = 'profile' | 'documents' | 'goals' | 'pip' | 'security';
+type GoalStatus = 'not_started' | 'started' | 'in_progress' | 'finished';
+
+const GOAL_STATUS_META: Record<GoalStatus, { label: string; pill: string; badge: string; dot: string }> = {
+  not_started: {
+    label: 'Not Started',
+    pill: 'text-slate-700 dark:text-slate-300 border-slate-400 dark:border-slate-600 bg-slate-100 dark:bg-slate-800/40',
+    badge: 'bg-slate-100 text-slate-700 dark:bg-slate-800/40 dark:text-slate-300',
+    dot: 'bg-slate-400',
+  },
+  started: {
+    label: 'Started',
+    pill: 'text-blue-700 dark:text-blue-400 border-blue-400 dark:border-blue-600 bg-blue-50 dark:bg-blue-950/40',
+    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    dot: 'bg-blue-500',
+  },
+  in_progress: {
+    label: 'In Progress',
+    pill: 'text-amber-700 dark:text-amber-400 border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/40',
+    badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+    dot: 'bg-amber-500',
+  },
+  finished: {
+    label: 'Finished',
+    pill: 'text-emerald-700 dark:text-emerald-400 border-emerald-400 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-950/40',
+    badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+    dot: 'bg-emerald-500',
+  },
+};
 
 export default function EmployeeDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -85,7 +113,9 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
   const canUploadDocs = canManageAllDocs || isSelf;
   const canEdit = canManageAllDocs || isSelf;
 
-  const [activeTab, setActiveTab] = useState<Tab>('profile');
+  const searchParams = useSearchParams();
+  const initialTab = (searchParams.get('tab') as Tab | null) ?? 'profile';
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [docCategory, setDocCategory] = useState('other');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
@@ -161,6 +191,71 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
     enabled: !!id && (canManageAllDocs || isSelf) && activeTab === 'pip',
   });
   const pips: any[] = Array.isArray(pipsRaw) ? pipsRaw : [];
+
+  // Goals
+  const goalsEndpoint = (() => {
+    if (isAdmin) {
+      // Admin viewing self-profile (from /profile) → employeeId in URL may not exist, use /me
+      if (isSelfProfile) return '/employees/me/goals';
+      return `/employees/${id}/goals`;
+    }
+    // Employee (always employee-guarded using logged-in id)
+    return `/employee/employees/${id}/goals`;
+  })();
+
+  const { data: goalsRaw } = useQuery({
+    queryKey: ['employee-goals', id, isSelfProfile, isAdmin],
+    queryFn: async () => {
+      const { api } = await import('@/lib/api/axios-instance');
+      const res = await api.get(goalsEndpoint);
+      const body = res.data as any;
+      const inner = body?.data ?? body;
+      return Array.isArray(inner) ? inner : (Array.isArray(inner?.data) ? inner.data : []);
+    },
+    enabled: !!id && activeTab === 'goals',
+  });
+  const goals: any[] = Array.isArray(goalsRaw) ? goalsRaw : [];
+  const canEditGoals = isAdmin || isSelf;
+  const [expandedGoalIds, setExpandedGoalIds] = useState<Set<number>>(new Set());
+  const toggleGoalExpanded = (goalId: number) => {
+    setExpandedGoalIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(goalId)) next.delete(goalId); else next.add(goalId);
+      return next;
+    });
+  };
+
+  async function deleteGoal(goalId: number) {
+    if (!confirm('Delete this goal? This cannot be undone.')) return;
+    try {
+      const { api } = await import('@/lib/api/axios-instance');
+      await api.delete(`${goalsEndpoint}/${goalId}`);
+      toast.success('Goal removed');
+      qc.invalidateQueries({ queryKey: ['employee-goals', id] });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'Failed to delete');
+    }
+  }
+
+  async function quickUpdateProgress(goalId: number, percent: number) {
+    try {
+      const { api } = await import('@/lib/api/axios-instance');
+      await api.patch(`${goalsEndpoint}/${goalId}`, { progressPercent: percent });
+      qc.invalidateQueries({ queryKey: ['employee-goals', id] });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'Failed to update');
+    }
+  }
+
+  async function quickUpdateStatus(goalId: number, status: GoalStatus) {
+    try {
+      const { api } = await import('@/lib/api/axios-instance');
+      await api.patch(`${goalsEndpoint}/${goalId}`, { status });
+      qc.invalidateQueries({ queryKey: ['employee-goals', id] });
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'Failed to update');
+    }
+  }
 
   // Reporting team — employees who report to this person
   const { data: reportingTeamRaw } = useQuery({
@@ -667,16 +762,248 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
 
             {/* ── Goals tab ───── */}
             {activeTab === 'goals' && (
-              <Card className="shadow-sm">
-                <CardContent className="px-5 py-4">
-                  <h2 className="text-base font-semibold mb-4">Goals & Objectives</h2>
-                  <div className="text-center py-8">
-                    <Target className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-                    <p className="text-sm text-muted-foreground">No goals set yet</p>
-                    <p className="text-xs text-muted-foreground mt-1">Goals and objectives for this employee will appear here</p>
+              <div className="space-y-4">
+                {/* Summary + add button */}
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base font-semibold flex items-center gap-2">
+                    <Target className="h-4 w-4 text-emerald-500" /> Goals & Objectives
+                  </h2>
+                  {canEditGoals && (
+                    <Button
+                      size="sm"
+                      className="bg-gradient-to-r from-blue-500 to-blue-700 hover:from-blue-600 hover:to-blue-800 text-white shadow-md"
+                      onClick={() => router.push(isSelfProfile ? '/profile/goals/new' : `/employees/${id}/goals/new`)}
+                    >
+                      <Plus className="h-3.5 w-3.5 mr-1" /> Add Goal
+                    </Button>
+                  )}
+                </div>
+
+                {/* Summary cards */}
+                {/* {goals.length > 0 && (() => {
+                  const isFinished = (g: any) => g.status === 'finished' || (Number(g.progressPercent) || 0) >= 100;
+                  const active = goals.filter((g) => !isFinished(g)).length;
+                  const completed = goals.filter(isFinished).length;
+                  const avg = goals.length === 0 ? 0 : Math.round(goals.reduce((s, g) => s + (Number(g.progressPercent) || 0), 0) / goals.length);
+                  return (
+                    <div className="grid grid-cols-3 gap-3">
+                      <Card className="rounded-xl border border-blue-200/60 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-900/40 shadow-sm">
+                        <CardContent className="px-4 py-3 flex items-center gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/40">
+                            <Target className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xl font-bold text-blue-700 dark:text-blue-400 leading-tight">{active}</p>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-600/80 dark:text-blue-400/70">Active</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card className="rounded-xl border border-emerald-200/60 bg-emerald-50/50 dark:bg-emerald-950/20 dark:border-emerald-900/40 shadow-sm">
+                        <CardContent className="px-4 py-3 flex items-center gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40">
+                            <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xl font-bold text-emerald-700 dark:text-emerald-400 leading-tight">{completed}</p>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-600/80 dark:text-emerald-400/70">Completed</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card className="rounded-xl border border-violet-200/60 bg-violet-50/50 dark:bg-violet-950/20 dark:border-violet-900/40 shadow-sm">
+                        <CardContent className="px-4 py-3 flex items-center gap-3">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-900/40">
+                            <Target className="h-5 w-5 text-violet-600 dark:text-violet-400" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xl font-bold text-violet-700 dark:text-violet-400 leading-tight">{avg}%</p>
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-600/80 dark:text-violet-400/70">Avg Progress</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  );
+                })()} */}
+
+                {/* Goals list */}
+                {goals.length === 0 ? (
+                  <Card className="shadow-sm ">
+                    <CardContent className="px-5 py-12 text-center">
+                      <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 dark:bg-emerald-950/30 mb-3">
+                        <Target className="h-8 w-8 text-emerald-500/60" />
+                      </div>
+                      <p className="text-sm font-semibold">No goals yet</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {canEditGoals ? 'Click "Add Goal" to create your first goal' : 'Goals will appear here once created'}
+                      </p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="space-y-3">
+                    {goals.map((g: any) => {
+                      const timeframeMeta: Record<string, { label: string; gradient: string; textColor: string; bg: string }> = {
+                        monthly: { label: 'Monthly', gradient: 'from-indigo-500 to-indigo-700', textColor: 'text-indigo-700 dark:text-indigo-400', bg: 'bg-indigo-100 dark:bg-indigo-900/30' },
+                        quarterly: { label: 'Quarterly', gradient: 'from-teal-500 to-teal-700', textColor: 'text-teal-700 dark:text-teal-400', bg: 'bg-teal-100 dark:bg-teal-900/30' },
+                        half_yearly: { label: 'Half-Yearly', gradient: 'from-amber-500 to-orange-600', textColor: 'text-amber-700 dark:text-amber-400', bg: 'bg-amber-100 dark:bg-amber-900/30' },
+                        yearly: { label: 'Yearly', gradient: 'from-pink-500 to-rose-600', textColor: 'text-pink-700 dark:text-pink-400', bg: 'bg-pink-100 dark:bg-pink-900/30' },
+                      };
+                      const tf = timeframeMeta[g.timeframe ?? 'monthly'] ?? timeframeMeta.monthly;
+                      const progress = Math.max(0, Math.min(100, Number(g.progressPercent) || 0));
+                      const goalStatus = (GOAL_STATUS_META[g.status as GoalStatus] ? g.status : (progress >= 100 ? 'finished' : progress > 0 ? 'in_progress' : 'not_started')) as GoalStatus;
+                      const statusMeta = GOAL_STATUS_META[goalStatus];
+                      const isCompleted = goalStatus === 'finished';
+                      let progColor = 'bg-red-500';
+                      let progText = 'text-red-600 dark:text-red-400';
+                      if (isCompleted) { progColor = 'bg-emerald-500'; progText = 'text-emerald-600 dark:text-emerald-400'; }
+                      else if (progress >= 75) { progColor = 'bg-blue-500'; progText = 'text-blue-600 dark:text-blue-400'; }
+                      else if (progress >= 50) { progColor = 'bg-amber-500'; progText = 'text-amber-600 dark:text-amber-400'; }
+                      else if (progress >= 25) { progColor = 'bg-pink-500'; progText = 'text-pink-600 dark:text-pink-400'; }
+
+                      const expanded = expandedGoalIds.has(g.id);
+                      return (
+                        <Card key={g.id} className="shadow-sm overflow-hidden gap-4 py-4">
+                          <div className="h-1 bg-gradient-to-r from-blue-500 to-blue-700" />
+                          <CardContent className="px-5 py-4">
+                            {/* Header */}
+                            <div
+                              className="flex items-start gap-3 cursor-pointer select-none"
+                              onClick={() => toggleGoalExpanded(g.id)}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap mb-2">
+                                  <Badge className="border-0 text-white bg-gradient-to-r from-blue-500 to-blue-700 shadow-sm">
+                                    {tf.label}
+                                  </Badge>
+                                  <Badge className={`border-0 ${statusMeta.badge}`}>
+                                    <span className={`h-1.5 w-1.5 rounded-full mr-1.5 ${statusMeta.dot}`} />
+                                    {statusMeta.label}
+                                  </Badge>
+                                </div>
+                                <h3 className="text-sm font-bold leading-snug">{g.title}</h3>
+                                {g.description && (
+                                  <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{g.description}</p>
+                                )}
+                              </div>
+                              <div className="flex gap-1 shrink-0 items-center" onClick={(e) => e.stopPropagation()}>
+                                {canEditGoals && (
+                                  <>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-muted-foreground hover:text-blue-600"
+                                      onClick={() => router.push(isSelfProfile ? `/profile/goals/${g.id}/edit` : `/employees/${id}/goals/${g.id}/edit`)}
+                                    >
+                                      <KeyRound className="h-3.5 w-3.5 rotate-180" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7 text-muted-foreground hover:text-red-600"
+                                      onClick={() => deleteGoal(g.id)}
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-muted-foreground"
+                                  onClick={() => toggleGoalExpanded(g.id)}
+                                  aria-label={expanded ? 'Collapse' : 'Expand'}
+                                >
+                                  <ChevronDown
+                                    className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`}
+                                  />
+                                </Button>
+                              </div>
+                            </div>
+
+                            {expanded && (
+                            <>
+                            {/* Progress bar */}
+                            <div className="mt-3 flex items-center gap-3">
+                              <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all ${progColor}`}
+                                  style={{ width: `${progress}%` }}
+                                />
+                              </div>
+                              <span className={`text-sm font-bold ${progText} tabular-nums`}>{progress}%</span>
+                            </div>
+
+                            {/* Meta */}
+                            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+                              {g.createdByName && (
+                                <span className="flex items-center gap-1">
+                                  <User className="h-3 w-3" /> by {g.createdByName}
+                                </span>
+                              )}
+                              {g.targetDate && (
+                                <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                                  <Target className="h-3 w-3" /> Target: {format(new Date(g.targetDate), 'MMM d, yyyy')}
+                                </span>
+                              )}
+                              {g.createdAt && (
+                                <span>Created {format(new Date(g.createdAt), 'MMM d')}</span>
+                              )}
+                            </div>
+
+                            {/* Quick update */}
+                            {canEditGoals && (
+                              <div className="mt-3 pt-3 border-t space-y-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground w-14 shrink-0">
+                                    Status:
+                                  </span>
+                                  {(['not_started', 'started', 'in_progress', 'finished'] as GoalStatus[]).map((s) => {
+                                    const meta = GOAL_STATUS_META[s];
+                                    const selected = goalStatus === s;
+                                    return (
+                                      <button
+                                        key={s}
+                                        onClick={() => quickUpdateStatus(g.id, s)}
+                                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${
+                                          selected
+                                            ? meta.pill
+                                            : 'text-muted-foreground border-border hover:bg-muted'
+                                        }`}
+                                      >
+                                        {meta.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                                {!isCompleted && (
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground w-14 shrink-0">
+                                      Progress:
+                                    </span>
+                                    {[25, 50, 75, 100].map((step) => (
+                                      <button
+                                        key={step}
+                                        onClick={() => quickUpdateProgress(g.id, step)}
+                                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${
+                                          progress >= step
+                                            ? `${progText} border-current bg-opacity-10`
+                                            : 'text-muted-foreground border-border hover:bg-muted'
+                                        }`}
+                                      >
+                                        {step}%
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            </>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
                   </div>
-                </CardContent>
-              </Card>
+                )}
+              </div>
             )}
 
             {/* ── PIP tab (admin/HR only) ───── */}

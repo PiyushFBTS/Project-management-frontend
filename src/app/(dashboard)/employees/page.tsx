@@ -8,7 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import Link from 'next/link';
-import { Plus, Pencil, Trash2, Loader2, FolderInput, Users, Search as SearchIcon } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, FolderInput, Users, Search as SearchIcon, Mail, Phone, Briefcase } from 'lucide-react';
 import { employeesApi } from '@/lib/api/employees';
 import { projectsApi } from '@/lib/api/projects';
 import { Employee } from '@/types';
@@ -23,9 +23,13 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
+import { Card } from '@/components/ui/card';
+
+const AVATAR_GRADIENT = 'bg-linear-to-r from-emerald-600 via-teal-600 to-cyan-600';
+
+function getInitials(name: string) {
+  return name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+}
 
 const empSchema = z.object({
   empCode: z.string().optional(),
@@ -244,64 +248,94 @@ export default function EmployeesPage() {
         />
       </div>
 
-      <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
-        <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-emerald-500 via-teal-500 to-cyan-500" />
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Code</TableHead>
-              <TableHead>Name</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Active</TableHead>
-              {isAdmin && <TableHead className="w-28">Actions</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading
-              ? [...Array(5)].map((_, i) => (
-                <TableRow key={i}>
-                  {[...Array(isAdmin ? 5 : 4)].map((__, j) => (
-                    <TableCell key={j}><Skeleton className="h-5 w-20" /></TableCell>
-                  ))}
-                </TableRow>
-              ))
-              : (data ?? []).map((emp) => (
-                <TableRow key={`${(emp as any)._type === 'admin' ? 'admin' : 'emp'}-${emp.id}`}>
-                  <TableCell className="font-mono text-xs">{emp.empCode}</TableCell>
-                  <TableCell className="font-medium">
-                    <Link href={`/employees/${emp.id}?type=${(emp as any)._type === 'admin' ? 'admin' : 'employee'}`} className="text-violet-600 dark:text-violet-400 hover:underline">
-                      {emp.empName}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-xs">{emp.email}</TableCell>
-                  <TableCell>
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${emp.isActive ? 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30 dark:text-emerald-400' : 'bg-rose-500/15 text-rose-500 ring-rose-500/30'}`}>
-                      {emp.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </TableCell>
-                  {isAdmin && (
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" title="Assign project" onClick={() => openAssign(emp)}>
-                          <FolderInput className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(emp)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600"
-                          onClick={() => { if (confirm(`Deactivate "${emp.empName}"?`)) deleteMutation.mutate({ id: emp.id, name: emp.empName }); }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))}
-          </TableBody>
-        </Table>
-      </div>
+      {isLoading ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i} className="p-4 flex items-center gap-3">
+              <Skeleton className="h-12 w-12 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-3 w-16" />
+              </div>
+            </Card>
+          ))}
+        </div>
+      ) : (data ?? []).length === 0 ? (
+        <Card className="py-12 text-center text-muted-foreground">
+          No employees found.
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {(data ?? []).map((emp) => {
+            const isAdminRow = (emp as any)._type === 'admin';
+            const roleLabel = typeLabels[emp.consultantType] ?? 'Employee';
+            return (
+              <Card
+                key={`${isAdminRow ? 'admin' : 'emp'}-${emp.id}`}
+                className="group relative overflow-hidden p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:ring-1 hover:ring-blue-500/30"
+              >
+                <Link
+                  href={`/employees/${emp.id}?type=${isAdminRow ? 'admin' : 'employee'}`}
+                  className="flex items-center gap-3"
+                >
+                  <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${AVATAR_GRADIENT} text-white text-sm font-bold shadow-sm ring-2 ring-white dark:ring-slate-900 transition-transform duration-300 group-hover:scale-110 group-hover:shadow-blue-500/40 group-hover:shadow-lg`}>
+                    {getInitials(emp.empName)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{emp.empName}</p>
+                    <p className="text-xs text-muted-foreground truncate">{roleLabel}</p>
+                    <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                      <span className="inline-flex items-center text-[9px] font-bold tracking-wider uppercase text-muted-foreground/80">
+                        <Briefcase className="h-2.5 w-2.5 mr-1" />
+                        {emp.empCode}
+                      </span>
+                      {!emp.isActive && (
+                        <span className="rounded-full px-1.5 py-0 text-[9px] font-bold tracking-wide uppercase bg-rose-500/15 text-rose-500 ring-1 ring-rose-500/30">
+                          Inactive
+                        </span>
+                      )}
+                      {(emp as any).isHr && (
+                        <span className="rounded-full px-1.5 py-0 text-[9px] font-bold tracking-wide uppercase bg-blue-500/15 text-blue-600 dark:text-blue-400 ring-1 ring-blue-500/30">
+                          HR
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground truncate">
+                      {emp.mobileNumber ? (
+                        <>
+                          <Phone className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{emp.mobileNumber}</span>
+                        </>
+                      ) : emp.email ? (
+                        <>
+                          <Mail className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{emp.email}</span>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                </Link>
+                {isAdmin && !isAdminRow && (
+                  <div className="absolute top-2 right-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button variant="ghost" size="icon" className="h-6 w-6" title="Assign project" onClick={(e) => { e.preventDefault(); openAssign(emp); }}>
+                      <FolderInput className="h-3 w-3" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-6 w-6" title="Edit" onClick={(e) => { e.preventDefault(); openEdit(emp); }}>
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:text-red-600" title="Deactivate"
+                      onClick={(e) => { e.preventDefault(); if (confirm(`Deactivate "${emp.empName}"?`)) deleteMutation.mutate({ id: emp.id, name: emp.empName }); }}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                )}
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       {/* Create / Edit Dialog — admin only */}
       {isAdmin && (
