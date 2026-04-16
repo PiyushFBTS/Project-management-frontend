@@ -175,146 +175,151 @@ export default function LeaveRequestDetailPage() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Reason + Remarks */}
-      <Card>
-        <CardContent className="p-4 space-y-3">
-          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-blue-600 dark:text-blue-400">
-            <FileText className="h-3 w-3" /> Reason
-          </div>
-          <p className="text-sm font-medium">{detail.leaveReason?.reasonName ?? '—'}</p>
-          {detail.remarks && (
-            <div className="mt-2">
-              <p className="text-[10px] text-muted-foreground">Employee Remarks</p>
-              <p className="text-sm text-muted-foreground italic">&quot;{detail.remarks}&quot;</p>
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {/* Reason + Remarks */}
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-blue-600 dark:text-blue-400">
+              <FileText className="h-3 w-3" /> Reason
             </div>
-          )}
-        </CardContent>
-      </Card>
+            <p className="text-sm font-medium">{detail.leaveReason?.reasonName ?? '—'}</p>
+            {detail.remarks && (
+              <div className="mt-2">
+                <p className="text-[10px] text-muted-foreground">Employee Remarks</p>
+                <p className="text-sm text-muted-foreground italic">&quot;{detail.remarks}&quot;</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-      {/* Approval Timeline */}
-      <Card>
-        <CardContent className="p-4 space-y-4">
-          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-emerald-600 dark:text-emerald-400">
-            <Clock className="h-3 w-3" /> Approval Timeline
-          </div>
-
-          {/* Manager */}
-          <div className="flex items-start gap-3">
-            <div className={`mt-1 h-3 w-3 rounded-full shrink-0 ${
-              detail.status === 'manager_rejected' ? 'bg-red-500' :
-              detail.managerActionAt ? 'bg-emerald-500' : 'bg-amber-400'
-            }`} />
-            <div>
-              <p className="text-sm font-medium">Reporting Manager: {detail.manager?.empName ?? '—'}</p>
-              {detail.managerActionAt ? (
-                <>
-                  <p className="text-xs text-muted-foreground">
-                    {detail.status === 'manager_rejected' ? 'Rejected' : 'Approved'} on {fmtDateTime(detail.managerActionAt)}
-                  </p>
-                  {detail.managerRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.managerRemarks}&quot;</p>}
-                </>
-              ) : (
-                <p className="text-xs text-muted-foreground">{detail.hrActionAt ? 'Bypassed by HR' : 'Pending action'}</p>
-              )}
+        {/* Approval Timeline */}
+        <Card>
+          <CardContent className="p-4 space-y-4">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-emerald-600 dark:text-emerald-400">
+              <Clock className="h-3 w-3" /> Approval Timeline
             </div>
-          </div>
 
-          {/* HR */}
-          {((['manager_approved', 'hr_approved', 'hr_rejected'] as LeaveRequestStatus[]).includes(detail.status) || !!detail.hrActionAt) && (
+            {/* Manager */}
             <div className="flex items-start gap-3">
-              <div className={`mt-1 h-3 w-3 rounded-full shrink-0 ${
-                detail.status === 'manager_approved' ? 'bg-amber-400' :
-                detail.status === 'hr_rejected' ? 'bg-red-500' : 'bg-emerald-500'
-              }`} />
+              <div className={`mt-1 h-3 w-3 rounded-full shrink-0 ${detail.status === 'manager_rejected' ? 'bg-red-500' :
+                detail.managerActionAt ? 'bg-emerald-500' : 'bg-amber-400'
+                }`} />
               <div>
-                <p className="text-sm font-medium">HR: {detail.hr?.empName ?? 'Pending'}</p>
-                {detail.hrActionAt ? (
+                <p className="text-sm font-medium">Reporting Manager: {detail.manager?.empName ?? '—'}</p>
+                {detail.managerActionAt ? (
                   <>
                     <p className="text-xs text-muted-foreground">
-                      {detail.status === 'hr_rejected' ? 'Rejected' : 'Approved'} on {fmtDateTime(detail.hrActionAt)}
+                      {detail.status === 'manager_rejected' ? 'Rejected' : 'Approved'} on {fmtDateTime(detail.managerActionAt)}
                     </p>
-                    {detail.hrRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.hrRemarks}&quot;</p>}
+                    {detail.managerRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.managerRemarks}&quot;</p>}
                   </>
                 ) : (
-                  <p className="text-xs text-muted-foreground">Pending action</p>
+                  <p className="text-xs text-muted-foreground">{detail.hrActionAt ? 'Bypassed by HR' : 'Pending action'}</p>
                 )}
               </div>
             </div>
-          )}
-        </CardContent>
-      </Card>
 
-      {/* Watchers */}
-      {detail.watchers && detail.watchers.length > 0 && (
-        <Card>
-          <CardContent className="p-4 space-y-2">
-            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-pink-600 dark:text-pink-400">
-              <Users className="h-3 w-3" /> Watchers
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {detail.watchers.map((w: any) => (
-                <Badge key={w.id} variant="outline" className="text-xs">
-                  {w.employee?.empName ?? `Employee #${w.employeeId}`}
-                </Badge>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Actions */}
-      {(canAct.canApprove || canAct.canCancel) && (
-        <Card>
-          <CardContent className="p-4 space-y-3">
-            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
-              <MessageSquare className="h-3 w-3" /> Actions
-            </div>
-            {canAct.canApprove && (
-              <>
-                <Textarea
-                  placeholder="Remarks (optional)"
-                  value={actionRemarks}
-                  onChange={(e) => setActionRemarks(e.target.value)}
-                  rows={2}
-                />
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                    disabled={approveMut.isPending || rejectMut.isPending}
-                    onClick={() => approveMut.mutate()}
-                  >
-                    <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                    {approveMut.isPending ? 'Processing...' : 'Approve'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    disabled={approveMut.isPending || rejectMut.isPending}
-                    onClick={() => rejectMut.mutate()}
-                  >
-                    <XCircle className="mr-1.5 h-3.5 w-3.5" />
-                    {rejectMut.isPending ? 'Processing...' : 'Reject'}
-                  </Button>
+            {/* HR */}
+            {((['manager_approved', 'hr_approved', 'hr_rejected'] as LeaveRequestStatus[]).includes(detail.status) || !!detail.hrActionAt) && (
+              <div className="flex items-start gap-3">
+                <div className={`mt-1 h-3 w-3 rounded-full shrink-0 ${detail.status === 'manager_approved' ? 'bg-amber-400' :
+                  detail.status === 'hr_rejected' ? 'bg-red-500' : 'bg-emerald-500'
+                  }`} />
+                <div>
+                  <p className="text-sm font-medium">HR: {detail.hr?.empName ?? 'Pending'}</p>
+                  {detail.hrActionAt ? (
+                    <>
+                      <p className="text-xs text-muted-foreground">
+                        {detail.status === 'hr_rejected' ? 'Rejected' : 'Approved'} on {fmtDateTime(detail.hrActionAt)}
+                      </p>
+                      {detail.hrRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.hrRemarks}&quot;</p>}
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Pending action</p>
+                  )}
                 </div>
-              </>
-            )}
-            {canAct.canCancel && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="text-destructive border-destructive/30 hover:bg-destructive/10"
-                disabled={cancelMut.isPending}
-                onClick={() => cancelMut.mutate()}
-              >
-                <Ban className="mr-1.5 h-3.5 w-3.5" />
-                {cancelMut.isPending ? 'Cancelling...' : 'Cancel Request'}
-              </Button>
+              </div>
             )}
           </CardContent>
         </Card>
-      )}
+
+      </div>
+
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {/* Watchers */}
+        {detail.watchers && detail.watchers.length > 0 && (
+          <Card>
+            <CardContent className="p-4 space-y-2">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-pink-600 dark:text-pink-400">
+                <Users className="h-3 w-3" /> Watchers
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {detail.watchers.map((w: any) => (
+                  <Badge key={w.id} variant="outline" className="text-xs">
+                    {w.employee?.empName ?? `Employee #${w.employeeId}`}
+                  </Badge>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Actions */}
+        {(canAct.canApprove || canAct.canCancel) && (
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+                <MessageSquare className="h-3 w-3" /> Actions
+              </div>
+              {canAct.canApprove && (
+                <>
+                  <Textarea
+                    placeholder="Remarks (optional)"
+                    value={actionRemarks}
+                    onChange={(e) => setActionRemarks(e.target.value)}
+                    rows={2}
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      disabled={approveMut.isPending || rejectMut.isPending}
+                      onClick={() => approveMut.mutate()}
+                    >
+                      <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                      {approveMut.isPending ? 'Processing...' : 'Approve'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={approveMut.isPending || rejectMut.isPending}
+                      onClick={() => rejectMut.mutate()}
+                    >
+                      <XCircle className="mr-1.5 h-3.5 w-3.5" />
+                      {rejectMut.isPending ? 'Processing...' : 'Reject'}
+                    </Button>
+                  </div>
+                </>
+              )}
+              {canAct.canCancel && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                  disabled={cancelMut.isPending}
+                  onClick={() => cancelMut.mutate()}
+                >
+                  <Ban className="mr-1.5 h-3.5 w-3.5" />
+                  {cancelMut.isPending ? 'Cancelling...' : 'Cancel Request'}
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+      </div>
+
     </div>
   );
 }

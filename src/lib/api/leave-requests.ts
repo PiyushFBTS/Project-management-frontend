@@ -1,5 +1,14 @@
 import { api } from './axios-instance';
+import { tokenStorage } from '@/lib/auth/token-storage';
 import { ApiResponse, LeaveRequest, LeaveType, PaginationParams, LeaveRequestStatus } from '@/types';
+
+// Admin approve/reject/cancel live under /leave-requests/:id/... (JwtAdminGuard).
+// Employees use the /employee/leave-requests/:id/... routes. Auto-route by login type.
+function actionPath(id: number, action: 'approve' | 'reject' | 'cancel') {
+  return tokenStorage.getLoginType() === 'admin'
+    ? `/leave-requests/${id}/${action}`
+    : `/employee/leave-requests/${id}/${action}`;
+}
 
 export const leaveRequestsApi = {
   // Admin endpoints
@@ -44,13 +53,13 @@ export const leaveRequestsApi = {
     api.get<ApiResponse<LeaveRequest>>(`/employee/leave-requests/${id}`),
 
   cancelLeave: (id: number) =>
-    api.patch<ApiResponse<LeaveRequest>>(`/employee/leave-requests/${id}/cancel`),
+    api.patch<ApiResponse<LeaveRequest>>(actionPath(id, 'cancel')),
 
   approveLeave: (id: number, remarks?: string) =>
-    api.patch<ApiResponse<LeaveRequest>>(`/employee/leave-requests/${id}/approve`, { remarks }),
+    api.patch<ApiResponse<LeaveRequest>>(actionPath(id, 'approve'), { remarks }),
 
   rejectLeave: (id: number, remarks?: string) =>
-    api.patch<ApiResponse<LeaveRequest>>(`/employee/leave-requests/${id}/reject`, { remarks }),
+    api.patch<ApiResponse<LeaveRequest>>(actionPath(id, 'reject'), { remarks }),
 
   getLeaveReasons: () =>
     api.get<ApiResponse<LeaveType[]>>('/employee/leave-types'),

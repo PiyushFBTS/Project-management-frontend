@@ -186,7 +186,7 @@ export default function LoginPage() {
               {loading ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing in…</>
               ) : (
-                `Sign In as ${loginType === 'admin' ? 'Admin' : 'Employee'}`
+                `Sign In as ${loginType === 'admin' ? 'Admin' : loginType === 'employee' ? 'Employee' : 'Client'}`
               )}
             </Button>
           </form>

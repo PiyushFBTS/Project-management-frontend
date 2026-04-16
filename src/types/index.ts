@@ -348,7 +348,34 @@ export interface TopEmployee {
   total_man_days: number;
 }
 
-// ── Notifications ─────────────────────────────────────────────────────────
+// ── Announcements ─────────────────────────────────────────────────────────
+
+export interface Announcement {
+  id: number;
+  title: string;
+  description: string;
+  expiresOn: string;
+  isActive: boolean;
+  createdById: number;
+  createdByType: 'admin' | 'employee';
+  createdByName: string;
+  companyId: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAnnouncementDto {
+  title: string;
+  description: string;
+  expiresOn: string;
+}
+
+export interface UpdateAnnouncementDto {
+  title?: string;
+  description?: string;
+  expiresOn?: string;
+  isActive?: boolean;
+}
 
 // ── Leave Types ─────────────────────────────────────────────────────────
 

@@ -7,6 +7,7 @@ import {
   LayoutDashboard, FolderKanban, Tags, Users, Receipt,
   ClipboardList, BarChart3, ChevronDown, TrendingUp, X,
   ChevronLeft, ChevronRight, CalendarDays, Building2, LogOut, Settings, ListTodo, Ticket, Mail,
+  Megaphone,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -79,6 +80,7 @@ const navItems: NavItem[] = [
     children: [
       { label: 'Leave Types', href: '/leave-types', dotColor: 'bg-rose-400' },
       { label: 'Leave Requests', href: '/leave-requests', dotColor: 'bg-orange-400' },
+      { label: 'Leave Balance', href: '/leave-balance', dotColor: 'bg-blue-400' },
       { label: 'Holiday Calendar', href: '/holidays', dotColor: 'bg-amber-400' },
     ],
   },
@@ -108,6 +110,12 @@ const navItems: NavItem[] = [
       { label: 'Employee Costing', href: '/reports/employee-cost', dotColor: 'bg-orange-400', hrOrAdminOnly: true },
       { label: 'Project Costing', href: '/reports/project-cost', dotColor: 'bg-teal-400', hrOrAdminOnly: true },
     ],
+  },
+  {
+    label: 'Announcements', href: '/announcements', icon: Megaphone,
+    iconColor: 'text-rose-400', iconBg: 'bg-rose-500/20',
+    activeBg: 'bg-rose-500/20', hoverBg: 'hover:bg-rose-500/10',
+    borderColor: 'border-l-rose-400', dotColor: 'bg-rose-400',
   },
   {
     label: 'Email Inbox', href: '/email-inbox', icon: Mail,

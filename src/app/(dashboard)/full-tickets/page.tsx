@@ -33,6 +33,7 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+import { KpiCard } from '@/components/shared/kpi-card';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -74,7 +75,7 @@ const statusColors: Record<string, string> = {
   in_progress: 'bg-blue-500/15 text-blue-600 ring-1 ring-blue-500/30 dark:text-blue-400',
   in_review: 'bg-amber-500/15 text-amber-600 ring-1 ring-amber-500/30 dark:text-amber-400',
   done: 'bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/30 dark:text-emerald-400',
-  closed: 'bg-purple-500/15 text-purple-600 ring-1 ring-purple-500/30 dark:text-purple-400',
+  // closed: 'bg-purple-500/15 text-purple-600 ring-1 ring-purple-500/30 dark:text-purple-400',
 };
 
 const priorityColors: Record<string, string> = {
@@ -126,6 +127,27 @@ export default function FullTicketsPage() {
   // Detail dialog
   const [detailTask, setDetailTask] = useState<ProjectTask | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+
+  // New Ticket — project picker dialog
+  const [newTicketPickerOpen, setNewTicketPickerOpen] = useState(false);
+  const [newTicketProjectId, setNewTicketProjectId] = useState<string>('');
+
+  function handleNewTicketClick() {
+    if (isClient && (user as any)?.projectId) {
+      router.push(`/projects/${(user as any).projectId}/planning/new-task`);
+      return;
+    }
+    if (projectFilter !== 'all') {
+      router.push(`/projects/${projectFilter}/planning/new-task`);
+      return;
+    }
+    if (projectsList.length === 1) {
+      router.push(`/projects/${projectsList[0].id}/planning/new-task`);
+      return;
+    }
+    setNewTicketProjectId('');
+    setNewTicketPickerOpen(true);
+  }
   const [commentText, setCommentText] = useState('');
   const attachInputRef = useRef<HTMLInputElement>(null);
   const [taggedMentions, setTaggedMentions] = useState<MentionEmployee[]>([]);
@@ -494,51 +516,62 @@ export default function FullTicketsPage() {
       </div> */}
 
       {/* KPI Stats */}
-      <div className={`grid grid-cols-2 gap-3 ${isClient ? 'lg:grid-cols-5' : 'lg:grid-cols-6'}`}>
+      <div className={`grid grid-cols-2 gap-4 ${isClient ? 'lg:grid-cols-5' : 'lg:grid-cols-5'}`}>
         {[
           { label: 'To Do', count: statsAll.filter(t => t.status === 'todo').length, gradient: 'bg-gradient-to-br from-slate-500 to-slate-600', icon: Ticket },
           { label: 'In Progress', count: statsAll.filter(t => t.status === 'in_progress').length, gradient: 'bg-gradient-to-br from-blue-500 to-indigo-600', icon: Clock },
           { label: 'In Review', count: statsAll.filter(t => t.status === 'in_review').length, gradient: 'bg-gradient-to-br from-amber-500 to-orange-600', icon: MessageSquare },
           { label: 'Done', count: statsAll.filter(t => t.status === 'done').length, gradient: 'bg-gradient-to-br from-emerald-500 to-teal-600', icon: Target },
-          { label: 'Closed', count: statsAll.filter(t => t.status === 'closed').length, gradient: 'bg-gradient-to-br from-purple-500 to-purple-700', icon: X },
+          // { label: 'Closed', count: statsAll.filter(t => t.status === 'closed').length, gradient: 'bg-gradient-to-br from-purple-500 to-purple-700', icon: X },
           ...(!isClient ? [{ label: 'Overdue', count: statsAll.filter(t => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'done' && t.status !== 'closed').length, gradient: 'bg-gradient-to-br from-red-500 to-rose-700', icon: AlertTriangle }] : []),
-        ].map(({ label, count, gradient, icon: Icon }) => (
-          <div key={label} className={`relative overflow-hidden rounded-xl border-0 ${gradient} p-4`}>
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-white/70">{label}</p>
-                <p className="mt-1 text-2xl font-bold text-white">{count}</p>
-              </div>
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/20 backdrop-blur-sm">
-                <Icon className="h-4 w-4 text-white" />
-              </div>
-            </div>
-          </div>
+        ].map(({ label, count, gradient, icon }) => (
+          <KpiCard key={label} title={label} value={count} icon={icon} gradient={gradient} />
         ))}
       </div>
 
-      {/* Search + Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by ticket ID or title..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-9 pl-9 pr-8"
-          />
-          {search && (
-            <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
+      {/* Toolbar — search + actions on row 1, filter dropdowns on row 2 */}
+      <div className="rounded-xl border bg-card shadow-sm p-3 sm:p-4 space-y-3">
+        {/* Row 1: search (flex-1) + actions */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by ticket ID or title..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9 pl-9 pr-8"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          <Button
+            size="sm"
+            className="h-9 shrink-0 bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-sm"
+            onClick={handleNewTicketClick}
+            disabled={!isClient && projectsList.length === 0}
+          >
+            <Ticket className="h-4 w-4 mr-1.5" />
+            New Ticket
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 shrink-0"
+            disabled={tasks.length === 0}
+            onClick={exportToExcel}
+          >
+            <Download className="h-4 w-4 mr-1.5" />
+            Export Excel
+          </Button>
         </div>
-        <div className="hidden sm:block h-6 w-px bg-border" />
-        <div className="grid grid-cols-3 gap-2 sm:flex sm:gap-3">
+
+        {/* Row 2: filter dropdowns */}
+        <div className="flex flex-wrap items-center gap-2">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full sm:w-36">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
+            <SelectTrigger className="h-9 w-full sm:w-36"><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="todo">To Do</SelectItem>
@@ -549,9 +582,7 @@ export default function FullTicketsPage() {
             </SelectContent>
           </Select>
           <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-            <SelectTrigger className="w-full sm:w-36">
-              <SelectValue placeholder="Priority" />
-            </SelectTrigger>
+            <SelectTrigger className="h-9 w-full sm:w-36"><SelectValue placeholder="Priority" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Priorities</SelectItem>
               <SelectItem value="low">Low</SelectItem>
@@ -562,9 +593,7 @@ export default function FullTicketsPage() {
           </Select>
           {!isClient && (
             <Select value={projectFilter} onValueChange={setProjectFilter}>
-              <SelectTrigger className="w-full sm:w-44">
-                <SelectValue placeholder="Project" />
-              </SelectTrigger>
+              <SelectTrigger className="h-9 w-full sm:w-44"><SelectValue placeholder="Project" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Projects</SelectItem>
                 {(projectsList ?? []).map((p) => (
@@ -587,9 +616,7 @@ export default function FullTicketsPage() {
             className="w-full sm:w-48"
           />
           <Select value={dueDateFilter} onValueChange={setDueDateFilter}>
-            <SelectTrigger className="w-full sm:w-36">
-              <SelectValue placeholder="Due Date" />
-            </SelectTrigger>
+            <SelectTrigger className="h-9 w-full sm:w-36"><SelectValue placeholder="Due Date" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Due Dates</SelectItem>
               <SelectItem value="overdue">Overdue</SelectItem>
@@ -597,38 +624,17 @@ export default function FullTicketsPage() {
               <SelectItem value="no_due_date">No Due Date</SelectItem>
             </SelectContent>
           </Select>
-        </div>
-        {(statusFilter !== 'all' || priorityFilter !== 'all' || projectFilter !== 'all' || assigneeFilter !== 'all' || dueDateFilter !== 'all' || search) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="shrink-0 text-red-500 hover:text-red-600 hover:bg-red-500/10"
-            onClick={() => { setStatusFilter('all'); setPriorityFilter('all'); setProjectFilter('all'); setAssigneeFilter('all'); setDueDateFilter('all'); setSearch(''); }}
-          >
-            <X className="h-3.5 w-3.5 mr-1" />
-            Clear Filters
-          </Button>
-        )}
-        <div className="ml-auto flex items-center gap-2 shrink-0">
-          {isClient && (user as any)?.projectId && (
+          {(statusFilter !== 'all' || priorityFilter !== 'all' || projectFilter !== 'all' || assigneeFilter !== 'all' || dueDateFilter !== 'all' || search) && (
             <Button
+              variant="ghost"
               size="sm"
-              className="bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white"
-              onClick={() => router.push(`/projects/${(user as any).projectId}/planning/new-task`)}
+              className="h-9 shrink-0 ml-auto text-red-500 hover:text-red-600 hover:bg-red-500/10"
+              onClick={() => { setStatusFilter('all'); setPriorityFilter('all'); setProjectFilter('all'); setAssigneeFilter('all'); setDueDateFilter('all'); setSearch(''); }}
             >
-              <Ticket className="h-4 w-4 mr-1.5" />
-              New Ticket
+              <X className="h-3.5 w-3.5 mr-1" />
+              Clear
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={tasks.length === 0}
-            onClick={exportToExcel}
-          >
-            <Download className="h-4 w-4 mr-1.5" />
-            Export Excel
-          </Button>
         </div>
       </div>
 
@@ -1178,6 +1184,45 @@ export default function FullTicketsPage() {
                 ))}
               </div>
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* New Ticket — pick project dialog */}
+      <Dialog open={newTicketPickerOpen} onOpenChange={setNewTicketPickerOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogTitle className="flex items-center gap-2">
+            <Ticket className="h-5 w-5 text-violet-600" />
+            New Ticket — Pick a Project
+          </DialogTitle>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              Tickets belong to a project. Choose where this ticket should live.
+            </p>
+            <SearchableSelect
+              value={newTicketProjectId}
+              onValueChange={setNewTicketProjectId}
+              placeholder="Select a project..."
+              options={projectsList.map((p: any) => ({
+                value: String(p.id),
+                label: `${p.projectName ?? p.name}${p.projectCode ? ` (${p.projectCode})` : ''}`,
+              }))}
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setNewTicketPickerOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={!newTicketProjectId}
+              className="bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white"
+              onClick={() => {
+                setNewTicketPickerOpen(false);
+                router.push(`/projects/${newTicketProjectId}/planning/new-task`);
+              }}
+            >
+              Continue
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

@@ -276,16 +276,13 @@ export function NotificationBell() {
         )}
 
         {/* ── Footer ── */}
-        {notifications.length > 0 && (
-          <>
-            <Separator />
-            <div className="px-3 py-2 text-center">
-              <p className="text-[10px] text-muted-foreground/50">
-                {notifications.length} notification{notifications.length !== 1 ? 's' : ''} · refreshes every 30s
-              </p>
-            </div>
-          </>
-        )}
+        <Separator />
+        <button
+          onClick={() => { setOpen(false); router.push('/notifications'); }}
+          className="w-full px-3 py-2.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-accent/60 transition-colors"
+        >
+          View all notifications
+        </button>
       </DropdownMenuContent>
     </DropdownMenu>
   );

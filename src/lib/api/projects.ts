@@ -1,5 +1,10 @@
 import { api } from './axios-instance';
+import { tokenStorage } from '@/lib/auth/token-storage';
 import { ApiResponse, Project, CreateProjectDto, UpdateProjectDto, PaginationParams, Employee } from '@/types';
+
+function projectsBase() {
+  return tokenStorage.getLoginType() === 'admin' ? '/projects' : '/employee/projects';
+}
 
 export const projectsApi = {
   getAll: (params?: PaginationParams & { search?: string; status?: string; type?: string }) =>
@@ -93,13 +98,13 @@ export const projectsApi = {
   deleteMilestone: (projectId: number, milestoneId: number) =>
     api.delete(`/projects/${projectId}/milestones/${milestoneId}`),
 
-  // Project Types
+  // Project Types — admins use /projects, employees (incl. HR) use /employee/projects
   getProjectTypes: () =>
-    api.get('/projects/types/list'),
+    api.get(`${projectsBase()}/types/list`),
 
   createProjectType: (dto: { value: string; label: string; description?: string }) =>
-    api.post('/projects/types', dto),
+    api.post(`${projectsBase()}/types`, dto),
 
   deleteProjectType: (typeId: number) =>
-    api.delete(`/projects/types/${typeId}`),
+    api.delete(`${projectsBase()}/types/${typeId}`),
 };

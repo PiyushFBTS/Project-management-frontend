@@ -1,7 +1,9 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/providers/auth-provider';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -40,6 +42,10 @@ const categoryLabels: Record<string, string> = {
 
 export default function TaskTypesPage() {
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?._type === 'admin';
+  const isHr = user?._type === 'employee' && !!(user as any)?.isHr;
+  const canManage = isAdmin || isHr;
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<TaskType | null>(null);
@@ -119,9 +125,11 @@ export default function TaskTypesPage() {
               <p className="text-sm text-white/60">Task type categories</p>
             </div>
           </div>
-          <Button size="sm" onClick={openCreate} className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg">
-            <Plus className="mr-1.5 h-4 w-4" /> New Task Type
-          </Button>
+          {canManage && (
+            <Button size="sm" onClick={openCreate} className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg">
+              <Plus className="mr-1.5 h-4 w-4" /> New Task Type
+            </Button>
+          )}
         </div>
       </div>
 
@@ -144,14 +152,14 @@ export default function TaskTypesPage() {
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Active</TableHead>
-              <TableHead className="w-20">Actions</TableHead>
+              {canManage && <TableHead className="w-20">Actions</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading
               ? [...Array(4)].map((_, i) => (
                   <TableRow key={i}>
-                    {[...Array(5)].map((__, j) => <TableCell key={j}><Skeleton className="h-5 w-20" /></TableCell>)}
+                    {[...Array(canManage ? 5 : 4)].map((__, j) => <TableCell key={j}><Skeleton className="h-5 w-20" /></TableCell>)}
                   </TableRow>
                 ))
               : (data ?? []).map((t) => (
@@ -166,19 +174,21 @@ export default function TaskTypesPage() {
                         {t.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(t)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600"
-                          onClick={() => { if (confirm(`Remove "${t.typeName}"?`)) deleteMutation.mutate({ id: t.id, name: t.typeName }); }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
+                    {canManage && (
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(t)}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600"
+                            onClick={() => { if (confirm(`Remove "${t.typeName}"?`)) deleteMutation.mutate({ id: t.id, name: t.typeName }); }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))}
           </TableBody>

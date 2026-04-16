@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Tags, Plus, Trash2, Loader2, FolderPlus } from 'lucide-react';
 import { projectsApi } from '@/lib/api/projects';
+import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -30,6 +31,10 @@ const defaultColor = 'bg-slate-100 text-slate-700 dark:bg-slate-500/15 dark:text
 export default function ProjectTypesPage() {
   const router = useRouter();
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?._type === 'admin';
+  const isHr = user?._type === 'employee' && !!(user as any)?.isHr;
+  const canManage = isAdmin || isHr;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [label, setLabel] = useState('');
   const [value, setValue] = useState('');
@@ -83,13 +88,15 @@ export default function ProjectTypesPage() {
               <p className="text-xs sm:text-sm text-white/60">{((types ?? []) as any[])?.length ?? 0} types available</p>
             </div>
           </div>
-          <Button
-            size="sm"
-            className="bg-white text-blue-700 hover:bg-white/90 border-0 shadow-lg font-semibold"
-            onClick={() => setDialogOpen(true)}
-          >
-            <Plus className="mr-1.5 h-4 w-4" /> Add Type
-          </Button>
+          {canManage && (
+            <Button
+              size="sm"
+              className="bg-white text-blue-700 hover:bg-white/90 border-0 shadow-lg font-semibold"
+              onClick={() => setDialogOpen(true)}
+            >
+              <Plus className="mr-1.5 h-4 w-4" /> Add Type
+            </Button>
+          )}
         </div>
       </div>
 
@@ -112,25 +119,27 @@ export default function ProjectTypesPage() {
                 <Badge className={`${typeColors[type.value] ?? defaultColor} text-xs font-semibold`}>
                   {type.label}
                 </Badge>
-                <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 text-primary opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Create project with this type"
-                    onClick={(ev) => { ev.stopPropagation(); router.push(`/projects/new?type=${encodeURIComponent(type.value)}`); }}
-                  >
-                    <FolderPlus className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={(ev) => { ev.stopPropagation(); if (confirm(`Delete "${type.label}"?`)) deleteMut.mutate(type.id); }}
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
+                {canManage && (
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-primary opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Create project with this type"
+                      onClick={(ev) => { ev.stopPropagation(); router.push(`/projects/new?type=${encodeURIComponent(type.value)}`); }}
+                    >
+                      <FolderPlus className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-red-500 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(ev) => { ev.stopPropagation(); if (confirm(`Delete "${type.label}"?`)) deleteMut.mutate(type.id); }}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                )}
               </div>
               {type.description && <p className="text-sm text-muted-foreground mt-2">{type.description}</p>}
               <p className="text-[10px] text-muted-foreground/60 mt-2 font-mono">{type.value}</p>

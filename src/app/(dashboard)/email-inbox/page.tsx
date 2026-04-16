@@ -1,8 +1,9 @@
 'use client';
 
 import { Suspense, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Mail, Search, RefreshCw, Eye, CheckCircle, XCircle, Paperclip, Download } from 'lucide-react';
+import { Mail, Search, RefreshCw, Eye, CheckCircle, XCircle } from 'lucide-react';
 
 const formatSentAt = (dateStr: string) => {
   const d = new Date(dateStr);
@@ -13,14 +14,12 @@ const formatSentAt = (dateStr: string) => {
   h = h % 12 || 12;
   return `${date} ${h}:${m}${ampm}`;
 };
-import { toast } from 'sonner';
 import { emailLogsApi, EmailLogFilter } from '@/lib/api/email-logs';
-import { EmailLog, EmailLogAttachment } from '@/types';
+import { EmailLog } from '@/types';
 import { useCompany } from '@/providers/company-provider';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -57,128 +56,17 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// ── Email Detail Dialog ────────────────────────────────────────────────────────
-
-function EmailDetailDialog({ log, open, onClose }: { log: EmailLog | null; open: boolean; onClose: () => void }) {
-  if (!log) return null;
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-2xl overflow-hidden">
-        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-sky-500 via-blue-500 to-indigo-500" />
-        <DialogHeader className="pt-2">
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <Mail className="h-4 w-4 text-sky-500" />
-            {log.subject ?? '(No subject)'}
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-3 text-sm">
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-lg border bg-muted/40 p-3">
-            <div>
-              <p className="text-xs text-muted-foreground">To</p>
-              <p className="font-medium">{log.toEmail}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">From</p>
-              <p className="font-medium">
-                {log.fromName ? `${log.fromName} <${log.fromEmail}>` : (log.fromEmail ?? '—')}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Sent At</p>
-              <p className="font-medium">{formatSentAt(log.sentAt)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Triggered By</p>
-              <p className="font-medium capitalize">{log.triggeredBy?.replace(/_/g, ' ') ?? '—'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Status</p>
-              <StatusBadge status={log.status} />
-            </div>
-          </div>
-
-          {log.errorMessage && (
-            <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-950/20 p-3 text-red-600 dark:text-red-400 text-xs">
-              <p className="font-semibold mb-1">Error</p>
-              <p>{log.errorMessage}</p>
-            </div>
-          )}
-
-          {log.body && (
-            <div className="rounded-lg border overflow-hidden">
-              <p className="bg-muted/60 px-3 py-1.5 text-xs font-medium text-muted-foreground border-b">
-                Email Body
-              </p>
-              <div
-                className="p-3 max-h-64 overflow-y-auto text-sm prose dark:prose-invert max-w-none"
-                dangerouslySetInnerHTML={{ __html: log.body }}
-              />
-            </div>
-          )}
-
-          {log.attachments && log.attachments.length > 0 && (
-            <div className="rounded-lg border overflow-hidden">
-              <p className="bg-muted/60 px-3 py-1.5 text-xs font-medium text-muted-foreground border-b flex items-center gap-1.5">
-                <Paperclip className="h-3.5 w-3.5" />
-                Attachments ({log.attachments.length})
-              </p>
-              <div className="divide-y">
-                {log.attachments.map((att, i) => (
-                  <AttachmentRow key={i} attachment={att} />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function AttachmentRow({ attachment }: { attachment: EmailLogAttachment }) {
-  const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
-  const url = `${apiBase}/uploads/${attachment.path}`;
-
-  function formatSize(bytes: number) {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-
-  const icon = attachment.mimetype.startsWith('image/') ? '🖼️' :
-    attachment.mimetype === 'application/pdf' ? '📄' : '📎';
-
-  return (
-    <div className="flex items-center gap-3 px-3 py-2 text-sm hover:bg-muted/40 transition-colors">
-      <span className="text-base">{icon}</span>
-      <span className="flex-1 truncate font-medium">{attachment.filename}</span>
-      <span className="text-xs text-muted-foreground shrink-0">{formatSize(attachment.size)}</span>
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        download={attachment.filename}
-        className="rounded p-1 hover:bg-sky-500/10 text-sky-500 transition-colors shrink-0"
-        title="Download"
-      >
-        <Download className="h-4 w-4" />
-      </a>
-    </div>
-  );
-}
-
 // ── Main Page Content ─────────────────────────────────────────────────────────
 
 function EmailInboxContent() {
   const { isSuperAdmin, selectedCompany } = useCompany();
+  const router = useRouter();
 
   const [filter, setFilter] = useState<EmailLogFilter>({ page: 1, limit: 20 });
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<string>('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [selected, setSelected] = useState<EmailLog | null>(null);
 
   // When super admin is in company context, scope to that company's emails
   const scopedCompanyId = isSuperAdmin && selectedCompany ? selectedCompany.id : undefined;
@@ -314,7 +202,7 @@ function EmailInboxContent() {
                 <TableRow
                   key={log.id}
                   className="cursor-pointer transition-colors hover:bg-muted/50"
-                  onClick={() => setSelected(log)}
+                  onClick={() => router.push(`/email-inbox/${log.id}`)}
                 >
                   <TableCell className="font-medium max-w-48 truncate">
                     {log.subject ?? <span className="text-muted-foreground italic">(No subject)</span>}
@@ -336,7 +224,7 @@ function EmailInboxContent() {
                   </TableCell>
                   <TableCell>
                     <button
-                      onClick={(e) => { e.stopPropagation(); setSelected(log); }}
+                      onClick={(e) => { e.stopPropagation(); router.push(`/email-inbox/${log.id}`); }}
                       className="rounded p-1 hover:bg-muted transition-colors"
                       title="View details"
                     >
@@ -375,12 +263,6 @@ function EmailInboxContent() {
         </div>
       )}
 
-      {/* Detail Dialog */}
-      <EmailDetailDialog
-        log={selected}
-        open={!!selected}
-        onClose={() => setSelected(null)}
-      />
     </div>
   );
 }

@@ -28,6 +28,7 @@ const pageTitles: Record<string, string> = {
   '/task-sheets':           'Task Sheets',
   '/leave-types':           'Leave Types',
   '/leave-requests':        'Leave Requests',
+  '/leave-balance':         'Leave Balance',
   '/task-sheets/fill':      'Fill Task Sheet',
   '/reports/employee-wise': 'Employee-Wise Report',
   '/reports/project-wise':  'Project-Wise Report',
@@ -35,6 +36,9 @@ const pageTitles: Record<string, string> = {
   '/profile':               'My Profile',
   '/settings':              'Settings',
   '/my-tasks':              'My Tasks',
+  '/notifications':         'Notifications',
+  '/announcements':         'Announcements',
+  '/email-inbox':           'Email Inbox',
 };
 
 const pageParents: Record<string, string> = {

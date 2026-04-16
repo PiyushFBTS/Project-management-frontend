@@ -30,6 +30,7 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+import { KpiCard } from '@/components/shared/kpi-card';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -236,25 +237,31 @@ export default function MyTasksPage() {
 
       {/* KPI Stats */}
       {!isLoading && tasks.length > 0 && (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            { label: 'To Do', count: tasks.filter(t => t.status === 'todo').length, gradient: 'bg-gradient-to-br from-slate-500 to-slate-600', icon: ListTodo },
-            { label: 'In Progress', count: tasks.filter(t => t.status === 'in_progress').length, gradient: 'bg-gradient-to-br from-blue-500 to-indigo-600', icon: Clock },
-            { label: 'In Review', count: tasks.filter(t => t.status === 'in_review').length, gradient: 'bg-gradient-to-br from-amber-500 to-orange-600', icon: MessageSquare },
-            { label: 'Done', count: tasks.filter(t => t.status === 'done').length, gradient: 'bg-gradient-to-br from-emerald-500 to-teal-600', icon: Target },
-          ].map(({ label, count, gradient, icon: Icon }) => (
-            <div key={label} className={`relative overflow-hidden rounded-xl border-0 ${gradient} p-4`}>
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-white/70">{label}</p>
-                  <p className="mt-1 text-2xl font-bold text-white">{count}</p>
-                </div>
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/20 backdrop-blur-sm">
-                  <Icon className="h-4 w-4 text-white" />
-                </div>
-              </div>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <KpiCard
+            title="To Do"
+            value={tasks.filter(t => t.status === 'todo').length}
+            icon={ListTodo}
+            gradient="bg-gradient-to-br from-slate-500 to-slate-600"
+          />
+          <KpiCard
+            title="In Progress"
+            value={tasks.filter(t => t.status === 'in_progress').length}
+            icon={Clock}
+            gradient="bg-gradient-to-br from-blue-500 to-indigo-600"
+          />
+          <KpiCard
+            title="In Review"
+            value={tasks.filter(t => t.status === 'in_review').length}
+            icon={MessageSquare}
+            gradient="bg-gradient-to-br from-amber-500 to-orange-600"
+          />
+          <KpiCard
+            title="Done"
+            value={tasks.filter(t => t.status === 'done').length}
+            icon={Target}
+            gradient="bg-gradient-to-br from-emerald-500 to-teal-600"
+          />
         </div>
       )}
 

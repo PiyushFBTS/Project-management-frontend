@@ -19,6 +19,8 @@ import {
 
 const fmt = (n: number | string | null) => Number(n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 });
 
+const COMPANY_OVERHEAD_RATE = 0.25;
+
 export default function ProjectCostPage() {
   const { user } = useAuth();
   const isAdmin = user?._type === 'admin';
@@ -49,22 +51,33 @@ export default function ProjectCostPage() {
     projectEmployeeMap[pid].push(row);
   });
 
-  // KPIs
+  // KPIs — apply 25% company overhead on top of employee cost
   const totalRevenue = projectProfitability.reduce((s, p) => s + Number(p.milestone_received ?? 0), 0);
-  const totalCost = projectProfitability.reduce((s, p) => s + Number(p.employee_cost ?? 0), 0);
+  const totalEmployeeCost = projectProfitability.reduce((s, p) => s + Number(p.employee_cost ?? 0), 0);
+  const totalCompanyOverhead = totalEmployeeCost * COMPANY_OVERHEAD_RATE;
+  const totalCost = totalEmployeeCost + totalCompanyOverhead;
   const totalProfit = totalRevenue - totalCost;
 
   const exportToExcel = () => {
-    const rows = projectProfitability.map((p: any) => ({
-      'Project': p.project_name,
-      'Code': p.project_code,
-      'Budget': Number(p.project_budget ?? 0),
-      'Milestone Total': Number(p.milestone_total),
-      'Received': Number(p.milestone_received),
-      'Employee Cost': Number(p.employee_cost),
-      'Profit': Number(p.profit),
-      'Margin %': Number(p.milestone_received) > 0 ? ((Number(p.profit) / Number(p.milestone_received)) * 100).toFixed(1) : '—',
-    }));
+    const rows = projectProfitability.map((p: any) => {
+      const empCost = Number(p.employee_cost ?? 0);
+      const companyCost = empCost * COMPANY_OVERHEAD_RATE;
+      const totalProjectCost = empCost + companyCost;
+      const received = Number(p.milestone_received ?? 0);
+      const adjustedProfit = received - totalProjectCost;
+      return {
+        'Project': p.project_name,
+        'Code': p.project_code,
+        'Budget': Number(p.project_budget ?? 0),
+        'Milestone Total': Number(p.milestone_total),
+        'Received': received,
+        'Employee Cost': empCost,
+        'Company Overhead (25%)': companyCost,
+        'Total Cost': totalProjectCost,
+        'Profit': adjustedProfit,
+        'Margin %': received > 0 ? ((adjustedProfit / received) * 100).toFixed(1) : '—',
+      };
+    });
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Project Profitability');
@@ -107,8 +120,11 @@ export default function ProjectCostPage() {
               <IndianRupee className="h-5 w-5 text-blue-500" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Total Employee Cost</p>
+              <p className="text-xs text-muted-foreground">Total Cost (incl. 25% overhead)</p>
               <p className="text-lg font-bold">{'\u20B9'}{fmt(totalCost)}</p>
+              <p className="text-[10px] text-muted-foreground">
+                Emp {'\u20B9'}{fmt(totalEmployeeCost)} + Co. {'\u20B9'}{fmt(totalCompanyOverhead)}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -145,14 +161,19 @@ export default function ProjectCostPage() {
                     <TableHead className="text-right">Milestone Total</TableHead>
                     <TableHead className="text-right">Received</TableHead>
                     <TableHead className="text-right">Employee Cost</TableHead>
+                    <TableHead className="text-right">Company (25%)</TableHead>
+                    <TableHead className="text-right">Total Cost</TableHead>
                     <TableHead className="text-right">Profit / Loss</TableHead>
                     <TableHead className="text-right">Margin</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {projectProfitability.map((p: any) => {
-                    const profit = Number(p.profit ?? 0);
                     const received = Number(p.milestone_received ?? 0);
+                    const empCost = Number(p.employee_cost ?? 0);
+                    const companyCost = empCost * COMPANY_OVERHEAD_RATE;
+                    const totalProjectCost = empCost + companyCost;
+                    const profit = received - totalProjectCost;
                     const margin = received > 0 ? ((profit / received) * 100).toFixed(1) : '—';
                     const isExpanded = expandedProject === p.id;
                     const empBreakdown = projectEmployeeMap[p.id] ?? [];
@@ -169,8 +190,10 @@ export default function ProjectCostPage() {
                           </TableCell>
                           <TableCell className="text-right">{p.project_budget ? `\u20B9${fmt(p.project_budget)}` : '—'}</TableCell>
                           <TableCell className="text-right">{'\u20B9'}{fmt(p.milestone_total)}</TableCell>
-                          <TableCell className="text-right">{'\u20B9'}{fmt(p.milestone_received)}</TableCell>
-                          <TableCell className="text-right">{'\u20B9'}{fmt(p.employee_cost)}</TableCell>
+                          <TableCell className="text-right">{'\u20B9'}{fmt(received)}</TableCell>
+                          <TableCell className="text-right">{'\u20B9'}{fmt(empCost)}</TableCell>
+                          <TableCell className="text-right text-amber-600 dark:text-amber-400">{'\u20B9'}{fmt(companyCost)}</TableCell>
+                          <TableCell className="text-right font-medium">{'\u20B9'}{fmt(totalProjectCost)}</TableCell>
                           <TableCell className="text-right">
                             <span className={`font-semibold ${profit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
                               {profit >= 0 ? '+' : ''}{'\u20B9'}{fmt(profit)}
@@ -185,22 +208,27 @@ export default function ProjectCostPage() {
                           </TableCell>
                         </TableRow>
 
-                        {/* Expanded: employee breakdown */}
-                        {isExpanded && empBreakdown.length > 0 && empBreakdown.map((emp: any, idx: number) => (
-                          <TableRow key={`${p.id}-emp-${idx}`} className="bg-muted/20">
-                            <TableCell></TableCell>
-                            <TableCell className="pl-8 text-sm">
-                              <span className="text-muted-foreground">{emp.emp_name}</span>
-                              <span className="text-xs text-muted-foreground ml-2 font-mono">{emp.emp_code}</span>
-                            </TableCell>
-                            <TableCell className="text-right text-xs text-muted-foreground">CTC: {'\u20B9'}{fmt(emp.monthly_ctc)}/mo</TableCell>
-                            <TableCell className="text-right text-xs text-muted-foreground">Rate: {'\u20B9'}{fmt(emp.daily_rate)}/day</TableCell>
-                            <TableCell className="text-right text-xs">{Number(emp.total_hours).toFixed(1)}h</TableCell>
-                            <TableCell className="text-right text-xs font-medium">{'\u20B9'}{fmt(emp.cost)}</TableCell>
-                            <TableCell className="text-right text-xs text-muted-foreground">{Number(emp.man_days).toFixed(1)} days</TableCell>
-                            <TableCell></TableCell>
-                          </TableRow>
-                        ))}
+                        {/* Expanded: employee breakdown (company overhead only applies at project level) */}
+                        {isExpanded && empBreakdown.length > 0 && empBreakdown.map((emp: any, idx: number) => {
+                          const empRowCost = Number(emp.cost ?? 0);
+                          return (
+                            <TableRow key={`${p.id}-emp-${idx}`} className="bg-muted/20">
+                              <TableCell></TableCell>
+                              <TableCell className="pl-8 text-sm">
+                                <span className="text-muted-foreground">{emp.emp_name}</span>
+                                <span className="text-xs text-muted-foreground ml-2 font-mono">{emp.emp_code}</span>
+                              </TableCell>
+                              <TableCell className="text-right text-xs text-muted-foreground">CTC: {'\u20B9'}{fmt(emp.monthly_ctc)}/mo</TableCell>
+                              <TableCell className="text-right text-xs text-muted-foreground">Rate: {'\u20B9'}{fmt(emp.daily_rate)}/day</TableCell>
+                              <TableCell className="text-right text-xs">{Number(emp.total_hours).toFixed(1)}h</TableCell>
+                              <TableCell className="text-right text-xs font-medium">{'\u20B9'}{fmt(empRowCost)}</TableCell>
+                              <TableCell className="text-right text-xs text-muted-foreground">—</TableCell>
+                              <TableCell className="text-right text-xs font-medium">{'\u20B9'}{fmt(empRowCost)}</TableCell>
+                              <TableCell className="text-right text-xs text-muted-foreground">{Number(emp.man_days).toFixed(1)} days</TableCell>
+                              <TableCell></TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </Fragment>
                     );
                   })}
@@ -212,6 +240,8 @@ export default function ProjectCostPage() {
                     <TableCell></TableCell>
                     <TableCell className="text-right">{'\u20B9'}{fmt(projectProfitability.reduce((s: number, p: any) => s + Number(p.milestone_total ?? 0), 0))}</TableCell>
                     <TableCell className="text-right">{'\u20B9'}{fmt(totalRevenue)}</TableCell>
+                    <TableCell className="text-right">{'\u20B9'}{fmt(totalEmployeeCost)}</TableCell>
+                    <TableCell className="text-right text-amber-600 dark:text-amber-400">{'\u20B9'}{fmt(totalCompanyOverhead)}</TableCell>
                     <TableCell className="text-right">{'\u20B9'}{fmt(totalCost)}</TableCell>
                     <TableCell className="text-right">
                       <span className={totalProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}>
