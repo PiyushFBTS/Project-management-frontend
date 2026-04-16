@@ -512,6 +512,9 @@ function AdminDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Active announcements (above KPIs) */}
+      <AnnouncementBanner />
+
       {/* KPI Row */}
       {summaryLoading ? (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
