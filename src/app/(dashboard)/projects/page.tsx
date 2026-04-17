@@ -108,7 +108,7 @@ export default function ProjectsPage() {
               <TableHead>Type</TableHead>
               <TableHead>Client</TableHead>
               <TableHead>Manager</TableHead>
-              <TableHead className="w-20">Actions</TableHead>
+              <TableHead className="w-20">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
