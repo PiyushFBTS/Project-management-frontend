@@ -210,32 +210,9 @@ export default function CompaniesPage() {
     setLogoPreview(null);
   }
 
-  function openCreate() { resetForm(); setEditing(null); setFormOpen(true); }
+  function openCreate() { router.push('/companies/new'); }
 
-  function openEdit(c: CompanyWithCounts) {
-    setEditing(c);
-    setForm({
-      name: c.name, slug: c.slug,
-      companyCode: c.companyCode ?? '',
-      contactPersonName: c.contactPersonName ?? '',
-      contactEmail: c.contactEmail ?? '', contactPhone: c.contactPhone ?? '',
-      address: c.address ?? '', subscriptionPlan: c.subscriptionPlan,
-      userLimit: String(c.userLimit), licenseExpiryDate: c.licenseExpiryDate,
-      countryId: c.countryId ? String(c.countryId) : '',
-      stateId: c.stateId ? String(c.stateId) : '',
-      cityId: c.cityId ? String(c.cityId) : '',
-      postalCode: c.postalCode ?? '',
-      gstNumber: c.gstNumber ?? '', panNumber: c.panNumber ?? '',
-      taxId: c.taxId ?? '', gstin: c.gstin ?? '',
-      taxRegistrationNumber: c.taxRegistrationNumber ?? '',
-      gstEnabled: c.gstEnabled ?? false, vatEnabled: c.vatEnabled ?? false,
-      baseCurrencyCode: c.baseCurrencyCode ?? '',
-    });
-    setLogoFile(null);
-    const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
-    setLogoPreview(c.logoUrl ? `${apiBase}${c.logoUrl}` : null);
-    setFormOpen(true);
-  }
+  function openEdit(c: CompanyWithCounts) { router.push(`/companies/new?edit=${c.id}`); }
 
   function openLicense(c: CompanyWithCounts) {
     setLicenseCompany(c);
