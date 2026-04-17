@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { Suspense, useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -31,6 +31,14 @@ const extractArray = (res: any): any[] => {
 };
 
 export default function NewCompanyPage() {
+  return (
+    <Suspense>
+      <NewCompanyContent />
+    </Suspense>
+  );
+}
+
+function NewCompanyContent() {
   const router = useRouter();
   const qc = useQueryClient();
   const searchParams = useSearchParams();
