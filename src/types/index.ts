@@ -275,7 +275,7 @@ export interface UpdateEmployeeDto {
 
 // ── Daily Task Sheets ─────────────────────────────────────────────────────
 
-export type TaskStatus = 'in_progress' | 'finished' | 'failed';
+export type TaskStatus = 'in_progress' | 'finished' | 'failed' | 'awaiting_response';
 
 export interface TaskEntry {
   id: number;
@@ -285,6 +285,8 @@ export interface TaskEntry {
   projectId?: number | null;
   project?: Project;
   otherProjectName?: string | null;
+  ticketId?: number | null;
+  activityType?: string | null;
   taskDescription: string;
   fromTime: string;
   toTime: string;

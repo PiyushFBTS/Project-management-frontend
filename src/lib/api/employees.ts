@@ -29,7 +29,7 @@ export const employeesApi = {
     api.patch<ApiResponse<Employee>>(`/employees/${id}/assign`, { projectId }),
 
   // ── Employee self-update ──
-  updateSelf: (dto: { empName?: string; mobileNumber?: string; dateOfBirth?: string }) =>
+  updateSelf: (dto: { empName?: string; mobileNumber?: string; dateOfBirth?: string; bloodGroup?: string; maritalStatus?: string }) =>
     api.patch<ApiResponse<Employee>>('/employee/employees/me', dto),
 
   // ── Employee endpoints (read-only) ──

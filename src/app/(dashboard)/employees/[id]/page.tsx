@@ -332,7 +332,13 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
     mutationFn: async () => {
       if (isSelf && isEmployee) {
         // Employee self-update (limited fields)
-        return employeesApi.updateSelf({ empName: editName, mobileNumber: editPhone, dateOfBirth: editDob || undefined });
+        return employeesApi.updateSelf({
+          empName: editName,
+          mobileNumber: editPhone,
+          dateOfBirth: editDob || undefined,
+          bloodGroup: editBloodGroup || undefined,
+          maritalStatus: editMaritalStatus || undefined,
+        });
       }
       // Admin/HR update (all fields)
       const [reportsType, reportsIdStr] = editReportsToId && editReportsToId !== 'none' ? editReportsToId.split('-') : [null, null];
@@ -583,7 +589,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Blood Group</p>
                         {editMode ? (
                           <Select value={editBloodGroup || 'none'} onValueChange={(v) => setEditBloodGroup(v === 'none' ? '' : v)}>
-                            <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
+                            <SelectTrigger className="h-8 text-sm w-full"><SelectValue placeholder="Select" /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="none">Not set</SelectItem>
                               {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((bg) => (
@@ -599,7 +605,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Marital Status</p>
                         {editMode ? (
                           <Select value={editMaritalStatus || 'none'} onValueChange={(v) => setEditMaritalStatus(v === 'none' ? '' : v)}>
-                            <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select" /></SelectTrigger>
+                            <SelectTrigger className="h-8 text-sm w-full"><SelectValue placeholder="Select" /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="none">Not set</SelectItem>
                               {['Single', 'Married', 'Divorced', 'Widowed'].map((ms) => (
@@ -627,7 +633,8 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                   <CardContent className="px-5 py-4">
                     <div className="flex items-center justify-between mb-3">
                       <h2 className="text-base font-semibold">Praise</h2>
-                      {canEdit && !isSelf && (
+                      {/* Any logged-in user can praise a colleague, but not themselves */}
+                      {!isSelf && (
                         <Button size="sm" variant="outline" className="text-xs" onClick={() => { setPraiseType(''); setPraiseDesc(''); setPraiseDialogOpen(true); }}>
                           + Give Praise
                         </Button>

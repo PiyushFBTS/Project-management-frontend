@@ -29,6 +29,8 @@ export const taskSheetsApi = {
     projectId?: number;
     otherProjectName?: string;
     taskTypeId?: number;
+    ticketId?: number | null;
+    activityType?: string | null;
     fromTime: string;
     toTime: string;
     taskDescription: string;
@@ -40,6 +42,8 @@ export const taskSheetsApi = {
     projectId?: number;
     otherProjectName?: string;
     taskTypeId?: number;
+    ticketId?: number | null;
+    activityType?: string | null;
     fromTime?: string;
     toTime?: string;
     taskDescription?: string;

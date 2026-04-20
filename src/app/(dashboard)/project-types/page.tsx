@@ -113,8 +113,13 @@ export default function ProjectTypesPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {((types ?? []) as any[]).map((type: any) => (
-            <div key={type.id} className="rounded-xl border bg-card p-4 hover:shadow-lg hover:-translate-y-1 hover:border-primary/30 transition-all duration-200 group cursor-pointer"
-              onClick={() => router.push(`/projects/new?type=${encodeURIComponent(type.value)}`)}>
+            <div
+              key={type.id}
+              className={`rounded-xl border bg-card p-4 hover:shadow-lg hover:-translate-y-1 hover:border-primary/30 transition-all duration-200 group ${canManage ? 'cursor-pointer' : 'cursor-default'}`}
+              onClick={() => {
+                if (canManage) router.push(`/projects/new?type=${encodeURIComponent(type.value)}`);
+              }}
+            >
               <div className="flex items-start justify-between gap-2">
                 <Badge className={`${typeColors[type.value] ?? defaultColor} text-xs font-semibold`}>
                   {type.label}

@@ -54,6 +54,21 @@ const emptyForm = {
   status: 'in_progress' as string,
 };
 
+const ACTIVITY_VALUES = new Set(['internal_meeting', 'client_meeting', 'others']);
+
+/**
+ * Split the UI `ticketId` value into backend fields: either a numeric
+ * `ticketId` (real project ticket) or a `activityType` string. When empty,
+ * both are cleared on update.
+ */
+function resolveTicketRef(value: string): { ticketId?: number | null; activityType?: string | null } {
+  if (!value) return { ticketId: null, activityType: null };
+  if (ACTIVITY_VALUES.has(value)) return { ticketId: null, activityType: value };
+  const n = Number(value);
+  if (Number.isFinite(n) && n > 0) return { ticketId: n, activityType: null };
+  return { ticketId: null, activityType: null };
+}
+
 /**
  * Build sequential fromTime/toTime based on existing entries.
  * New entry starts after the last entry ends, or at 09:00 if no entries.
@@ -134,6 +149,7 @@ function FillTaskSheetPage() {
       const hours = parseFloat(data.hoursSpent);
       const { fromTime, toTime } = buildTimesFromHours(hours, sheet?.taskEntries ?? []);
       const isOther = data.projectId === 'other';
+      const ticketRef = resolveTicketRef(data.ticketId);
       return taskSheetsApi.addEntry(sheet!.id, {
         ...(isOther
           ? { otherProjectName: data.otherProjectName }
@@ -142,6 +158,7 @@ function FillTaskSheetPage() {
         toTime,
         taskDescription: data.taskDescription,
         status: data.status as TaskStatus,
+        ...ticketRef,
       });
     },
     onSuccess: () => {
@@ -158,12 +175,15 @@ function FillTaskSheetPage() {
   const updateMutation = useMutation({
     mutationFn: ({ entryId, data }: { entryId: number; data: typeof emptyForm }) => {
       const hours = parseFloat(data.hoursSpent);
-      // Keep the original fromTime, only adjust toTime
-      const origFrom = editingEntry!.fromTime;
-      const [fh, fm] = origFrom.split(':').map(Number);
+      // Keep the original fromTime, only adjust toTime.
+      // MySQL returns time as "HH:MM:SS"; the backend DTO requires "HH:MM".
+      const origFromRaw = editingEntry!.fromTime;
+      const [fh, fm] = origFromRaw.split(':').map(Number);
+      const origFrom = `${String(fh).padStart(2, '0')}:${String(fm).padStart(2, '0')}`;
       const endMinutes = fh * 60 + fm + Math.round(hours * 60);
       const toTime = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`;
       const isOther = data.projectId === 'other';
+      const ticketRef = resolveTicketRef(data.ticketId);
       return taskSheetsApi.updateEntry(sheet!.id, entryId, {
         ...(isOther
           ? { otherProjectName: data.otherProjectName, projectId: undefined }
@@ -172,6 +192,7 @@ function FillTaskSheetPage() {
         toTime,
         taskDescription: data.taskDescription,
         status: data.status as TaskStatus,
+        ...ticketRef,
       });
     },
     onSuccess: () => {
@@ -229,10 +250,14 @@ function FillTaskSheetPage() {
 
   const openEditForm = (entry: TaskEntry) => {
     setEditingEntry(entry);
+    // Restore Ticket/Activity field from whichever column was saved.
+    const ticketRef = entry.ticketId
+      ? String(entry.ticketId)
+      : (entry.activityType ?? '');
     setForm({
       projectId: entry.projectId ? String(entry.projectId) : 'other',
       otherProjectName: entry.otherProjectName ?? '',
-      ticketId: (entry as any).ticketId ? String((entry as any).ticketId) : '',
+      ticketId: ticketRef,
       hoursSpent: String(Number(entry.durationHours).toFixed(2)),
       taskDescription: entry.taskDescription,
       status: entry.status,
@@ -514,15 +539,29 @@ function FillTaskSheetPage() {
                 value={form.ticketId}
                 onValueChange={(v) => setForm((p) => ({ ...p, ticketId: v }))}
                 placeholder="Search ticket or select activity..."
-                options={[
-                  { value: 'internal_meeting', label: 'Internal Meeting' },
-                  { value: 'client_meeting', label: 'Client Meeting' },
-                  { value: 'others', label: 'Others' },
-                  ...((projectTickets ?? []) as any[]).map((t: any) => ({
-                    value: String(t.id),
-                    label: `${t.ticketNumber ?? ''} — ${t.title}`,
-                  })),
-                ]}
+                options={(() => {
+                  const baseOptions = [
+                    { value: 'internal_meeting', label: 'Internal Meeting' },
+                    { value: 'client_meeting', label: 'Client Meeting' },
+                    { value: 'others', label: 'Others' },
+                    ...((projectTickets ?? []) as any[]).map((t: any) => ({
+                      value: String(t.id),
+                      label: `${t.ticketNumber ?? ''} — ${t.title}`,
+                    })),
+                  ];
+                  // When editing, if the saved ticket isn't yet in the fetched list
+                  // (different project, or still loading) surface a placeholder entry
+                  // so the select displays a label instead of appearing empty.
+                  if (
+                    form.ticketId &&
+                    !baseOptions.some((o) => o.value === form.ticketId) &&
+                    !ACTIVITY_VALUES.has(form.ticketId)
+                  ) {
+                    const fallbackLabel = `Ticket #${form.ticketId}`;
+                    baseOptions.push({ value: form.ticketId, label: fallbackLabel });
+                  }
+                  return baseOptions;
+                })()}
               />
             </div>
 
