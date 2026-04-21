@@ -2,7 +2,7 @@
 'use client';
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -134,6 +134,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
   const [editBloodGroup, setEditBloodGroup] = useState('');
   const [editMaritalStatus, setEditMaritalStatus] = useState('');
   const [editReportsToId, setEditReportsToId] = useState<string>('');
+  const [editIsActive, setEditIsActive] = useState(true);
 
   // Password change state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -325,8 +326,21 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
         ? `adm-${(emp as any).reportsToAdminId}`
         : emp.reportsToId ? `emp-${emp.reportsToId}` : 'none'
     );
+    setEditIsActive(emp.isActive !== false);
     setEditMode(true);
   };
+
+  // Auto-enter edit mode when navigated here with ?edit=1 — but only once,
+  // otherwise post-save refetches would flip edit mode back on.
+  const wantEdit = searchParams.get('edit') === '1';
+  const autoEditedRef = useRef(false);
+  useEffect(() => {
+    if (wantEdit && emp && !autoEditedRef.current && canEdit && targetType !== 'admin') {
+      autoEditedRef.current = true;
+      startEdit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantEdit, emp]);
 
   const saveProfileMut = useMutation({
     mutationFn: async () => {
@@ -345,7 +359,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
       const isReportToAdmin = reportsType === 'adm';
       const reportsToId = reportsType === 'emp' ? Number(reportsIdStr) : null;
       const reportsToAdminId = reportsType === 'adm' ? Number(reportsIdStr) : null;
-      const dto: any = { empName: editName, email: editEmail, mobileNumber: editPhone, dateOfBirth: editDob || undefined, consultantType: editType, joiningDate: editJoiningDate || undefined, isHr: editIsHr, isReportToAdmin, reportsToId, reportsToAdminId, fillDaysOverride: editFillDays ? Number(editFillDays) : null, annualCTC: editAnnualCTC ? Number(editAnnualCTC) : null, bloodGroup: editBloodGroup || undefined, maritalStatus: editMaritalStatus || undefined };
+      const dto: any = { empName: editName, email: editEmail, mobileNumber: editPhone, dateOfBirth: editDob || undefined, consultantType: editType, joiningDate: editJoiningDate || undefined, isHr: editIsHr, isReportToAdmin, reportsToId, reportsToAdminId, fillDaysOverride: editFillDays ? Number(editFillDays) : null, annualCTC: editAnnualCTC ? Number(editAnnualCTC) : null, bloodGroup: editBloodGroup || undefined, maritalStatus: editMaritalStatus || undefined, isActive: editIsActive };
       return employeesApi.update(Number(id), dto);
     },
     onSuccess: () => {
@@ -559,9 +573,22 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                       )}
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Status</p>
-                        <Badge className={`text-xs border-0 ${emp.isActive ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
-                          {emp.isActive ? 'Active' : 'Inactive'}
-                        </Badge>
+                        {editMode && canManageAllDocs ? (
+                          <>
+                            <Select value={editIsActive ? 'active' : 'inactive'} onValueChange={(v) => setEditIsActive(v === 'active')}>
+                              <SelectTrigger className="h-8 text-sm w-full"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="active">Active</SelectItem>
+                                <SelectItem value="inactive">Inactive</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <p className="text-[10px] text-muted-foreground mt-1">Inactive employees cannot log in.</p>
+                          </>
+                        ) : (
+                          <Badge className={`text-xs border-0 ${emp.isActive ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
+                            {emp.isActive ? 'Active' : 'Inactive'}
+                          </Badge>
+                        )}
                       </div>
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">HR Access</p>

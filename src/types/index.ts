@@ -254,10 +254,16 @@ export interface CreateEmployeeDto {
   password: string;
   consultantType: ConsultantType;
   assignedProjectId?: number;
-  reportsToId?: number;
+  reportsToId?: number | null;
+  reportsToAdminId?: number | null;
+  isReportToAdmin?: boolean;
   isHr?: boolean;
   dateOfBirth?: string;
   joiningDate?: string;
+  fillDaysOverride?: number | null;
+  annualCTC?: number | null;
+  bloodGroup?: string;
+  maritalStatus?: string;
 }
 
 export interface UpdateEmployeeDto {
@@ -265,12 +271,18 @@ export interface UpdateEmployeeDto {
   email?: string;
   mobileNumber?: string;
   consultantType?: ConsultantType;
-  assignedProjectId?: number;
+  assignedProjectId?: number | null;
   reportsToId?: number | null;
+  reportsToAdminId?: number | null;
+  isReportToAdmin?: boolean;
   isHr?: boolean;
   isActive?: boolean;
   dateOfBirth?: string | null;
   joiningDate?: string | null;
+  fillDaysOverride?: number | null;
+  annualCTC?: number | null;
+  bloodGroup?: string | null;
+  maritalStatus?: string | null;
 }
 
 // ── Daily Task Sheets ─────────────────────────────────────────────────────

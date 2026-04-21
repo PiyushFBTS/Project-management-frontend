@@ -100,6 +100,9 @@ function FillTaskSheetPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const isEmployee = user?._type === 'employee';
+  const isAdmin = user?._type === 'admin';
+  // Both regular employees/HR and admins can fill their own sheet.
+  const canFill = isEmployee || isAdmin;
 
   const dateParam = searchParams.get('date'); // e.g. "2026-03-17"
   const today = new Date().toISOString().split('T')[0];
@@ -107,21 +110,26 @@ function FillTaskSheetPage() {
   const isToday = sheetDate === today;
 
   // Get employee's fill days override (default 3)
-  const fillDays = (user as any)?.fillDaysOverride ?? 3;
+  // Admin + HR get a 30-day fill window by default; regular employees get 3 days.
+  // A per-employee `fillDaysOverride` takes precedence when set.
+  const isHr = isEmployee && !!(user as any)?.isHr;
+  const defaultFillDays = isAdmin || isHr ? 30 : 3;
+  const fillDays = (user as any)?.fillDaysOverride ?? defaultFillDays;
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TaskEntry | null>(null);
   const [form, setForm] = useState(emptyForm);
 
   // Sheet for the selected date (auto-created by backend)
-  const { data: sheet, isLoading: sheetLoading, refetch } = useQuery({
-    queryKey: ['task-sheet-by-date', sheetDate],
+  const { data: sheet, isLoading: sheetLoading, refetch, error: sheetError } = useQuery({
+    queryKey: ['task-sheet-by-date', sheetDate, user?._type],
     queryFn: () =>
       (isToday
         ? taskSheetsApi.getToday()
         : taskSheetsApi.getByDate(sheetDate)
       ).then((r) => r.data.data),
-    enabled: isEmployee,
+    enabled: canFill,
+    retry: false,
   });
 
   // Dropdown data
@@ -130,12 +138,14 @@ function FillTaskSheetPage() {
     queryFn: () => taskSheetsApi.getProjects().then((r) => r.data.data),
   });
 
-  // Tickets for selected project (for ticket selector in form)
+  // Tickets for selected project (for ticket selector in form).
+  // Admin hits /admin/all-tickets; employee/HR hits /employee/project-tickets.
   const { data: projectTickets } = useQuery({
-    queryKey: ['project-tickets-for-sheet', form.projectId],
+    queryKey: ['project-tickets-for-sheet', form.projectId, isAdmin],
     queryFn: async () => {
       if (!form.projectId || form.projectId === 'other') return [];
-      const r = await api.get('/employee/project-tickets', { params: { projectId: form.projectId, limit: 100 } });
+      const endpoint = isAdmin ? '/admin/all-tickets' : '/employee/project-tickets';
+      const r = await api.get(endpoint, { params: { projectId: form.projectId, limit: 200 } });
       const body = r.data;
       const list = Array.isArray(body?.data) ? body.data : Array.isArray(body?.data?.data) ? body.data.data : [];
       return list as Array<{ id: number; ticketNumber: string; title: string }>;
@@ -233,8 +243,8 @@ function FillTaskSheetPage() {
 
   // Redirect non-employees (after all hooks)
   useEffect(() => {
-    if (!isEmployee) router.replace('/task-sheets');
-  }, [isEmployee, router]);
+    if (!canFill) router.replace('/task-sheets');
+  }, [canFill, router]);
 
   const closeForm = () => {
     setFormOpen(false);
@@ -294,7 +304,7 @@ function FillTaskSheetPage() {
   const entries = sheet?.taskEntries ?? [];
   const isSaving = addMutation.isPending || updateMutation.isPending;
 
-  if (!isEmployee) return null;
+  if (!canFill) return null;
 
   if (sheetLoading) {
     return (
@@ -308,7 +318,17 @@ function FillTaskSheetPage() {
     );
   }
 
-  if (!sheet) return <p className="text-muted-foreground">Could not load today&apos;s task sheet.</p>;
+  if (!sheet) {
+    const err = sheetError as { response?: { data?: { message?: string } }; message?: string } | undefined;
+    const msg = err?.response?.data?.message || err?.message;
+    return (
+      <div className="space-y-3 p-6 text-center">
+        <p className="text-sm font-semibold text-foreground">Could not load today&apos;s task sheet.</p>
+        {msg && <p className="text-xs text-red-500">{msg}</p>}
+        <Button size="sm" variant="outline" onClick={() => refetch()}>Retry</Button>
+      </div>
+    );
+  }
 
   const dateOptions = Array.from({ length: fillDays }, (_, i) => i).map((daysAgo) => {
     const d = subDays(new Date(), daysAgo);

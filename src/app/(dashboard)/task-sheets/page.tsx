@@ -21,10 +21,11 @@ import {
 const today = format(new Date(), 'yyyy-MM-dd');
 const monthStart = format(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'yyyy-MM-dd');
 
-function isEditable(sheetDate: string): boolean {
+function isEditable(sheetDate: string, windowDays: number): boolean {
   const d = new Date(sheetDate);
   const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 2);
+  // Today counts as day 1, so subtract (windowDays - 1) from today.
+  cutoff.setDate(cutoff.getDate() - Math.max(0, windowDays - 1));
   cutoff.setHours(0, 0, 0, 0);
   return d >= cutoff;
 }
@@ -32,6 +33,10 @@ function isEditable(sheetDate: string): boolean {
 export default function TaskSheetsPage() {
   const { user } = useAuth();
   const isEmployee = user?._type === 'employee';
+  const isAdmin = user?._type === 'admin';
+
+  // Admin defaults to team tab; employees always on "my"
+  const [activeTab, setActiveTab] = useState<'my' | 'team'>(isAdmin ? 'team' : 'my');
 
   const [fromDate, setFromDate] = useState(monthStart);
   const [toDate, setToDate] = useState(today);
@@ -42,12 +47,12 @@ export default function TaskSheetsPage() {
   const { data: employees } = useQuery({
     queryKey: ['employees-list'],
     queryFn: () => employeesApi.getAll({ limit: 200 }).then((r) => r.data.data),
-    enabled: !isEmployee,
+    enabled: isAdmin,
   });
 
-  // Admin: all task sheets
-  const { data: adminData, isLoading: adminLoading } = useQuery({
-    queryKey: ['task-sheets', fromDate, toDate, empId, submitted],
+  // Team tab (admin only): all task sheets in company
+  const { data: teamData, isLoading: teamLoading } = useQuery({
+    queryKey: ['task-sheets-team', fromDate, toDate, empId, submitted],
     queryFn: () =>
       taskSheetsApi.adminGetAll({
         fromDate,
@@ -56,12 +61,12 @@ export default function TaskSheetsPage() {
         isSubmitted: submitted === '' ? undefined : submitted === 'true',
         limit: 100,
       }).then((r) => r.data.data),
-    enabled: !isEmployee,
+    enabled: isAdmin && activeTab === 'team',
   });
 
-  // Employee: history
-  const { data: empData, isLoading: empLoading } = useQuery({
-    queryKey: ['my-task-sheets', fromDate, toDate],
+  // My tab: current user's own history (admin uses bridged-admin endpoint, employees use /task-sheets/history)
+  const { data: myData, isLoading: myLoading } = useQuery({
+    queryKey: ['my-task-sheets', fromDate, toDate, user?._type],
     queryFn: () =>
       taskSheetsApi.getHistory({
         fromDate,
@@ -70,11 +75,17 @@ export default function TaskSheetsPage() {
         sort: 'sheetDate',
         order: 'desc',
       }).then((r) => r.data.data),
-    enabled: isEmployee,
+    enabled: !!user && activeTab === 'my',
   });
 
-  const data = isEmployee ? empData : adminData;
-  const isLoading = isEmployee ? empLoading : adminLoading;
+  const data = activeTab === 'team' ? teamData : myData;
+  const isLoading = activeTab === 'team' ? teamLoading : myLoading;
+  const canFillOwn = isEmployee || isAdmin;
+
+  // Edit window: admin + HR get 30 days, regular employees 3 days.
+  const isHr = isEmployee && !!(user as any)?.isHr;
+  const defaultFillDays = isAdmin || isHr ? 30 : 3;
+  const fillWindowDays = (user as any)?.fillDaysOverride ?? defaultFillDays;
 
   return (
     <div className="space-y-4">
@@ -92,7 +103,7 @@ export default function TaskSheetsPage() {
               <p className="text-sm text-white/60">Task sheet submissions</p>
             </div>
           </div>
-          {isEmployee && (
+          {canFillOwn && (
             <Link href="/task-sheets/fill">
               <Button size="sm" className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg">
                 <Plus className="mr-1.5 h-4 w-4" />
@@ -103,6 +114,22 @@ export default function TaskSheetsPage() {
         </div>
       </div>
 
+      {/* Tabs — admin sees both; employee sees only "My Sheets" */}
+      {isAdmin && (
+        <div className="flex gap-1 p-0.5 bg-muted rounded-lg w-fit">
+          {(['my', 'team'] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-1.5 text-xs font-medium rounded-md transition-colors ${activeTab === tab ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              {tab === 'my' ? 'My Sheets' : 'My Team Sheets'}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-3">
         <div className="flex items-center gap-2">
           <label className="text-xs text-muted-foreground">From</label>
@@ -112,7 +139,7 @@ export default function TaskSheetsPage() {
           <label className="text-xs text-muted-foreground">To</label>
           <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-36" />
         </div>
-        {!isEmployee && (
+        {isAdmin && activeTab === 'team' && (
           <>
             <Select value={empId || 'all'} onValueChange={(v) => setEmpId(v === 'all' ? '' : v)}>
               <SelectTrigger className="w-48">
@@ -143,7 +170,7 @@ export default function TaskSheetsPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              {!isEmployee && <TableHead>Employee</TableHead>}
+              {activeTab === 'team' && <TableHead>Employee</TableHead>}
               <TableHead>Date</TableHead>
               <TableHead>Total Hours</TableHead>
               <TableHead>Man-Days</TableHead>
@@ -156,12 +183,12 @@ export default function TaskSheetsPage() {
             {isLoading
               ? [...Array(6)].map((_, i) => (
                   <TableRow key={i}>
-                    {[...Array(isEmployee ? 6 : 7)].map((__, j) => <TableCell key={j}><Skeleton className="h-5 w-20" /></TableCell>)}
+                    {[...Array(activeTab === 'team' ? 7 : 6)].map((__, j) => <TableCell key={j}><Skeleton className="h-5 w-20" /></TableCell>)}
                   </TableRow>
                 ))
               : (data ?? []).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={isEmployee ? 6 : 7} className="h-32">
+                    <TableCell colSpan={activeTab === 'team' ? 7 : 6} className="h-32">
                       <div className="flex flex-col items-center justify-center text-center">
                         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-violet-500/10 mb-3">
                           <ClipboardList className="h-6 w-6 text-violet-500" />
@@ -174,7 +201,7 @@ export default function TaskSheetsPage() {
                 )
               : (data ?? []).map((s) => (
                   <TableRow key={s.id}>
-                    {!isEmployee && (
+                    {activeTab === 'team' && (
                       <TableCell className="font-medium">{s.employee?.empName ?? `#${s.employeeId}`}</TableCell>
                     )}
                     <TableCell>{s.sheetDate?.slice(0, 10)}</TableCell>
@@ -195,7 +222,7 @@ export default function TaskSheetsPage() {
                             <Eye className="h-3.5 w-3.5" />
                           </Button>
                         </Link>
-                        {isEmployee && isEditable(s.sheetDate) && (
+                        {activeTab === 'my' && canFillOwn && isEditable(s.sheetDate, fillWindowDays) && (
                           <Link href={`/task-sheets/fill?date=${s.sheetDate?.slice(0, 10)}`}>
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-violet-600 hover:text-violet-700 hover:bg-violet-500/10" title="Edit">
                               <Pencil className="h-3.5 w-3.5" />

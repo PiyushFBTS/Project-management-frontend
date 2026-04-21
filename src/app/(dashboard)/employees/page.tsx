@@ -3,11 +3,9 @@
 
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { toast } from 'sonner';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Plus, Pencil, Trash2, Loader2, FolderInput, Users, Search as SearchIcon, Mail, Phone, Briefcase } from 'lucide-react';
 import { employeesApi } from '@/lib/api/employees';
 import { projectsApi } from '@/lib/api/projects';
@@ -31,21 +29,6 @@ function getInitials(name: string) {
   return name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 }
 
-const empSchema = z.object({
-  empCode: z.string().optional(),
-  empName: z.string().min(1, 'Required'),
-  email: z.string().email('Invalid email'),
-  mobileNumber: z.string().max(20, 'Max 20 characters').optional(),
-  password: z.string().optional(),
-  consultantType: z.enum(['project_manager', 'functional', 'technical', 'management', 'core_team']),
-  reportsToId: z.string().optional(),
-  isHr: z.boolean().optional(),
-  dateOfBirth: z.string().optional(),
-  joiningDate: z.string().optional(),
-});
-
-type EmpFormValues = z.infer<typeof empSchema>;
-
 const typeLabels: Record<string, string> = {
   project_manager: 'Project Manager',
   functional: 'Functional',
@@ -57,24 +40,28 @@ const typeLabels: Record<string, string> = {
 
 export default function EmployeesPage() {
   const qc = useQueryClient();
+  const router = useRouter();
   const { user } = useAuth();
   const isEmployee = user?._type === 'employee';
   const isAdmin = !isEmployee;
+  const isHr = isEmployee && !!(user as any)?.isHr;
+  const canSeeInactive = isAdmin || isHr;
 
   const [search, setSearch] = useState('');
-  const [open, setOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
   const [assignOpen, setAssignOpen] = useState(false);
-  const [editing, setEditing] = useState<Employee | null>(null);
   const [assignEmp, setAssignEmp] = useState<Employee | null>(null);
   const [assignProjectId, setAssignProjectId] = useState<string>('none');
-  const [formError, setFormError] = useState<string | null>(null);
+
+  const effectiveStatus = canSeeInactive ? statusFilter : 'active';
+  const isActiveParam = effectiveStatus === 'all' ? undefined : effectiveStatus === 'active';
 
   const { data, isLoading } = useQuery({
-    queryKey: ['employees', search, isEmployee],
+    queryKey: ['employees', search, isEmployee, effectiveStatus],
     queryFn: () =>
       (isEmployee
-        ? employeesApi.employeeGetAll({ search, limit: 100 })
-        : employeesApi.getAll({ search, limit: 100 })
+        ? employeesApi.employeeGetAll({ search, limit: 100, isActive: isActiveParam })
+        : employeesApi.getAll({ search, limit: 100, isActive: isActiveParam })
       ).then((r) => r.data.data),
   });
 
@@ -82,72 +69,6 @@ export default function EmployeesPage() {
     queryKey: ['projects-active'],
     queryFn: () => projectsApi.getAll({ status: 'active', limit: 200 }).then((r) => r.data.data),
     enabled: isAdmin,
-  });
-
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    reset,
-    formState: { errors },
-  } = useForm<EmpFormValues>({
-    resolver: zodResolver(empSchema),
-    defaultValues: { consultantType: 'functional' },
-  });
-
-  const consultantType = watch('consultantType');
-
-  const createMutation = useMutation({
-    mutationFn: (values: EmpFormValues) =>
-      employeesApi.create({
-        empCode: values.empCode!,
-        empName: values.empName,
-        email: values.email,
-        mobileNumber: values.mobileNumber,
-        password: values.password!,
-        consultantType: values.consultantType,
-        reportsToId: values.reportsToId && values.reportsToId !== 'none' ? Number(values.reportsToId) : undefined,
-        isHr: values.isHr,
-        dateOfBirth: values.dateOfBirth || undefined,
-        joiningDate: values.joiningDate || undefined,
-      }),
-    onMutate: () => setFormError(null),
-    onSuccess: (res) => {
-      qc.invalidateQueries({ queryKey: ['employees'] });
-      toast.success(`"${res.data.data.empName}" added`);
-      setOpen(false);
-      reset();
-    },
-    onError: (e: any) => {
-      const msg = e?.response?.data?.message;
-      setFormError(Array.isArray(msg) ? msg.join('\n') : (msg ?? 'Failed to create employee'));
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, values }: { id: number; values: EmpFormValues }) =>
-      employeesApi.update(id, {
-        empName: values.empName,
-        email: values.email,
-        mobileNumber: values.mobileNumber,
-        consultantType: values.consultantType,
-        reportsToId: values.reportsToId && values.reportsToId !== 'none' ? Number(values.reportsToId) : null,
-        isHr: values.isHr,
-        dateOfBirth: values.dateOfBirth || null,
-        joiningDate: values.joiningDate || null,
-      }),
-    onMutate: () => setFormError(null),
-    onSuccess: (res) => {
-      qc.invalidateQueries({ queryKey: ['employees'] });
-      toast.success(`"${res.data.data.empName}" updated`);
-      setOpen(false);
-      setEditing(null);
-    },
-    onError: (e: any) => {
-      const msg = e?.response?.data?.message;
-      setFormError(Array.isArray(msg) ? msg.join('\n') : (msg ?? 'Failed to update employee'));
-    },
   });
 
   const deleteMutation = useMutation({
@@ -175,44 +96,15 @@ export default function EmployeesPage() {
     onError: (e: any, _, ctx) => toast.error(e?.response?.data?.message ?? 'Failed to assign project', { id: ctx?.id }),
   });
 
-  const openCreate = () => {
-    setEditing(null);
-    setFormError(null);
-    reset({ consultantType: 'functional' });
-    setOpen(true);
-  };
+  const openCreate = () => { router.push('/employees/new'); };
 
-  const openEdit = (emp: Employee) => {
-    setEditing(emp);
-    setFormError(null);
-    reset({
-      empName: emp.empName,
-      email: emp.email,
-      mobileNumber: emp.mobileNumber ?? '',
-      consultantType: emp.consultantType,
-      reportsToId: emp.reportsToId?.toString() ?? 'none',
-      isHr: emp.isHr ?? false,
-      dateOfBirth: emp.dateOfBirth ?? '',
-      joiningDate: emp.joiningDate ?? '',
-    });
-    setOpen(true);
-  };
+  const openEdit = (emp: Employee) => { router.push(`/employees/${emp.id}?type=employee&tab=profile&edit=1`); };
 
   const openAssign = (emp: Employee) => {
     setAssignEmp(emp);
     setAssignProjectId(emp.assignedProjectId?.toString() ?? 'none');
     setAssignOpen(true);
   };
-
-  const onSubmit = (values: EmpFormValues) => {
-    if (editing) {
-      updateMutation.mutate({ id: editing.id, values });
-    } else {
-      createMutation.mutate(values);
-    }
-  };
-
-  const isPending = createMutation.isPending || updateMutation.isPending;
 
   return (
     <div className="space-y-4">
@@ -238,14 +130,26 @@ export default function EmployeesPage() {
         </div>
       </div>
 
-      <div className="relative w-full sm:max-w-xs">
-        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search employees..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-        />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative w-full sm:max-w-xs">
+          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search employees..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        {canSeeInactive && (
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'active' | 'inactive' | 'all')}>
+            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+              <SelectItem value="all">All</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       {isLoading ? (
@@ -317,9 +221,9 @@ export default function EmployeesPage() {
                 </Link>
                 {isAdmin && !isAdminRow && (
                   <div className="absolute top-2 right-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button variant="ghost" size="icon" className="h-6 w-6" title="Assign project" onClick={(e) => { e.preventDefault(); openAssign(emp); }}>
+                    {/* <Button variant="ghost" size="icon" className="h-6 w-6" title="Assign project" onClick={(e) => { e.preventDefault(); openAssign(emp); }}>
                       <FolderInput className="h-3 w-3" />
-                    </Button>
+                    </Button> */}
                     <Button variant="ghost" size="icon" className="h-6 w-6" title="Edit" onClick={(e) => { e.preventDefault(); openEdit(emp); }}>
                       <Pencil className="h-3 w-3" />
                     </Button>
@@ -337,134 +241,6 @@ export default function EmployeesPage() {
         </div>
       )}
 
-      {/* Create / Edit Dialog — admin only */}
-      {isAdmin && (
-        <Dialog open={open} onOpenChange={(v) => { if (!v) { setOpen(false); setEditing(null); } }}>
-          <DialogContent className="max-w-lg overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-emerald-500 via-teal-500 to-cyan-500" />
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-emerald-500" />
-                {editing ? 'Edit Employee' : 'New Employee'}
-              </DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
-              {/* Server-side error banner */}
-              {formError && (
-                <div className="rounded-md border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-800 px-3 py-2.5">
-                  <p className="text-xs font-semibold text-red-600 dark:text-red-400 mb-0.5">Please fix the following:</p>
-                  {formError.split('\n').map((line, i) => (
-                    <p key={i} className="text-xs text-red-600 dark:text-red-400">• {line}</p>
-                  ))}
-                </div>
-              )}
-
-              {!editing && (
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Emp Code</label>
-                  <Input {...register('empCode')} className={errors.empCode ? 'border-red-500 focus-visible:ring-red-500' : ''} />
-                  {errors.empCode && <p className="text-xs text-red-500">{errors.empCode.message}</p>}
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Full Name <span className="text-red-500">*</span></label>
-                  <Input {...register('empName')} className={errors.empName ? 'border-red-500 focus-visible:ring-red-500' : ''} />
-                  {errors.empName && <p className="text-xs text-red-500">{errors.empName.message}</p>}
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Email <span className="text-red-500">*</span></label>
-                  <Input type="email" {...register('email')} className={errors.email ? 'border-red-500 focus-visible:ring-red-500' : ''} />
-                  {errors.email && <p className="text-xs text-red-500">{errors.email.message}</p>}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Phone</label>
-                  <Input {...register('mobileNumber')} className={errors.mobileNumber ? 'border-red-500 focus-visible:ring-red-500' : ''} />
-                  {errors.mobileNumber && <p className="text-xs text-red-500">{errors.mobileNumber.message}</p>}
-                </div>
-                {!editing && (
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium">Password <span className="text-red-500">*</span></label>
-                    <Input type="password" {...register('password')} className={errors.password ? 'border-red-500 focus-visible:ring-red-500' : ''} />
-                    {errors.password && <p className="text-xs text-red-500">{errors.password.message}</p>}
-                  </div>
-                )}
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Consultant Type <span className="text-red-500">*</span></label>
-                  <Select
-                    value={consultantType}
-                    onValueChange={(v) => setValue('consultantType', v as EmpFormValues['consultantType'])}
-                  >
-                    <SelectTrigger className={`w-full ${errors.consultantType ? 'border-red-500' : ''}`}><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(typeLabels).map(([v, l]) => (
-                        <SelectItem key={v} value={v}>{l}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {errors.consultantType && <p className="text-xs text-red-500">{errors.consultantType.message}</p>}
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Reports To</label>
-                  <Select
-                    value={watch('reportsToId') ?? 'none'}
-                    onValueChange={(v) => setValue('reportsToId', v)}
-                  >
-                    <SelectTrigger className="w-full"><SelectValue placeholder="Select manager" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {(data ?? [])
-                        .filter((e) => e.isActive && e.id !== editing?.id)
-                        .filter((e, idx, arr) => arr.findIndex((x) => x.id === e.id) === idx)
-                        .map((e) => (
-                          <SelectItem key={`${(e as any)._type ?? 'employee'}-${e.id}`} value={String(e.id)}>
-                            {e.empName} ({e.empCode})
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 pb-1">
-                <input
-                  type="checkbox"
-                  id="isHr"
-                  checked={watch('isHr') ?? false}
-                  onChange={(e) => setValue('isHr', e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300"
-                />
-                <label htmlFor="isHr" className="text-sm font-medium leading-none">Is HR</label>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Date of Birth</label>
-                  <Input type="date" {...register('dateOfBirth')} />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium">Joining Date</label>
-                  <Input type="date" {...register('joiningDate')} />
-                </div>
-              </div>
-
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => { setOpen(false); setEditing(null); setFormError(null); }}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={isPending}>
-                  {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {editing ? 'Update' : 'Create'}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
-      )}
 
       {/* Assign Project Dialog — admin only */}
       {isAdmin && (
