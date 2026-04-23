@@ -16,6 +16,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 
 export default function ProjectsPage() {
   const qc = useQueryClient();
@@ -24,7 +27,11 @@ export default function ProjectsPage() {
   const isEmployee = user?._type === 'employee';
   const isClient = user?._type === 'client';
   const isHr = isEmployee && !!(user as { isHr?: boolean })?.isHr;
+  const canSeeInactive = !isEmployee || isHr;
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
+  // Regular employees can only see active projects — mirror the employees page pattern.
+  const effectiveStatus = canSeeInactive ? statusFilter : 'active';
 
   // Client: fetch their single project and redirect to detail page
   const { data: clientProject } = useQuery({
@@ -39,12 +46,13 @@ export default function ProjectsPage() {
     }
   }, [isClient, clientProject, router]);
 
+  const statusParam = effectiveStatus === 'all' ? undefined : effectiveStatus;
   const { data, isLoading } = useQuery({
-    queryKey: ['projects', search, isEmployee, isHr],
+    queryKey: ['projects', search, isEmployee, isHr, effectiveStatus],
     queryFn: () =>
       isEmployee
-        ? projectsApi.employeeGetAll().then((r) => r.data.data)
-        : projectsApi.getAll({ search, limit: 100 }).then((r) => r.data.data),
+        ? projectsApi.employeeGetAll({ status: statusParam }).then((r) => r.data.data)
+        : projectsApi.getAll({ search, limit: 100, status: statusParam }).then((r) => r.data.data),
     enabled: !isClient,
   });
 
@@ -96,6 +104,16 @@ export default function ProjectsPage() {
             className="pl-9"
           />
         </div>
+        {canSeeInactive && (
+          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'active' | 'inactive' | 'all')}>
+            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+              <SelectItem value="all">All</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
@@ -108,6 +126,7 @@ export default function ProjectsPage() {
               <TableHead>Type</TableHead>
               <TableHead>Client</TableHead>
               <TableHead>Manager</TableHead>
+              <TableHead>Status</TableHead>
               <TableHead className="w-20">Action</TableHead>
             </TableRow>
           </TableHeader>
@@ -115,7 +134,7 @@ export default function ProjectsPage() {
             {isLoading
               ? [...Array(5)].map((_, i) => (
                   <TableRow key={i}>
-                    {[...Array(6)].map((__, j) => (
+                    {[...Array(7)].map((__, j) => (
                       <TableCell key={j}><Skeleton className="h-5 w-24" /></TableCell>
                     ))}
                   </TableRow>
@@ -136,6 +155,21 @@ export default function ProjectsPage() {
                     <TableCell className="text-slate-600">{p.clientName}</TableCell>
                     <TableCell className="text-slate-600 text-sm">
                       {p.projectManager ? p.projectManager.empName : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const s = (p as any).status ?? 'active';
+                        const cls = s === 'active'
+                          ? 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30'
+                          : s === 'completed'
+                            ? 'bg-blue-500/15 text-blue-600 ring-blue-500/30'
+                            : 'bg-slate-500/15 text-slate-500 ring-slate-500/30';
+                        return (
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>
+                            {s === 'active' ? 'Active' : s === 'completed' ? 'Completed' : 'Inactive'}
+                          </span>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">

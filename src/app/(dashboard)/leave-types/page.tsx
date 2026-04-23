@@ -25,6 +25,10 @@ const schema = z.object({
   reasonCode: z.string().min(1, 'Required').max(50),
   reasonName: z.string().min(1, 'Required').max(150),
   description: z.string().optional(),
+  // Number input: use `valueAsNumber: true` on the <input> so RHF hands us a number.
+  defaultDays: z.number({ message: 'Must be a number' })
+    .int()
+    .min(0, 'Must be 0 or more'),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -96,13 +100,18 @@ export default function LeaveTypesPage() {
 
   const openCreate = () => {
     setEditing(null);
-    reset({ reasonCode: '', reasonName: '', description: '' });
+    reset({ reasonCode: '', reasonName: '', description: '', defaultDays: 0 });
     setOpen(true);
   };
 
   const openEdit = (r: LeaveType) => {
     setEditing(r);
-    reset({ reasonCode: r.reasonCode, reasonName: r.reasonName, description: r.description ?? '' });
+    reset({
+      reasonCode: r.reasonCode,
+      reasonName: r.reasonName,
+      description: r.description ?? '',
+      defaultDays: (r as any).defaultDays ?? 0,
+    });
     setOpen(true);
   };
 
@@ -155,6 +164,7 @@ export default function LeaveTypesPage() {
               <TableHead>Code</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Description</TableHead>
+              <TableHead>Annual Days</TableHead>
               <TableHead>Active</TableHead>
               {canManage && <TableHead className="w-20">Actions</TableHead>}
             </TableRow>
@@ -163,7 +173,7 @@ export default function LeaveTypesPage() {
             {isLoading
               ? [...Array(4)].map((_, i) => (
                   <TableRow key={i}>
-                    {[...Array(canManage ? 5 : 4)].map((__, j) => <TableCell key={j}><Skeleton className="h-5 w-20" /></TableCell>)}
+                    {[...Array(canManage ? 6 : 5)].map((__, j) => <TableCell key={j}><Skeleton className="h-5 w-20" /></TableCell>)}
                   </TableRow>
                 ))
               : (data ?? []).map((r) => (
@@ -172,6 +182,11 @@ export default function LeaveTypesPage() {
                     <TableCell className="font-medium">{r.reasonName}</TableCell>
                     <TableCell className="text-muted-foreground text-xs max-w-48 truncate">
                       {r.description || <span className="text-muted-foreground/60">-</span>}
+                    </TableCell>
+                    <TableCell className="text-sm font-medium tabular-nums">
+                      {((r as any).defaultDays ?? 0) > 0
+                        ? `${(r as any).defaultDays} days`
+                        : <span className="text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell>
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${r.isActive ? 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30 dark:text-emerald-400' : 'bg-rose-500/15 text-rose-500 ring-rose-500/30'}`}>
@@ -218,6 +233,12 @@ export default function LeaveTypesPage() {
               <div className="space-y-1">
                 <label className="text-sm font-medium">Description</label>
                 <Input {...register('description')} />
+              </div>
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Annual Days</label>
+                <Input type="number" min={0} {...register('defaultDays', { valueAsNumber: true })} placeholder="e.g. 12" />
+                <p className="text-[10px] text-muted-foreground">Annual allowance per employee. 0 means no quota is enforced.</p>
+                {errors.defaultDays && <p className="text-xs text-red-500">{errors.defaultDays.message}</p>}
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => { setOpen(false); setEditing(null); }}>Cancel</Button>

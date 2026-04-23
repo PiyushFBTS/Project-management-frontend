@@ -24,9 +24,10 @@ export const projectsApi = {
   getManagers: () =>
     api.get<ApiResponse<{ id: number; empName: string; empCode: string }[]>>('/projects/managers/list'),
 
-  // Employee: only projects where employee has assigned tickets
-  employeeGetAll: () =>
-    api.get<ApiResponse<Project[]>>('/employee/projects'),
+  // Employee: only projects where employee has assigned tickets (HR sees all,
+  // optionally filtered by status).
+  employeeGetAll: (params?: { status?: string }) =>
+    api.get<ApiResponse<Project[]>>('/employee/projects', { params }),
 
   employeeGetOne: (id: number) =>
     api.get<ApiResponse<Project>>(`/employee/projects/${id}`),

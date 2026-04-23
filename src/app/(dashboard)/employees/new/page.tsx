@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { ArrowLeft, User, Loader2 } from 'lucide-react';
 import { employeesApi } from '@/lib/api/employees';
+import { apiErrorMessage } from '@/lib/utils';
 import { CreateEmployeeDto, Employee } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -89,10 +90,7 @@ function NewEmployeeContent() {
       toast.success(`"${res.data.data.empName}" added`);
       router.push('/employees');
     },
-    onError: (e: any) => {
-      const msg = e?.response?.data?.message;
-      setError(Array.isArray(msg) ? msg.join('\n') : (msg ?? 'Failed to create employee'));
-    },
+    onError: (e: unknown) => setError(apiErrorMessage(e, 'Failed to create employee')),
   });
 
   const saving = createMutation.isPending;

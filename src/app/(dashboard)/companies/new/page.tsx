@@ -293,7 +293,7 @@ function NewCompanyContent() {
               </div>
               <div className="space-y-1.5"><Label>Plan</Label>
                 <Select value={form.subscriptionPlan} onValueChange={(v) => setForm((p) => ({ ...p, subscriptionPlan: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className='w-full'><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="trial">Trial</SelectItem>
                     <SelectItem value="basic">Basic</SelectItem>

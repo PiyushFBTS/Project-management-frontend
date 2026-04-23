@@ -1,20 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Tags, Plus, Trash2, Loader2, FolderPlus } from 'lucide-react';
+import { Tags, Plus, Trash2, FolderPlus } from 'lucide-react';
 import { projectsApi } from '@/lib/api/projects';
 import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 
 const typeColors: Record<string, string> = {
   fresh_implement: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
@@ -35,27 +30,10 @@ export default function ProjectTypesPage() {
   const isAdmin = user?._type === 'admin';
   const isHr = user?._type === 'employee' && !!(user as any)?.isHr;
   const canManage = isAdmin || isHr;
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [label, setLabel] = useState('');
-  const [value, setValue] = useState('');
-  const [description, setDescription] = useState('');
 
   const { data: types, isLoading } = useQuery({
     queryKey: ['project-types'],
     queryFn: () => projectsApi.getProjectTypes().then((r: any) => r.data?.data ?? r.data ?? []),
-  });
-
-  const createMut = useMutation({
-    mutationFn: () => projectsApi.createProjectType({ value: value || label, label, description }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['project-types'] });
-      setDialogOpen(false);
-      setLabel('');
-      setValue('');
-      setDescription('');
-      toast.success('Project type added');
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to add'),
   });
 
   const deleteMut = useMutation({
@@ -66,12 +44,6 @@ export default function ProjectTypesPage() {
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
   });
-
-  // Auto-generate value from label
-  const handleLabelChange = (v: string) => {
-    setLabel(v);
-    setValue(v.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''));
-  };
 
   return (
     <div className="space-y-5">
@@ -92,7 +64,7 @@ export default function ProjectTypesPage() {
             <Button
               size="sm"
               className="bg-white text-blue-700 hover:bg-white/90 border-0 shadow-lg font-semibold"
-              onClick={() => setDialogOpen(true)}
+              onClick={() => router.push('/project-types/new')}
             >
               <Plus className="mr-1.5 h-4 w-4" /> Add Type
             </Button>
@@ -153,56 +125,6 @@ export default function ProjectTypesPage() {
         </div>
       )}
 
-      {/* Add Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Tags className="h-5 w-5 text-blue-600" /> Add Project Type
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label className="text-xs">Label *</Label>
-              <Input
-                value={label}
-                onChange={(e) => handleLabelChange(e.target.value)}
-                placeholder="e.g. Staff Augmentation"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Value (auto-generated)</Label>
-              <Input
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                placeholder="staff_augmentation"
-                className="mt-1 font-mono text-sm"
-              />
-            </div>
-            <div>
-              <Label className="text-xs">Description</Label>
-              <Textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Brief description of this project type..."
-                rows={2}
-                className="mt-1"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button
-              disabled={!label.trim() || createMut.isPending}
-              onClick={() => createMut.mutate()}
-            >
-              {createMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-              Add Type
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

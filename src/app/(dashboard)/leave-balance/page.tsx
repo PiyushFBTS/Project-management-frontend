@@ -12,18 +12,18 @@ import { useAuth } from '@/providers/auth-provider';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
-// Per-code visual + default quota (mirrors the Flutter sample data)
-const TYPE_META: Record<string, { icon: React.ElementType; accent: string; defaultTotal: number }> = {
-  CL:  { icon: Umbrella,       accent: 'sky',     defaultTotal: 12 },
-  SL:  { icon: HeartPulse,     accent: 'rose',    defaultTotal: 12 },
-  BL:  { icon: HeartHandshake, accent: 'slate',   defaultTotal: 5 },
-  ML:  { icon: Heart,          accent: 'rose',    defaultTotal: 3 },
-  MAT: { icon: Baby,           accent: 'violet',  defaultTotal: 10 },
-  PL:  { icon: CalendarDays,   accent: 'emerald', defaultTotal: 15 },
-  COMP:{ icon: CalendarDays,   accent: 'violet',  defaultTotal: 5 },
+// Per-code visual styling only — quotas come from the backend's defaultDays.
+const TYPE_META: Record<string, { icon: React.ElementType; accent: string }> = {
+  CL:  { icon: Umbrella,       accent: 'sky'     },
+  SL:  { icon: HeartPulse,     accent: 'rose'    },
+  BL:  { icon: HeartHandshake, accent: 'slate'   },
+  ML:  { icon: Heart,          accent: 'rose'    },
+  MAT: { icon: Baby,           accent: 'violet'  },
+  PL:  { icon: CalendarDays,   accent: 'emerald' },
+  COMP:{ icon: CalendarDays,   accent: 'violet'  },
 };
 
-const DEFAULT_META = { icon: CalendarDays, accent: 'indigo', defaultTotal: 10 };
+const DEFAULT_META = { icon: CalendarDays, accent: 'indigo' };
 
 // Tailwind class mapping per accent (ensures safelisting via static strings)
 const ACCENT: Record<string, { iconBg: string; iconFg: string; text: string; bar: string; ring: string }> = {
@@ -69,30 +69,13 @@ export default function LeaveBalancePage() {
   }, [myLeaves]);
 
   const balances = useMemo(() => {
-    const EXCLUDE_RE = /\b(sick|paid|public\s*holiday|work\s*from\s*home|wfh)\b/i;
-    const isExcluded = (t: any) => {
-      const code = String(t.reasonCode ?? '').toUpperCase();
-      if (code === 'SL' || code === 'PL' || code === 'PH' || code === 'WFH') return true;
-      const name = String(t.reasonName ?? '');
-      return EXCLUDE_RE.test(name);
-    };
-    // Always-on synthetic types so the policy is visible even if HR hasn't created them yet.
-    const ALWAYS_SHOW: { reasonCode: string; reasonName: string }[] = [
-      { reasonCode: 'BL', reasonName: 'Bereavement Leave' },
-      { reasonCode: 'ML', reasonName: 'Marriage Leave' },
-      { reasonCode: 'MAT', reasonName: 'Maternity Leave' },
-    ];
-    const merged = [...(types as any[])];
-    for (const fallback of ALWAYS_SHOW) {
-      if (!merged.some((t) => String(t.reasonCode ?? '').toUpperCase() === fallback.reasonCode)) {
-        merged.push({ id: `synthetic-${fallback.reasonCode}`, ...fallback });
-      }
-    }
-    return merged.filter((t) => !isExcluded(t)).map((t) => {
-      const meta = TYPE_META[t.reasonCode] ?? DEFAULT_META;
-      const total = meta.defaultTotal;
-      const used = Math.min(usedByType[t.id] ?? 0, total);
-      const remaining = Math.max(0, total - used);
+    // Each row is whatever HR configured in Leave Types. Quota = defaultDays.
+    return (types as any[]).map((t) => {
+      const meta = TYPE_META[String(t.reasonCode ?? '').toUpperCase()] ?? DEFAULT_META;
+      const total = Number(t.defaultDays ?? 0);
+      const rawUsed = usedByType[t.id] ?? 0;
+      const used = total > 0 ? Math.min(rawUsed, total) : rawUsed;
+      const remaining = total > 0 ? Math.max(0, total - used) : null;
       return {
         id: t.id,
         code: t.reasonCode,
@@ -186,10 +169,18 @@ export default function LeaveBalancePage() {
                     </div>
                     <div className="text-right">
                       <p className="text-xl font-bold tabular-nums">
-                        <span className={a.text}>{b.remaining}</span>
-                        <span className="text-xs font-medium text-muted-foreground"> / {b.total}</span>
+                        {b.total > 0 ? (
+                          <>
+                            <span className={a.text}>{b.remaining}</span>
+                            <span className="text-xs font-medium text-muted-foreground"> / {b.total}</span>
+                          </>
+                        ) : (
+                          <span className="text-xs font-medium text-muted-foreground">No quota</span>
+                        )}
                       </p>
-                      <p className="text-[9px] text-muted-foreground">days left</p>
+                      <p className="text-[9px] text-muted-foreground">
+                        {b.total > 0 ? 'days left' : `${b.used} used`}
+                      </p>
                     </div>
                   </div>
 
@@ -213,7 +204,7 @@ export default function LeaveBalancePage() {
       <div className="flex items-start gap-2 rounded-md border border-dashed border-border bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground">
         <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
         <p>
-          Per-type allowance numbers are defaults until your company configures quotas.
+          Annual allowances are configured by HR in <span className="font-medium">Leave Types</span>.
           Used days are computed from your HR-approved leave requests.
         </p>
       </div>

@@ -81,6 +81,13 @@ export const companiesApi = {
   createAdmin: (id: number, dto: CreateCompanyAdminDto) =>
     api.post<ApiResponse<AdminUser>>(`/platform/companies/${id}/admins`, dto),
 
+  updateAdmin: (
+    id: number,
+    adminId: number,
+    dto: { name?: string; email?: string; password?: string; isActive?: boolean },
+  ) =>
+    api.patch<ApiResponse<AdminUser>>(`/platform/companies/${id}/admins/${adminId}`, dto),
+
   uploadLogo: (id: number, file: File) => {
     const formData = new FormData();
     formData.append('logo', file);

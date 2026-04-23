@@ -11,7 +11,9 @@ import {
   User, Shield, KeyRound, Eye, EyeOff, CheckCircle2, Target, Lock, Ban, AlertTriangle, Plus, ChevronDown,
 } from 'lucide-react';
 import { employeesApi } from '@/lib/api/employees';
+import { companiesApi } from '@/lib/api/companies';
 import { authApi } from '@/lib/api/auth';
+import { apiErrorMessage } from '@/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -106,6 +108,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
   const { user } = useAuth();
   const isEmployee = user?._type === 'employee';
   const isAdmin = user?._type === 'admin';
+  const isSuperAdmin = isAdmin && (user as any)?.role === 'super_admin';
   const isHr = isEmployee && !!(user as any)?.isHr;
   const canManageAllDocs = isAdmin || isHr;
   const isSelf = isSelfProfile || (targetType === 'employee' && isEmployee && Number(id) === user?.id) ||
@@ -135,6 +138,8 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
   const [editMaritalStatus, setEditMaritalStatus] = useState('');
   const [editReportsToId, setEditReportsToId] = useState<string>('');
   const [editIsActive, setEditIsActive] = useState(true);
+  // Admin-target only: optional new password. Kept empty means "don't change".
+  const [editAdminPassword, setEditAdminPassword] = useState('');
 
   // Password change state
   const [currentPassword, setCurrentPassword] = useState('');
@@ -327,6 +332,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
         : emp.reportsToId ? `emp-${emp.reportsToId}` : 'none'
     );
     setEditIsActive(emp.isActive !== false);
+    setEditAdminPassword('');
     setEditMode(true);
   };
 
@@ -335,7 +341,9 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
   const wantEdit = searchParams.get('edit') === '1';
   const autoEditedRef = useRef(false);
   useEffect(() => {
-    if (wantEdit && emp && !autoEditedRef.current && canEdit && targetType !== 'admin') {
+    // Super admin can edit admin records too; everyone else keeps admin read-only.
+    const canEditTarget = targetType !== 'admin' || isSuperAdmin;
+    if (wantEdit && emp && !autoEditedRef.current && canEdit && canEditTarget) {
       autoEditedRef.current = true;
       startEdit();
     }
@@ -344,6 +352,18 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
 
   const saveProfileMut = useMutation({
     mutationFn: async () => {
+      // Admin target (super admin only) — different entity, different endpoint.
+      if (targetType === 'admin') {
+        const adminCompanyId = (emp as any)?.companyId;
+        if (!adminCompanyId) throw new Error('Missing company context for this admin');
+        const adminDto: { name?: string; email?: string; password?: string; isActive?: boolean } = {
+          name: editName.trim() || undefined,
+          email: editEmail.trim() || undefined,
+          isActive: editIsActive,
+        };
+        if (editAdminPassword.trim()) adminDto.password = editAdminPassword;
+        return companiesApi.updateAdmin(adminCompanyId, Number(id), adminDto);
+      }
       if (isSelf && isEmployee) {
         // Employee self-update (limited fields)
         return employeesApi.updateSelf({
@@ -362,12 +382,17 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
       const dto: any = { empName: editName, email: editEmail, mobileNumber: editPhone, dateOfBirth: editDob || undefined, consultantType: editType, joiningDate: editJoiningDate || undefined, isHr: editIsHr, isReportToAdmin, reportsToId, reportsToAdminId, fillDaysOverride: editFillDays ? Number(editFillDays) : null, annualCTC: editAnnualCTC ? Number(editAnnualCTC) : null, bloodGroup: editBloodGroup || undefined, maritalStatus: editMaritalStatus || undefined, isActive: editIsActive };
       return employeesApi.update(Number(id), dto);
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success('Profile updated');
+      // Exact-key invalidate + explicit refetch so the profile reflects the
+      // write on the next tick (belt-and-suspenders — the admin path hits a
+      // different endpoint than the detail query, so prefix-invalidate alone
+      // has raced into stale data in the past).
+      await qc.invalidateQueries({ queryKey: ['employee-detail', id, targetType] });
+      await qc.refetchQueries({ queryKey: ['employee-detail', id, targetType] });
       setEditMode(false);
-      qc.invalidateQueries({ queryKey: ['employee-detail', id] });
     },
-    onError: (e: any) => toast.error(e?.response?.data?.message || 'Update failed'),
+    onError: (e: unknown) => toast.error(apiErrorMessage(e, 'Update failed')),
   });
 
   const uploadMut = useMutation({
@@ -490,7 +515,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                   <CardContent className="px-5 py-4">
                     <div className="flex items-center justify-between mb-4">
                       <h2 className="text-base font-semibold">Personal Information</h2>
-                      {canEdit && targetType !== 'admin' && !editMode && (
+                      {canEdit && (targetType !== 'admin' || isSuperAdmin) && !editMode && (
                         <Button size="sm" variant="outline" onClick={startEdit}>Edit</Button>
                       )}
                       {editMode && (
@@ -523,7 +548,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">User Role</p>
                         {editMode && canManageAllDocs ? (
                           <Select value={editType} onValueChange={setEditType}>
-                            <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                            <SelectTrigger className="h-8 text-sm w-full"><SelectValue /></SelectTrigger>
                             <SelectContent>
                               {Object.entries(TYPE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                             </SelectContent>
@@ -582,13 +607,29 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                                 <SelectItem value="inactive">Inactive</SelectItem>
                               </SelectContent>
                             </Select>
-                            <p className="text-[10px] text-muted-foreground mt-1">Inactive employees cannot log in.</p>
+                            <p className="text-[10px] text-muted-foreground mt-1">Inactive users cannot log in.</p>
                           </>
                         ) : (
                           <Badge className={`text-xs border-0 ${emp.isActive ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
                             {emp.isActive ? 'Active' : 'Inactive'}
                           </Badge>
                         )}
+                      </div>
+                      {/* Admin target + super admin: set a new password (optional). */}
+                      {editMode && targetType === 'admin' && isSuperAdmin && (
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">New Password</p>
+                          <Input
+                            type="password"
+                            placeholder="Leave blank to keep unchanged"
+                            value={editAdminPassword}
+                            onChange={(e) => setEditAdminPassword(e.target.value)}
+                            className="h-8 text-sm"
+                          />
+                          <p className="text-[10px] text-muted-foreground mt-1">Minimum 6 characters when setting a new password.</p>
+                        </div>
+                      )}
+                      <div style={{ display: 'contents' }}>{/* passthrough wrapper — original trailing </div> balances the tree */}
                       </div>
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">HR Access</p>

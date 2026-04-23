@@ -70,6 +70,8 @@ export default function CompaniesPage() {
   const [licenseCompany, setLicenseCompany] = useState<CompanyWithCounts | null>(null);
   const [adminsOpen, setAdminsOpen] = useState(false);
   const [adminsCompany, setAdminsCompany] = useState<CompanyWithCounts | null>(null);
+  const [editingAdminId, setEditingAdminId] = useState<number | null>(null);
+  const [editAdminForm, setEditAdminForm] = useState({ name: '', email: '', password: '', isActive: true });
   const [smtpOpen, setSmtpOpen] = useState(false);
   const [smtpCompany, setSmtpCompany] = useState<CompanyWithCounts | null>(null);
 
@@ -198,6 +200,33 @@ export default function CompaniesPage() {
     onSuccess: () => { toast.success('Admin created'); setAdminForm({ name: '', email: '', password: '' }); qc.invalidateQueries({ queryKey: ['company-admins'] }); },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to create admin'),
   });
+
+  const updateAdminMutation = useMutation({
+    mutationFn: ({ companyId, adminId, dto }: { companyId: number; adminId: number; dto: { name?: string; email?: string; password?: string; isActive?: boolean } }) =>
+      companiesApi.updateAdmin(companyId, adminId, dto),
+    onSuccess: () => {
+      toast.success('Admin updated');
+      setEditingAdminId(null);
+      qc.invalidateQueries({ queryKey: ['company-admins'] });
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to update admin'),
+  });
+
+  function startEditAdmin(a: any) {
+    setEditingAdminId(a.id);
+    setEditAdminForm({ name: a.name ?? '', email: a.email ?? '', password: '', isActive: a.isActive !== false });
+  }
+
+  function handleSaveEditedAdmin() {
+    if (!adminsCompany || editingAdminId == null) return;
+    const dto: { name?: string; email?: string; password?: string; isActive?: boolean } = {
+      name: editAdminForm.name.trim() || undefined,
+      email: editAdminForm.email.trim() || undefined,
+      isActive: editAdminForm.isActive,
+    };
+    if (editAdminForm.password.trim()) dto.password = editAdminForm.password;
+    updateAdminMutation.mutate({ companyId: adminsCompany.id, adminId: editingAdminId, dto });
+  }
 
   function closeForm() { setFormOpen(false); setEditing(null); resetForm(); }
 
@@ -638,7 +667,7 @@ export default function CompaniesPage() {
               <div className="space-y-1.5">
                 <Label>Plan</Label>
                 <Select value={form.subscriptionPlan} onValueChange={(v) => setForm((p) => ({ ...p, subscriptionPlan: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className='w-full'><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="trial">Trial</SelectItem>
                     <SelectItem value="basic">Basic</SelectItem>
@@ -689,7 +718,7 @@ export default function CompaniesPage() {
             <div className="space-y-1.5">
               <Label>Plan</Label>
               <Select value={licenseForm.subscriptionPlan} onValueChange={(v) => setLicenseForm((p) => ({ ...p, subscriptionPlan: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className='w-full'><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="trial">Trial</SelectItem>
                   <SelectItem value="basic">Basic</SelectItem>
@@ -725,14 +754,54 @@ export default function CompaniesPage() {
                 <div className="flex justify-center py-4"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
               ) : (Array.isArray(admins) && admins.length > 0) ? (
                 admins.map((a: any) => (
-                  <div key={a.id} className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm">
-                    <div>
-                      <p className="font-medium">{a.name}</p>
-                      <p className="text-xs text-muted-foreground">{a.email}</p>
-                    </div>
-                    <Badge variant="outline" className={`text-[10px] ${a.isActive ? 'border-emerald-500/30 text-emerald-600' : 'border-red-500/30 text-red-500'}`}>
-                      {a.isActive ? 'Active' : 'Inactive'}
-                    </Badge>
+                  <div key={a.id} className="rounded-lg border px-3 py-2 text-sm">
+                    {editingAdminId === a.id ? (
+                      <div className="space-y-2">
+                        <Input placeholder="Name" value={editAdminForm.name} onChange={(e) => setEditAdminForm((p) => ({ ...p, name: e.target.value }))} />
+                        <Input placeholder="Email" type="email" value={editAdminForm.email} onChange={(e) => setEditAdminForm((p) => ({ ...p, email: e.target.value }))} />
+                        <Input placeholder="New password (optional, min 6 chars)" type="password" value={editAdminForm.password} onChange={(e) => setEditAdminForm((p) => ({ ...p, password: e.target.value }))} />
+                        <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={editAdminForm.isActive}
+                            onChange={(e) => setEditAdminForm((p) => ({ ...p, isActive: e.target.checked }))}
+                            className="h-3.5 w-3.5 rounded border-gray-300"
+                          />
+                          Active (can log in)
+                        </label>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            className="flex-1 bg-linear-to-r from-emerald-500 to-teal-600 text-white hover:opacity-90 border-0"
+                            disabled={updateAdminMutation.isPending}
+                            onClick={handleSaveEditedAdmin}
+                          >
+                            {updateAdminMutation.isPending ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                            Save
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setEditingAdminId(null)}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{a.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{a.email}</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Badge variant="outline" className={`text-[10px] ${a.isActive ? 'border-emerald-500/30 text-emerald-600' : 'border-red-500/30 text-red-500'}`}>
+                            {a.isActive ? 'Active' : 'Inactive'}
+                          </Badge>
+                          {a.role !== 'super_admin' && (
+                            <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit admin" onClick={() => startEditAdmin(a)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))
               ) : (
