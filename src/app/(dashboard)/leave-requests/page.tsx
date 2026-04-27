@@ -35,11 +35,24 @@ const statusConfig: Record<LeaveRequestStatus, { label: string; color: string }>
   cancelled:        { label: 'Cancelled',          color: 'bg-gray-500/15 text-gray-500 ring-gray-500/30 dark:text-gray-400' },
 };
 
-function StatusBadge({ status }: { status: LeaveRequestStatus }) {
-  const cfg = statusConfig[status] ?? statusConfig.pending;
+/**
+ * Render the status pill. Pass the whole leave request (not just `status`)
+ * so we can distinguish an admin-final-approval from an HR approval — admins
+ * have no row in the employees table, so when the backend records a final
+ * action with `hr_id` null but `hr_approver_name` set, it was an admin.
+ */
+function StatusBadge({ lr }: { lr: { status: LeaveRequestStatus; hrId?: number | null; hrApproverName?: string | null } }) {
+  const cfg = statusConfig[lr.status] ?? statusConfig.pending;
+  const adminFinal =
+    (lr.status === 'hr_approved' || lr.status === 'hr_rejected') &&
+    lr.hrId == null &&
+    !!lr.hrApproverName;
+  let label = cfg.label;
+  if (adminFinal && lr.status === 'hr_approved') label = 'Admin Approved';
+  if (adminFinal && lr.status === 'hr_rejected') label = 'Admin Rejected';
   return (
     <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cfg.color}`}>
-      {cfg.label}
+      {label}
     </span>
   );
 }
@@ -636,7 +649,7 @@ function LeaveRequestsContent() {
                     <TableCell className="text-xs font-mono">{lr.dateFrom}</TableCell>
                     <TableCell className="text-xs font-mono">{lr.dateTo}</TableCell>
                     <TableCell className="text-center font-semibold">{lr.totalDays}</TableCell>
-                    <TableCell><StatusBadge status={lr.status} /></TableCell>
+                    <TableCell><StatusBadge lr={lr as any} /></TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {lr.manager?.empName ?? '-'}
                       {lr.managerActionAt && (
@@ -646,7 +659,7 @@ function LeaveRequestsContent() {
                       )}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {lr.hr?.empName ?? '-'}
+                      {(lr as any).hrApproverName ?? lr.hr?.empName ?? '-'}
                       {lr.hrActionAt && (
                         <span className="block text-[10px] text-muted-foreground/60">
                           {format(new Date(lr.hrActionAt), 'dd MMM yyyy')}
@@ -820,7 +833,7 @@ function LeaveRequestsContent() {
                 </div>
                 <div>
                   <p className="text-muted-foreground text-xs">Status</p>
-                  <StatusBadge status={detail.status} />
+                  <StatusBadge lr={detail as any} />
                 </div>
               </div>
 
@@ -857,50 +870,89 @@ function LeaveRequestsContent() {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Approval Timeline</p>
 
                 {/* Level 1: Reporting Manager */}
-                <div className="flex items-start gap-3">
-                  <div className={`mt-0.5 h-2.5 w-2.5 rounded-full shrink-0 ${
-                    detail.status === 'manager_rejected' ? 'bg-red-500' :
-                    detail.managerActionAt ? 'bg-emerald-500' : 'bg-amber-400'
-                  }`} />
-                  <div>
-                    <p className="text-xs font-medium">Reporting Manager: {detail.manager?.empName ?? '-'}</p>
-                    {detail.managerActionAt ? (
-                      <>
-                        <p className="text-xs text-muted-foreground">
-                          {detail.status === 'manager_rejected' ? 'Rejected' : 'Approved'} on {format(new Date(detail.managerActionAt!), 'dd MMM yyyy, HH:mm')}
-                        </p>
-                        {detail.managerRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.managerRemarks}&quot;</p>}
-                      </>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">
-                        {detail.hrActionAt ? 'Bypassed by HR' : 'Pending action'}
-                      </p>
-                    )}
-                  </div>
-                </div>
+                {(() => {
+                  const hrApproverName = (detail as any).hrApproverName as string | undefined;
+                  const isFinal = detail.status === 'hr_approved' || detail.status === 'hr_rejected';
+                  const adminFinal = isFinal && detail.hrId == null && !!hrApproverName;
+                  const autoWord = detail.status === 'hr_rejected' ? 'Auto-rejected' : 'Auto-approved';
+                  const showHrRow =
+                    detail.status === 'manager_approved' ||
+                    detail.status === 'hr_approved' ||
+                    detail.status === 'hr_rejected' ||
+                    !!detail.hrActionAt;
 
-                {/* Level 2: HR */}
-                {((['manager_approved', 'hr_approved', 'hr_rejected'] as LeaveRequestStatus[]).includes(detail.status) || !!detail.hrActionAt) && (
-                  <div className="flex items-start gap-3">
-                    <div className={`mt-0.5 h-2.5 w-2.5 rounded-full shrink-0 ${
-                      detail.status === 'manager_approved' ? 'bg-amber-400' :
-                      detail.status === 'hr_rejected' ? 'bg-red-500' : 'bg-emerald-500'
-                    }`} />
-                    <div>
-                      <p className="text-xs font-medium">HR: {detail.hr?.empName ?? 'Pending'}</p>
-                      {detail.hrActionAt ? (
-                        <>
-                          <p className="text-xs text-muted-foreground">
-                            {detail.status === 'hr_rejected' ? 'Rejected' : 'Approved'} on {format(new Date(detail.hrActionAt), 'dd MMM yyyy, HH:mm')}
-                          </p>
-                          {detail.hrRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.hrRemarks}&quot;</p>}
-                        </>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">Pending action</p>
+                  return (
+                    <>
+                      {/* Manager row */}
+                      <div className="flex items-start gap-3">
+                        <div className={`mt-0.5 h-2.5 w-2.5 rounded-full shrink-0 ${
+                          detail.status === 'manager_rejected' ? 'bg-red-500' :
+                          detail.managerActionAt ? 'bg-emerald-500' :
+                          adminFinal ? 'bg-emerald-500' : 'bg-amber-400'
+                        }`} />
+                        <div>
+                          <p className="text-xs font-medium">Manager: {detail.manager?.empName ?? '—'}</p>
+                          {detail.managerActionAt ? (
+                            <>
+                              <p className="text-xs text-muted-foreground">
+                                {detail.status === 'manager_rejected' ? 'Rejected' : 'Approved'} on {format(new Date(detail.managerActionAt!), 'dd MMM yyyy, HH:mm')}
+                              </p>
+                              {detail.managerRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.managerRemarks}&quot;</p>}
+                            </>
+                          ) : adminFinal ? (
+                            <p className="text-xs text-muted-foreground">{autoWord}</p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">Pending action</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* HR row */}
+                      {showHrRow && (
+                        <div className="flex items-start gap-3">
+                          <div className={`mt-0.5 h-2.5 w-2.5 rounded-full shrink-0 ${
+                            detail.status === 'hr_rejected' ? 'bg-red-500' :
+                            detail.hrActionAt || adminFinal ? 'bg-emerald-500' : 'bg-amber-400'
+                          }`} />
+                          <div>
+                            <p className="text-xs font-medium">
+                              HR: {adminFinal ? '—' : (detail.hr?.empName ?? hrApproverName ?? 'Pending')}
+                            </p>
+                            {adminFinal ? (
+                              <p className="text-xs text-muted-foreground">{autoWord}</p>
+                            ) : detail.hrActionAt ? (
+                              <>
+                                <p className="text-xs text-muted-foreground">
+                                  {detail.status === 'hr_rejected' ? 'Rejected' : 'Approved'} on {format(new Date(detail.hrActionAt), 'dd MMM yyyy, HH:mm')}
+                                </p>
+                                {detail.hrRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.hrRemarks}&quot;</p>}
+                              </>
+                            ) : (
+                              <p className="text-xs text-muted-foreground">Pending action</p>
+                            )}
+                          </div>
+                        </div>
                       )}
-                    </div>
-                  </div>
-                )}
+
+                      {/* Admin row — only when an admin was the final decision-maker */}
+                      {adminFinal && (
+                        <div className="flex items-start gap-3">
+                          <div className={`mt-0.5 h-2.5 w-2.5 rounded-full shrink-0 ${
+                            detail.status === 'hr_rejected' ? 'bg-red-500' : 'bg-emerald-500'
+                          }`} />
+                          <div>
+                            <p className="text-xs font-medium">Admin: {hrApproverName}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {detail.status === 'hr_rejected' ? 'Rejected' : 'Approved'}
+                              {detail.hrActionAt ? ` on ${format(new Date(detail.hrActionAt), 'dd MMM yyyy, HH:mm')}` : ''}
+                            </p>
+                            {detail.hrRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.hrRemarks}&quot;</p>}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Watchers */}

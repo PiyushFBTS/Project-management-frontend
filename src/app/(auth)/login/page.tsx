@@ -21,9 +21,9 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 const features = [
-  { icon: BarChart3,   label: 'Real-time dashboards & reports' },
-  { icon: Users,       label: 'Employee & project management'  },
-  { icon: ShieldCheck, label: 'Role-based secure access'       },
+  { icon: BarChart3, label: 'Real-time dashboards & reports' },
+  { icon: Users, label: 'Employee & project management' },
+  { icon: ShieldCheck, label: 'Role-based secure access' },
 ];
 
 export default function LoginPage() {
@@ -48,7 +48,12 @@ export default function LoginPage() {
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } };
       const msg = axiosErr?.response?.data?.message ?? 'Login failed. Check credentials.';
-      toast.error(msg, { id });
+      console.log("msg===>",msg);
+      
+      toast.error(msg, {
+        id,
+        duration: 5000
+      });
     } finally {
       setLoading(false);
     }
@@ -119,33 +124,30 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={() => setLoginType('admin')}
-              className={`flex-1 rounded-md py-2 text-sm font-medium transition-all ${
-                loginType === 'admin'
+              className={`flex-1 rounded-md py-2 text-sm font-medium transition-all ${loginType === 'admin'
                   ? 'bg-white dark:bg-card shadow-sm text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
-              }`}
+                }`}
             >
               Admin
             </button>
             <button
               type="button"
               onClick={() => setLoginType('employee')}
-              className={`flex-1 rounded-md py-2 text-sm font-medium transition-all ${
-                loginType === 'employee'
+              className={`flex-1 rounded-md py-2 text-sm font-medium transition-all ${loginType === 'employee'
                   ? 'bg-white dark:bg-card shadow-sm text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
-              }`}
+                }`}
             >
               Employee
             </button>
             <button
               type="button"
               onClick={() => setLoginType('client')}
-              className={`flex-1 rounded-md py-2 text-sm font-medium transition-all ${
-                loginType === 'client'
+              className={`flex-1 rounded-md py-2 text-sm font-medium transition-all ${loginType === 'client'
                   ? 'bg-white dark:bg-card shadow-sm text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
-              }`}
+                }`}
             >
               Client
             </button>

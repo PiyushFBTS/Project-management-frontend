@@ -27,9 +27,18 @@ const statusConfig: Record<string, { label: string; color: string; bg: string }>
   cancelled: { label: 'Cancelled', color: 'text-slate-700', bg: 'bg-slate-100 dark:bg-slate-900/30 dark:text-slate-400' },
 };
 
-function StatusBadge({ status }: { status: string }) {
-  const c = statusConfig[status] ?? { label: status, bg: 'bg-slate-100' };
-  return <Badge className={`${c.bg} border-0 text-xs font-semibold`}>{c.label}</Badge>;
+function StatusBadge({ lr }: { lr: { status: string; hrId?: number | null; hrApproverName?: string | null } }) {
+  const c = statusConfig[lr.status] ?? { label: lr.status, bg: 'bg-slate-100' };
+  // Admins live outside the employees table — when the final-action row has
+  // no hr_id but a stamped hr_approver_name, an admin took the action.
+  const adminFinal =
+    (lr.status === 'hr_approved' || lr.status === 'hr_rejected') &&
+    lr.hrId == null &&
+    !!lr.hrApproverName;
+  let label = c.label;
+  if (adminFinal && lr.status === 'hr_approved') label = 'Admin Approved';
+  if (adminFinal && lr.status === 'hr_rejected') label = 'Admin Rejected';
+  return <Badge className={`${c.bg} border-0 text-xs font-semibold`}>{label}</Badge>;
 }
 
 function fmtDate(d: string | null | undefined) {
@@ -63,22 +72,27 @@ export default function LeaveRequestDetailPage() {
     enabled: !!id,
   });
 
-  // Determine if current user can act
+  // Determine if current user can act. Reject can be triggered in more
+  // states than approve — specifically, an admin may reject an already-
+  // HR-approved leave (revoke a mistaken approval).
   const canAct = (() => {
-    if (!detail || !user) return { canApprove: false, canCancel: false };
+    if (!detail || !user) return { canApprove: false, canReject: false, canCancel: false };
     const isOwn = isEmployee && detail.employeeId === (user as any).id;
     const canCancel = isOwn && !['cancelled', 'hr_approved', 'hr_rejected', 'manager_rejected'].includes(detail.status);
 
     let canApprove = false;
+    let canReject = false;
     if (isAdmin) {
       canApprove = ['pending', 'manager_approved'].includes(detail.status);
+      // Admin can also reject an already-approved leave to revoke it.
+      canReject = ['pending', 'manager_approved', 'hr_approved'].includes(detail.status);
     } else if (isEmployee) {
       const isManager = detail.employee?.reportsToId === (user as any).id;
       const isHr = !!(user as any).isHr;
-      if (isManager && detail.status === 'pending') canApprove = true;
-      if (isHr && ['pending', 'manager_approved'].includes(detail.status)) canApprove = true;
+      if (isManager && detail.status === 'pending') { canApprove = true; canReject = true; }
+      if (isHr && ['pending', 'manager_approved'].includes(detail.status)) { canApprove = true; canReject = true; }
     }
-    return { canApprove, canCancel };
+    return { canApprove, canReject, canCancel };
   })();
 
   const invalidateAll = () => {
@@ -136,7 +150,7 @@ export default function LeaveRequestDetailPage() {
           <h1 className="text-lg font-bold">Leave Request</h1>
           <p className="text-xs text-muted-foreground">#{detail.id} · Applied {fmtDate(detail.createdAt)}</p>
         </div>
-        <StatusBadge status={detail.status} />
+        <StatusBadge lr={detail as any} />
       </div>
 
       {/* Employee + Leave Info */}
@@ -198,48 +212,92 @@ export default function LeaveRequestDetailPage() {
             <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-emerald-600 dark:text-emerald-400">
               <Clock className="h-3 w-3" /> Approval Timeline
             </div>
+            {(() => {
+              const hrApproverName = (detail as any).hrApproverName as string | undefined;
+              // Admin final-approved when there's a recorded approver name but
+              // no HR employee id — admins live outside the employees table,
+              // so hr_id can't carry them.
+              const isFinal = detail.status === 'hr_approved' || detail.status === 'hr_rejected';
+              const adminFinal = isFinal && detail.hrId == null && !!hrApproverName;
+              const autoWord = detail.status === 'hr_rejected' ? 'Auto-rejected' : 'Auto-approved';
+              const showHrRow =
+                detail.status === 'manager_approved' ||
+                detail.status === 'hr_approved' ||
+                detail.status === 'hr_rejected' ||
+                !!detail.hrActionAt;
 
-            {/* Manager */}
-            <div className="flex items-start gap-3">
-              <div className={`mt-1 h-3 w-3 rounded-full shrink-0 ${detail.status === 'manager_rejected' ? 'bg-red-500' :
-                detail.managerActionAt ? 'bg-emerald-500' : 'bg-amber-400'
-                }`} />
-              <div>
-                <p className="text-sm font-medium">Reporting Manager: {detail.manager?.empName ?? '—'}</p>
-                {detail.managerActionAt ? (
-                  <>
-                    <p className="text-xs text-muted-foreground">
-                      {detail.status === 'manager_rejected' ? 'Rejected' : 'Approved'} on {fmtDateTime(detail.managerActionAt)}
-                    </p>
-                    {detail.managerRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.managerRemarks}&quot;</p>}
-                  </>
-                ) : (
-                  <p className="text-xs text-muted-foreground">{detail.hrActionAt ? 'Bypassed by HR' : 'Pending action'}</p>
-                )}
-              </div>
-            </div>
+              return (
+                <>
+                  {/* Manager row */}
+                  <div className="flex items-start gap-3">
+                    <div className={`mt-1 h-3 w-3 rounded-full shrink-0 ${
+                      detail.status === 'manager_rejected' ? 'bg-red-500' :
+                      detail.managerActionAt ? 'bg-emerald-500' :
+                      adminFinal ? 'bg-emerald-500' : 'bg-amber-400'
+                    }`} />
+                    <div>
+                      <p className="text-sm font-medium">Manager: {detail.manager?.empName ?? '—'}</p>
+                      {detail.managerActionAt ? (
+                        <>
+                          <p className="text-xs text-muted-foreground">
+                            {detail.status === 'manager_rejected' ? 'Rejected' : 'Approved'} on {fmtDateTime(detail.managerActionAt)}
+                          </p>
+                          {detail.managerRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.managerRemarks}&quot;</p>}
+                        </>
+                      ) : adminFinal ? (
+                        <p className="text-xs text-muted-foreground">{autoWord}</p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Pending action</p>
+                      )}
+                    </div>
+                  </div>
 
-            {/* HR */}
-            {((['manager_approved', 'hr_approved', 'hr_rejected'] as LeaveRequestStatus[]).includes(detail.status) || !!detail.hrActionAt) && (
-              <div className="flex items-start gap-3">
-                <div className={`mt-1 h-3 w-3 rounded-full shrink-0 ${detail.status === 'manager_approved' ? 'bg-amber-400' :
-                  detail.status === 'hr_rejected' ? 'bg-red-500' : 'bg-emerald-500'
-                  }`} />
-                <div>
-                  <p className="text-sm font-medium">HR: {detail.hr?.empName ?? 'Pending'}</p>
-                  {detail.hrActionAt ? (
-                    <>
-                      <p className="text-xs text-muted-foreground">
-                        {detail.status === 'hr_rejected' ? 'Rejected' : 'Approved'} on {fmtDateTime(detail.hrActionAt)}
-                      </p>
-                      {detail.hrRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.hrRemarks}&quot;</p>}
-                    </>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Pending action</p>
+                  {/* HR row */}
+                  {showHrRow && (
+                    <div className="flex items-start gap-3">
+                      <div className={`mt-1 h-3 w-3 rounded-full shrink-0 ${
+                        detail.status === 'hr_rejected' ? 'bg-red-500' :
+                        detail.hrActionAt || adminFinal ? 'bg-emerald-500' : 'bg-amber-400'
+                      }`} />
+                      <div>
+                        <p className="text-sm font-medium">
+                          HR: {adminFinal ? '—' : (detail.hr?.empName ?? hrApproverName ?? 'Pending')}
+                        </p>
+                        {adminFinal ? (
+                          <p className="text-xs text-muted-foreground">{autoWord}</p>
+                        ) : detail.hrActionAt ? (
+                          <>
+                            <p className="text-xs text-muted-foreground">
+                              {detail.status === 'hr_rejected' ? 'Rejected' : 'Approved'} on {fmtDateTime(detail.hrActionAt)}
+                            </p>
+                            {detail.hrRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.hrRemarks}&quot;</p>}
+                          </>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">Pending action</p>
+                        )}
+                      </div>
+                    </div>
                   )}
-                </div>
-              </div>
-            )}
+
+                  {/* Admin row — only when admin was the final decision-maker */}
+                  {adminFinal && (
+                    <div className="flex items-start gap-3">
+                      <div className={`mt-1 h-3 w-3 rounded-full shrink-0 ${
+                        detail.status === 'hr_rejected' ? 'bg-red-500' : 'bg-emerald-500'
+                      }`} />
+                      <div>
+                        <p className="text-sm font-medium">Admin: {hrApproverName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {detail.status === 'hr_rejected' ? 'Rejected' : 'Approved'}
+                          {detail.hrActionAt ? ` on ${fmtDateTime(detail.hrActionAt)}` : ''}
+                        </p>
+                        {detail.hrRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.hrRemarks}&quot;</p>}
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </CardContent>
         </Card>
 
@@ -266,13 +324,13 @@ export default function LeaveRequestDetailPage() {
         )}
 
         {/* Actions */}
-        {(canAct.canApprove || canAct.canCancel) && (
+        {(canAct.canApprove || canAct.canReject || canAct.canCancel) && (
           <Card>
             <CardContent className="p-4 space-y-3">
               <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
                 <MessageSquare className="h-3 w-3" /> Actions
               </div>
-              {canAct.canApprove && (
+              {(canAct.canApprove || canAct.canReject) && (
                 <>
                   <Textarea
                     placeholder="Remarks (optional)"
@@ -281,24 +339,32 @@ export default function LeaveRequestDetailPage() {
                     rows={2}
                   />
                   <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                      disabled={approveMut.isPending || rejectMut.isPending}
-                      onClick={() => approveMut.mutate()}
-                    >
-                      <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                      {approveMut.isPending ? 'Processing...' : 'Approve'}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      disabled={approveMut.isPending || rejectMut.isPending}
-                      onClick={() => rejectMut.mutate()}
-                    >
-                      <XCircle className="mr-1.5 h-3.5 w-3.5" />
-                      {rejectMut.isPending ? 'Processing...' : 'Reject'}
-                    </Button>
+                    {canAct.canApprove && (
+                      <Button
+                        size="sm"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                        disabled={approveMut.isPending || rejectMut.isPending}
+                        onClick={() => approveMut.mutate()}
+                      >
+                        <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                        {approveMut.isPending ? 'Processing...' : 'Approve'}
+                      </Button>
+                    )}
+                    {canAct.canReject && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={approveMut.isPending || rejectMut.isPending}
+                        onClick={() => rejectMut.mutate()}
+                      >
+                        <XCircle className="mr-1.5 h-3.5 w-3.5" />
+                        {rejectMut.isPending
+                          ? 'Processing...'
+                          : detail.status === 'hr_approved'
+                            ? 'Reject (revoke approval)'
+                            : 'Reject'}
+                      </Button>
+                    )}
                   </div>
                 </>
               )}
