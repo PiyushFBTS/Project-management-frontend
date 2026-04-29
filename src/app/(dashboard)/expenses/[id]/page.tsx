@@ -11,7 +11,7 @@ import {
   Calendar, IndianRupee, FolderKanban, Tag, User, Clock,
   FileText, Image as ImageIcon, AlignLeft, Download,
 } from 'lucide-react';
-import { expensesApi, adminExpensesApi } from '@/lib/api/expenses';
+import { expensesApi, adminExpensesApi, hrExpensesApi } from '@/lib/api/expenses';
 import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +32,7 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
   const { user } = useAuth();
   const isAdmin = user?._type === 'admin';
   const isEmployee = user?._type === 'employee';
+  const isHr = isEmployee && !!(user as any)?.isHr;
   const expenseId = Number(params.id);
   const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:8000';
 
@@ -53,7 +54,12 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
 
   const statusMut = useMutation({
     mutationFn: ({ status, remarks, approvedAmount: amt }: { status: 'approved' | 'rejected'; remarks?: string; approvedAmount?: number }) =>
-      adminExpensesApi.updateStatus(expenseId, status, remarks, amt),
+      // Route through the HR endpoint when the requester is HR — admins
+      // keep using the admin endpoint. Both share the same self-approval
+      // guard server-side.
+      isHr
+        ? hrExpensesApi.updateStatus(expenseId, status, remarks, amt)
+        : adminExpensesApi.updateStatus(expenseId, status, remarks, amt),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expense-detail', expenseId] });
       qc.invalidateQueries({ queryKey: ['expenses'] });
@@ -205,18 +211,30 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
                 {e.approvedAt && <p>{e.status === 'approved' ? 'Approved' : 'Reviewed'}: {format(new Date(e.approvedAt), 'dd MMM yyyy, hh:mm a')}</p>}
                 <p>Created: {format(new Date(e.createdAt), 'dd MMM yyyy, hh:mm a')}</p>
               </div>
-              {isAdmin && e.status === 'pending' && (
-                <>
-                  <h3 className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">Admin Actions</h3>
-                  <Button className="w-full bg-emerald-600 hover:bg-emerald-700"
-                    onClick={() => { setApproveAmount(String(Number(e.amount || 0))); setApproveRemarks(''); setApproveOpen(true); }}>
-                    <Check className="h-4 w-4 mr-1.5" /> Approve
-                  </Button>
-                  <Button variant="destructive" className="w-full" onClick={() => { setRejectReason(''); setRejectOpen(true); }}>
-                    <X className="h-4 w-4 mr-1.5" /> Reject
-                  </Button>
-                </>
-              )}
+              {(() => {
+                // Self-approval guard: an admin can't action their own
+                // admin-bridged expense; an HR can't action a leave they
+                // themselves submitted (matched by employeeId).
+                const isOwnAdminExpense =
+                  isAdmin && e.submitterAdminId != null && e.submitterAdminId === (user as any)?.id;
+                const isOwnHrExpense =
+                  isHr && e.employeeId != null && e.employeeId === (user as any)?.id;
+                const canAction =
+                  (isAdmin || isHr) && e.status === 'pending' && !isOwnAdminExpense && !isOwnHrExpense;
+                if (!canAction) return null;
+                return (
+                  <>
+                    <h3 className="text-xs uppercase tracking-wider font-semibold text-muted-foreground">{isHr ? 'HR Actions' : 'Admin Actions'}</h3>
+                    <Button className="w-full bg-emerald-600 hover:bg-emerald-700"
+                      onClick={() => { setApproveAmount(String(Number(e.amount || 0))); setApproveRemarks(''); setApproveOpen(true); }}>
+                      <Check className="h-4 w-4 mr-1.5" /> Approve
+                    </Button>
+                    <Button variant="destructive" className="w-full" onClick={() => { setRejectReason(''); setRejectOpen(true); }}>
+                      <X className="h-4 w-4 mr-1.5" /> Reject
+                    </Button>
+                  </>
+                );
+              })()}
             </CardContent>
           </Card>
         </div>

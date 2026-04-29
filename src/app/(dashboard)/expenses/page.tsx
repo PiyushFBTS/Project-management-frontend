@@ -11,7 +11,7 @@ import {
   Receipt, Filter, FileText, Image as ImageIcon, FileSpreadsheet,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { expensesApi, adminExpensesApi } from '@/lib/api/expenses';
+import { expensesApi, adminExpensesApi, hrExpensesApi } from '@/lib/api/expenses';
 import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,11 +42,13 @@ export default function ExpensesPage() {
   const qc = useQueryClient();
   const isAdmin = user?._type === 'admin';
   const isEmployee = user?._type === 'employee';
+  const isHr = isEmployee && !!(user as any)?.isHr;
+  const canApprove = isAdmin || isHr;
   const fileRef = useRef<HTMLInputElement>(null);
   const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:8000';
 
   // Tab: admin/HR sees both tabs, employee sees only "My Expenses"
-  const [activeTab, setActiveTab] = useState<'my' | 'team'>(isAdmin ? 'team' : 'my');
+  const [activeTab, setActiveTab] = useState<'my' | 'team'>(canApprove ? 'team' : 'my');
 
   // Filters
   const [statusFilter, setStatusFilter] = useState('all');
@@ -75,14 +77,18 @@ export default function ExpensesPage() {
 
   // Queries
   const { data: rawData, isLoading } = useQuery({
-    queryKey: ['expenses', isAdmin, statusFilter, activeTab],
+    queryKey: ['expenses', isAdmin, isHr, statusFilter, activeTab],
     queryFn: async () => {
-      if (isAdmin && activeTab === 'team') {
-        // All company expenses (team view)
-        const r = await adminExpensesApi.getAll({
+      if (canApprove && activeTab === 'team') {
+        // All company expenses (team view) — admin uses admin endpoint,
+        // HR uses the HR-gated /employee/expenses/all route.
+        const params = {
           limit: 200,
           status: statusFilter !== 'all' ? statusFilter : undefined,
-        });
+        };
+        const r = isAdmin
+          ? await adminExpensesApi.getAll(params)
+          : await hrExpensesApi.getAll(params);
         return r.data?.data ?? r.data;
       }
       if (isAdmin && activeTab === 'my') {
@@ -90,9 +96,9 @@ export default function ExpensesPage() {
         const r = await adminExpensesApi.getAll({ limit: 200 });
         const all = r.data?.data ?? r.data ?? [];
         // Filter to only admin's own
-        const adminName = (user as any)?.name;
+        const adminId = (user as any)?.id;
         return (Array.isArray(all) ? all : []).filter((e: any) =>
-          e.submitterType === 'admin' && e.submitterName === adminName
+          e.submitterType === 'admin' && e.submitterAdminId === adminId
         );
       }
       const r = await expensesApi.getMyExpenses({ limit: 100 });
@@ -151,10 +157,12 @@ export default function ExpensesPage() {
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
   });
 
-  // Admin: approve/reject
+  // Admin / HR: approve/reject (HR routes through the HR-gated endpoint)
   const statusMut = useMutation({
     mutationFn: ({ id, status, remarks, approvedAmount: amt }: { id: number; status: 'approved' | 'rejected'; remarks?: string; approvedAmount?: number }) =>
-      adminExpensesApi.updateStatus(id, status, remarks, amt),
+      isHr
+        ? hrExpensesApi.updateStatus(id, status, remarks, amt)
+        : adminExpensesApi.updateStatus(id, status, remarks, amt),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['expenses'] });
       toast.success('Status updated');
@@ -343,10 +351,11 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {/* Tabs for admin/HR */}
-      {isAdmin && (
+      {/* Tabs for admin/HR — admins get both tabs (own + team); HR only
+          gets the team tab since "my" is a separate concept for them. */}
+      {canApprove && (
         <div className="flex gap-1 p-0.5 bg-muted rounded-lg w-fit">
-          {(['my', 'team'] as const).map((tab) => (
+          {(isAdmin ? (['my', 'team'] as const) : (['team'] as const)).map((tab) => (
             <button key={tab} type="button" onClick={() => setActiveTab(tab)}
               className={`px-4 py-1.5 text-xs font-medium rounded-md transition-colors ${activeTab === tab ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
               {tab === 'my' ? 'My Expenses' : 'Team Expenses'}
@@ -368,7 +377,7 @@ export default function ExpensesPage() {
                 <thead className="bg-muted/50">
                   <tr>
                     <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">Date</th>
-                    {isAdmin && activeTab === 'team' && <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">Employee</th>}
+                    {canApprove && activeTab === 'team' && <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">Employee</th>}
                     <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">Project</th>
                     <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">Type</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-muted-foreground">Amount</th>
@@ -384,7 +393,7 @@ export default function ExpensesPage() {
                         {exp.expenseDate ? format(new Date(exp.expenseDate + 'T00:00:00'), 'dd MMM yyyy') : '—'}
                         {exp.expenseDateTo && exp.expenseDateTo !== exp.expenseDate ? ` — ${format(new Date(exp.expenseDateTo + 'T00:00:00'), 'dd MMM')}` : ''}
                       </td>
-                      {isAdmin && activeTab === 'team' && <td className="px-3 py-2">{exp.employee?.empName ?? exp.submitterName ?? '—'}{exp.submitterType === 'admin' ? ' (Admin)' : ''}</td>}
+                      {canApprove && activeTab === 'team' && <td className="px-3 py-2">{exp.employee?.empName ?? exp.submitterName ?? '—'}{exp.submitterType === 'admin' ? ' (Admin)' : ''}</td>}
                       <td className="px-3 py-2">{exp.project?.projectName ?? '—'}</td>
                       <td className="px-3 py-2">{exp.expenseType}</td>
                       <td className="px-3 py-2 text-right font-semibold">₹{Number(exp.amount).toLocaleString('en-IN')}</td>
@@ -400,16 +409,32 @@ export default function ExpensesPage() {
                       </td>
                       <td className="px-3 py-2 text-center" onClick={(ev) => ev.stopPropagation()}>
                         <div className="flex items-center justify-center gap-1">
-                          {isAdmin && activeTab === 'team' && exp.status === 'pending' && !(exp.submitterType === 'admin' && exp.submitterName === (user as any)?.name) && (
-                            <>
-                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-emerald-600" onClick={() => { setApproveId(exp.id); setApproveAmount(String(Number(exp.amount || 0))); setApproveRequestedAmt(Number(exp.amount || 0)); setApproveRemarks(''); }} title="Approve">
-                                <Check className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600" onClick={() => { setRejectId(exp.id); setRejectReason(''); }} title="Reject">
-                                <X className="h-3.5 w-3.5" />
-                              </Button>
-                            </>
-                          )}
+                          {(() => {
+                            // Self-approval guard:
+                            //  - Admin can't action their own admin-bridged expense
+                            //    (matched by submitterAdminId === current admin id).
+                            //  - HR can't action an expense they themselves
+                            //    submitted (matched by employeeId === current id).
+                            const myId = (user as any)?.id;
+                            const isOwnAdminExpense =
+                              isAdmin && exp.submitterType === 'admin' && exp.submitterAdminId === myId;
+                            const isOwnHrExpense =
+                              isHr && exp.employeeId != null && exp.employeeId === myId;
+                            const showActions =
+                              canApprove && activeTab === 'team' && exp.status === 'pending'
+                              && !isOwnAdminExpense && !isOwnHrExpense;
+                            if (!showActions) return null;
+                            return (
+                              <>
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-emerald-600" onClick={() => { setApproveId(exp.id); setApproveAmount(String(Number(exp.amount || 0))); setApproveRequestedAmt(Number(exp.amount || 0)); setApproveRemarks(''); }} title="Approve">
+                                  <Check className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600" onClick={() => { setRejectId(exp.id); setRejectReason(''); }} title="Reject">
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                              </>
+                            );
+                          })()}
                           {(isAdmin || (isEmployee && exp.status === 'pending')) && (
                             <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500" onClick={() => deleteMut.mutate(exp.id)} title="Delete">
                               <Trash2 className="h-3.5 w-3.5" />

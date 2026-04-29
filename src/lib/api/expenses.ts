@@ -18,6 +18,17 @@ export const expensesApi = {
     api.delete(`/employee/expenses/${id}`),
 };
 
+// HR endpoints — same `/employee/expenses` mount point but the backend
+// gates these behind `emp.isHr === true`. HR can list every expense and
+// approve / reject (except their own — that's a server-side guard).
+export const hrExpensesApi = {
+  getAll: (params?: { page?: number; limit?: number; employeeId?: number; status?: string; projectId?: number; fromDate?: string; toDate?: string }) =>
+    api.get('/employee/expenses/all', { params }),
+
+  updateStatus: (id: number, status: 'approved' | 'rejected', remarks?: string, approvedAmount?: number) =>
+    api.patch(`/employee/expenses/${id}/status`, { status, ...(approvedAmount !== undefined ? { approvedAmount } : {}), ...(remarks ? { remarks } : {}) }),
+};
+
 export const adminExpensesApi = {
   // Admin endpoints
   getAll: (params?: { page?: number; limit?: number; employeeId?: number; status?: string; projectId?: number; fromDate?: string; toDate?: string }) =>
