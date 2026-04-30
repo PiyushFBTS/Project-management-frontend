@@ -25,6 +25,7 @@ import {
 } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { capitalizeFirst } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
@@ -807,7 +808,7 @@ export default function ProjectPlanningPage() {
               <FormField control={phaseForm.control} name="name" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Phase Name</FormLabel>
-                  <FormControl><Input {...field} /></FormControl>
+                  <FormControl><Input {...field} onChange={(e) => field.onChange(capitalizeFirst(e.target.value))} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />
@@ -872,7 +873,7 @@ export default function ProjectPlanningPage() {
               <FormField control={taskForm.control} name="title" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Title</FormLabel>
-                  <FormControl><Input {...field} /></FormControl>
+                  <FormControl><Input {...field} onChange={(e) => field.onChange(capitalizeFirst(e.target.value))} /></FormControl>
                   <FormMessage />
                 </FormItem>
               )} />

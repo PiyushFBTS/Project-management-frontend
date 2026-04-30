@@ -15,6 +15,7 @@ import { useAuth } from '@/providers/auth-provider';
 import { CreateTaskDto } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { capitalizeFirst } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
@@ -160,7 +161,7 @@ export default function NewTaskPage({ params: paramsPromise }: { params: Promise
           <div>
             <Input
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => setTitle(capitalizeFirst(e.target.value))}
               placeholder="Task title…"
               className="text-xl font-bold border-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-violet-500 h-auto py-2"
             />

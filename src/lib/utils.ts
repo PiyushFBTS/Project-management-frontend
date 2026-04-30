@@ -13,6 +13,19 @@ export function cn(...inputs: ClassValue[]) {
  * on validation failure, so prefer `errors` (per-field detail) over the
  * generic `message`. Falls back to `fallback` when nothing usable is present.
  */
+/**
+ * Capitalise the first character of a string. Used on free-text label
+ * fields (project / phase / ticket name) so a list doesn't mix lowercase
+ * "task 1" with capitalised "Task 2". Only the first char is touched —
+ * acronyms and proper nouns elsewhere in the string are preserved.
+ */
+export function capitalizeFirst(s: string): string {
+  if (!s) return s;
+  const first = s[0];
+  const upper = first.toUpperCase();
+  return first === upper ? s : upper + s.slice(1);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function apiErrorMessage(err: any, fallback = 'Something went wrong'): string {
   const data = err?.response?.data;

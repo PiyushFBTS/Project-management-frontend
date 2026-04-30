@@ -13,6 +13,7 @@ import { CreateProjectDto } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
+import { capitalizeFirst } from '@/lib/utils';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -227,7 +228,7 @@ function NewProjectPage() {
           </div>
           <Input
             value={form.projectName}
-            onChange={(e) => setForm((p) => ({ ...p, projectName: e.target.value }))}
+            onChange={(e) => setForm((p) => ({ ...p, projectName: capitalizeFirst(e.target.value) }))}
             placeholder="e.g. E-commerce Platform"
             className="h-8 text-sm"
           />

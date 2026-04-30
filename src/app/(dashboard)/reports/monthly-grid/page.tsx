@@ -2,6 +2,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Download, Calendar, ArrowLeft, Search, User } from 'lucide-react';
 import { api } from '@/lib/api/axios-instance';
@@ -12,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 
-type DayEntry = { date: string; hours: number | null; submitted: boolean };
+type DayEntry = { date: string; sheetId: number | null; hours: number | null; submitted: boolean };
 type EmployeeRow = {
   employeeId: number;
   empCode: string;
@@ -29,6 +30,7 @@ const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default function MonthlyGridPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const isAdmin = user?._type === 'admin';
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -220,14 +222,27 @@ export default function MonthlyGridPage() {
                   <div key={`empty-${i}`} />
                 ))}
 
-                {/* Day cells */}
+                {/* Day cells — clickable when a sheet exists for that day */}
                 {empRow.days.map((entry) => {
                   const day = parseInt(entry.date.split('-')[2], 10);
                   const sun = isSunday(entry.date);
+                  const clickable = !sun && entry.sheetId != null;
                   return (
                     <div
                       key={entry.date}
+                      role={clickable ? 'button' : undefined}
+                      tabIndex={clickable ? 0 : undefined}
+                      onClick={clickable ? () => router.push(`/task-sheets/${entry.sheetId}`) : undefined}
+                      onKeyDown={clickable ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          router.push(`/task-sheets/${entry.sheetId}`);
+                        }
+                      } : undefined}
+                      title={clickable ? 'Open task sheet' : undefined}
                       className={`rounded-lg border p-2 min-h-[70px] transition-all ${
+                        clickable ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5' : ''
+                      } ${
                         sun
                           ? 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800'
                           : entry.hours !== null

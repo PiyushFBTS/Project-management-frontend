@@ -17,6 +17,7 @@ import { projectsApi } from '@/lib/api/projects';
 import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { capitalizeFirst } from '@/lib/utils';
 import { RichTextEditor, RichTextDisplay } from '@/components/ui/rich-text-editor';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -356,7 +357,7 @@ export default function ProjectDetailPage() {
             <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-cyan-600 dark:text-cyan-400 mb-1.5">
               <FileText className="h-3 w-3" /> Project Name
             </div>
-            <Input value={form.projectName} onChange={(e) => setForm((p) => ({ ...p, projectName: e.target.value }))} className="h-8 text-sm" />
+            <Input value={form.projectName} onChange={(e) => setForm((p) => ({ ...p, projectName: capitalizeFirst(e.target.value) }))} className="h-8 text-sm" />
           </div>
         ) : null}
 
