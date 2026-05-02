@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Download, Search, BarChart3, Ticket, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { reportsApi } from '@/lib/api/reports';
@@ -47,6 +48,7 @@ const typeLabels: Record<string, string> = {
 
 export default function EmployeeWiseReportPage() {
   const { user } = useAuth();
+  const router = useRouter();
   const isEmployee = user?._type === 'employee';
   const isAdmin = !isEmployee;
   const isHr = isEmployee && !!(user as any)?.isHr;
@@ -95,9 +97,10 @@ export default function EmployeeWiseReportPage() {
 
   return (
     <div className="space-y-4">
-      {/* Gradient Header */}
+      {/* Gradient Header — brand blue, matches the rest of the app
+          (project-wise drill-down, leave page, announcements). */}
       <div className="relative overflow-hidden rounded-2xl shadow-lg">
-        <div className="absolute inset-0 bg-linear-to-r from-indigo-600 via-violet-600 to-fuchsia-600" />
+        <div className="absolute inset-0 bg-linear-to-r from-blue-600 to-blue-800" />
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djZoLTZWMzRoNnptMC0zMHY2aC02VjRoNnptMCAzMHY2aC02di02aDZ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30" />
         <div className="relative px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -140,7 +143,7 @@ export default function EmployeeWiseReportPage() {
             </SelectContent>
           </Select>
         )}
-        <Button size="sm" onClick={() => setAutoFetch(true)} className="bg-linear-to-r from-indigo-500 to-violet-600 text-white hover:opacity-90 shadow-sm shadow-indigo-500/25 border-0">
+        <Button size="sm" onClick={() => setAutoFetch(true)} className="bg-linear-to-r from-blue-600 to-blue-800 text-white hover:opacity-90 shadow-sm shadow-blue-500/25 border-0">
           <Search className="mr-1.5 h-4 w-4" /> Run Report
         </Button>
       </div>
@@ -151,7 +154,7 @@ export default function EmployeeWiseReportPage() {
         </div>
       ) : (
         <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
-          <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-indigo-500 via-violet-500 to-fuchsia-500" />
+          <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-blue-500 to-blue-700" />
           <Table>
             <TableHeader>
               <TableRow>
@@ -173,10 +176,23 @@ export default function EmployeeWiseReportPage() {
                     </TableRow>
                   ))
                 : (data ?? []).map((row: any) => (
-                    <TableRow key={row.id}>
+                    <TableRow
+                      key={row.id}
+                      className="cursor-pointer hover:bg-muted/40"
+                      onClick={() =>
+                        router.push(
+                          `/reports/employee-wise/${row.id}?from_date=${fromDate}&to_date=${toDate}`,
+                        )
+                      }
+                      title="Open per-project / per-ticket breakdown"
+                    >
                       <TableCell className="font-mono text-xs">{row.emp_code}</TableCell>
-                      <TableCell className="font-medium">
-                        <Link href={`/employees/${row.id}?type=employee`} className="text-violet-600 dark:text-violet-400 hover:underline">
+                      <TableCell className="font-medium" onClick={(e) => e.stopPropagation()}>
+                        <Link
+                          href={`/employees/${row.id}?type=admin`}
+                          className="text-blue-600 dark:text-blue-400 hover:underline"
+                          title="Open employee profile"
+                        >
                           {row.emp_name}
                         </Link>
                       </TableCell>
@@ -185,9 +201,9 @@ export default function EmployeeWiseReportPage() {
                       <TableCell className="text-right">{row.days_filled}</TableCell>
                       <TableCell className="text-right">{Number(row.total_hours).toFixed(1)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">{Number(row.avg_hours_per_day).toFixed(2)}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <button
-                          className="font-medium text-violet-600 dark:text-violet-400 hover:underline cursor-pointer"
+                          className="font-medium text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
                           onClick={() => { setTicketEmpId(row.id); setTicketEmpName(row.emp_name); setTicketDialogOpen(true); }}
                         >
                           {Number(row.ticket_count ?? 0).toFixed(2)}
@@ -203,7 +219,7 @@ export default function EmployeeWiseReportPage() {
       {/* ── Ticket List Dialog ──────────────────────────────────────── */}
       <Dialog open={ticketDialogOpen} onOpenChange={(open) => { if (!open) { setTicketDialogOpen(false); setTicketEmpId(null); } }}>
         <DialogContent className="max-w-lg max-h-[80vh] flex flex-col gap-0 p-0">
-          <div className="bg-linear-to-r from-violet-600 to-indigo-600 px-5 py-4 text-white rounded-t-lg">
+          <div className="bg-linear-to-r from-blue-600 to-blue-800 px-5 py-4 text-white rounded-t-lg">
             <DialogTitle className="text-white flex items-center gap-2">
               <Ticket className="h-4 w-4" />
               Contributed Tickets
@@ -221,14 +237,14 @@ export default function EmployeeWiseReportPage() {
                   <div key={t.id} className="rounded-lg border p-3 hover:bg-accent/30 transition-colors">
                     <div className="flex items-center justify-between gap-2 mb-1">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-xs font-mono font-semibold text-violet-600 dark:text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded shrink-0">
+                        <span className="text-xs font-mono font-semibold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded shrink-0">
                           {t.ticket_number ?? `#${t.id}`}
                         </span>
                         <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium shrink-0 ${statusColors[t.status] ?? ''}`}>
                           {statusLabels[t.status] ?? t.status}
                         </span>
                       </div>
-                      <span className="text-xs font-semibold text-violet-600 dark:text-violet-400 shrink-0">
+                      <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 shrink-0">
                         Share: {t.weighted_share}
                       </span>
                     </div>

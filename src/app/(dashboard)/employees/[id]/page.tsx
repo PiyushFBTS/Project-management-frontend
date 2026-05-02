@@ -132,6 +132,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
   const [editType, setEditType] = useState('');
   const [editJoiningDate, setEditJoiningDate] = useState('');
   const [editIsHr, setEditIsHr] = useState(false);
+  const [editIsAccounts, setEditIsAccounts] = useState(false);
   const [editFillDays, setEditFillDays] = useState('');
   const [editAnnualCTC, setEditAnnualCTC] = useState('');
   const [editBloodGroup, setEditBloodGroup] = useState('');
@@ -322,6 +323,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
     setEditType(emp.consultantType ?? '');
     setEditJoiningDate(emp.joiningDate ?? '');
     setEditIsHr(!!emp.isHr);
+    setEditIsAccounts(!!(emp as any).isAccounts);
     setEditFillDays(emp.fillDaysOverride != null ? String(emp.fillDaysOverride) : '');
     setEditAnnualCTC(emp.annualCTC != null ? String(emp.annualCTC) : '');
     setEditBloodGroup(emp.bloodGroup ?? '');
@@ -379,7 +381,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
       const isReportToAdmin = reportsType === 'adm';
       const reportsToId = reportsType === 'emp' ? Number(reportsIdStr) : null;
       const reportsToAdminId = reportsType === 'adm' ? Number(reportsIdStr) : null;
-      const dto: any = { empName: editName, email: editEmail, mobileNumber: editPhone, dateOfBirth: editDob || undefined, consultantType: editType, joiningDate: editJoiningDate || undefined, isHr: editIsHr, isReportToAdmin, reportsToId, reportsToAdminId, fillDaysOverride: editFillDays ? Number(editFillDays) : null, annualCTC: editAnnualCTC ? Number(editAnnualCTC) : null, bloodGroup: editBloodGroup || undefined, maritalStatus: editMaritalStatus || undefined, isActive: editIsActive };
+      const dto: any = { empName: editName, email: editEmail, mobileNumber: editPhone, dateOfBirth: editDob || undefined, consultantType: editType, joiningDate: editJoiningDate || undefined, isHr: editIsHr, isAccounts: editIsAccounts, isReportToAdmin, reportsToId, reportsToAdminId, fillDaysOverride: editFillDays ? Number(editFillDays) : null, annualCTC: editAnnualCTC ? Number(editAnnualCTC) : null, bloodGroup: editBloodGroup || undefined, maritalStatus: editMaritalStatus || undefined, isActive: editIsActive };
       return employeesApi.update(Number(id), dto);
     },
     onSuccess: async () => {
@@ -640,6 +642,17 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                           </label>
                         ) : (
                           <p className="text-sm font-medium">{emp.isHr ? 'Yes' : 'No'}</p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Accounts Access</p>
+                        {editMode && canManageAllDocs ? (
+                          <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                            <input type="checkbox" checked={editIsAccounts} onChange={(e) => setEditIsAccounts(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+                            {editIsAccounts ? 'Yes' : 'No'}
+                          </label>
+                        ) : (
+                          <p className="text-sm font-medium">{(emp as any).isAccounts ? 'Yes' : 'No'}</p>
                         )}
                       </div>
                       <div>

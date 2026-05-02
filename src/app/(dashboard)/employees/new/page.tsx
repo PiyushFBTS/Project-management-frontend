@@ -36,6 +36,7 @@ const defaultForm = {
   consultantType: 'functional' as Employee['consultantType'],
   reportsTo: 'none', // encoded "emp-123" or "adm-456" or "none"
   isHr: false,
+  isAccounts: false,
   dateOfBirth: '',
   joiningDate: '',
   fillDaysOverride: '',
@@ -118,6 +119,7 @@ function NewEmployeeContent() {
       reportsToAdminId,
       isReportToAdmin,
       isHr: form.isHr,
+      isAccounts: form.isAccounts,
       dateOfBirth: form.dateOfBirth || undefined,
       joiningDate: form.joiningDate || undefined,
       fillDaysOverride: form.fillDaysOverride ? Number(form.fillDaysOverride) : null,
@@ -202,6 +204,12 @@ function NewEmployeeContent() {
                 <label className="flex items-center gap-2 h-9 text-sm cursor-pointer">
                   <input type="checkbox" checked={form.isHr} onChange={(e) => setForm((p) => ({ ...p, isHr: e.target.checked }))} className="h-4 w-4 rounded border-gray-300" />
                   <span>This employee is HR</span>
+                </label>
+              </Field>
+              <Field label="Accounts Access">
+                <label className="flex items-center gap-2 h-9 text-sm cursor-pointer">
+                  <input type="checkbox" checked={form.isAccounts} onChange={(e) => setForm((p) => ({ ...p, isAccounts: e.target.checked }))} className="h-4 w-4 rounded border-gray-300" />
+                  <span>Can mark expenses as paid</span>
                 </label>
               </Field>
             </div>

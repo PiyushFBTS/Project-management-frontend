@@ -203,6 +203,11 @@ export default function EmployeesPage() {
                           HR
                         </span>
                       )}
+                      {(emp as any).isAccounts && (
+                        <span className="rounded-full px-1.5 py-0 text-[9px] font-bold tracking-wide uppercase bg-purple-500/15 text-purple-600 dark:text-purple-400 ring-1 ring-purple-500/30">
+                          Accounts
+                        </span>
+                      )}
                     </div>
                     <div className="mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground truncate">
                       {emp.mobileNumber ? (

@@ -127,7 +127,14 @@ export default function ProjectWiseReportPage() {
                     </TableRow>
                   ))
                 : (data ?? []).map((row) => (
-                    <TableRow key={row.project_id}>
+                    <TableRow
+                      key={row.project_id}
+                      className="cursor-pointer hover:bg-muted/40"
+                      onClick={() =>
+                        router.push(`/reports/project-wise/${row.project_id}?month=${month}`)
+                      }
+                      title="View per-employee breakdown"
+                    >
                       <TableCell className="font-mono text-xs">{row.project_code}</TableCell>
                       <TableCell className="font-medium max-w-[160px] truncate">{row.project_name}</TableCell>
                       <TableCell>

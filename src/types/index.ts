@@ -214,6 +214,7 @@ export interface Employee {
   reportsToId?: number | null;
   reportsTo?: { id: number; empName: string; empCode: string } | null;
   isHr: boolean;
+  isAccounts: boolean;
   isActive: boolean;
   dateOfBirth?: string | null;
   joiningDate?: string | null;
@@ -258,6 +259,7 @@ export interface CreateEmployeeDto {
   reportsToAdminId?: number | null;
   isReportToAdmin?: boolean;
   isHr?: boolean;
+  isAccounts?: boolean;
   dateOfBirth?: string;
   joiningDate?: string;
   fillDaysOverride?: number | null;
@@ -276,6 +278,7 @@ export interface UpdateEmployeeDto {
   reportsToAdminId?: number | null;
   isReportToAdmin?: boolean;
   isHr?: boolean;
+  isAccounts?: boolean;
   isActive?: boolean;
   dateOfBirth?: string | null;
   joiningDate?: string | null;
@@ -423,7 +426,11 @@ export type LeaveRequestStatus =
 
 export interface LeaveRequest {
   id: number;
-  employeeId: number;
+  // Either employeeId (employee-submitted) or adminId (admin-submitted) is
+  // set; the other is null. Admin-submitted leaves come back through the
+  // same admin list and are recognised by `adminId`.
+  employeeId: number | null;
+  adminId?: number | null;
   employee?: Employee;
   leaveReasonId: number;
   leaveReason?: LeaveType;

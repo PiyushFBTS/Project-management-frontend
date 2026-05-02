@@ -43,12 +43,17 @@ export default function ExpensesPage() {
   const isAdmin = user?._type === 'admin';
   const isEmployee = user?._type === 'employee';
   const isHr = isEmployee && !!(user as any)?.isHr;
+  const isAccounts = isEmployee && !!(user as any)?.isAccounts;
   const canApprove = isAdmin || isHr;
+  // Mark-paid is admin, HR, or accounts.
+  const canMarkPaid = isAdmin || isHr || isAccounts;
+  // Anyone with isHr / isAccounts / admin can see the team tab.
+  const canSeeTeam = isAdmin || isHr || isAccounts;
   const fileRef = useRef<HTMLInputElement>(null);
   const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:8000';
 
-  // Tab: admin/HR sees both tabs, employee sees only "My Expenses"
-  const [activeTab, setActiveTab] = useState<'my' | 'team'>(canApprove ? 'team' : 'my');
+  // Tab: admin/HR/Accounts sees both tabs, regular employees only see "My"
+  const [activeTab, setActiveTab] = useState<'my' | 'team'>(canSeeTeam ? 'team' : 'my');
 
   // Filters
   const [statusFilter, setStatusFilter] = useState('all');
@@ -77,11 +82,11 @@ export default function ExpensesPage() {
 
   // Queries
   const { data: rawData, isLoading } = useQuery({
-    queryKey: ['expenses', isAdmin, isHr, statusFilter, activeTab],
+    queryKey: ['expenses', isAdmin, isHr, isAccounts, statusFilter, activeTab],
     queryFn: async () => {
-      if (canApprove && activeTab === 'team') {
+      if (canSeeTeam && activeTab === 'team') {
         // All company expenses (team view) — admin uses admin endpoint,
-        // HR uses the HR-gated /employee/expenses/all route.
+        // HR / Accounts use the gated /employee/expenses/all route.
         const params = {
           limit: 200,
           status: statusFilter !== 'all' ? statusFilter : undefined,
@@ -155,6 +160,20 @@ export default function ExpensesPage() {
     mutationFn: (id: number) => isAdmin ? adminExpensesApi.delete(id) : expensesApi.delete(id),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); toast.success('Deleted'); },
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
+  });
+
+  // Admin / Accounts: toggle paid/unpaid. Routes through /admin or
+  // /employee depending on actor type.
+  const paidMut = useMutation({
+    mutationFn: ({ id, paid }: { id: number; paid: boolean }) =>
+      isAdmin
+        ? adminExpensesApi.markPaid(id, paid)
+        : hrExpensesApi.markPaid(id, paid),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expenses'] });
+      toast.success('Payment status updated');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to update'),
   });
 
   // Admin / HR: approve/reject (HR routes through the HR-gated endpoint)
@@ -383,6 +402,7 @@ export default function ExpensesPage() {
                     <th className="px-3 py-2 text-right text-xs font-semibold text-muted-foreground">Amount</th>
                     <th className="px-3 py-2 text-center text-xs font-semibold text-muted-foreground">Proof</th>
                     <th className="px-3 py-2 text-center text-xs font-semibold text-muted-foreground">Status</th>
+                    <th className="px-3 py-2 text-center text-xs font-semibold text-muted-foreground">Payment</th>
                     <th className="px-3 py-2 text-center text-xs font-semibold text-muted-foreground">Actions</th>
                   </tr>
                 </thead>
@@ -406,6 +426,39 @@ export default function ExpensesPage() {
                       </td>
                       <td className="px-3 py-2 text-center">
                         <Badge className={`text-[10px] border-0 ${STATUS_COLORS[exp.status] ?? ''}`}>{exp.status}</Badge>
+                      </td>
+                      <td className="px-3 py-2 text-center" onClick={(ev) => ev.stopPropagation()}>
+                        {(() => {
+                          // Paid pill — only meaningful on approved expenses.
+                          // Approved + can-mark-paid → clickable pill.
+                          // Approved + read-only viewer → static pill.
+                          // Anything else → em-dash placeholder.
+                          if (exp.status !== 'approved') {
+                            return <span className="text-xs text-muted-foreground">—</span>;
+                          }
+                          const paid = !!exp.paid;
+                          const cls = paid
+                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 ring-emerald-500/30'
+                            : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-amber-500/30';
+                          if (canMarkPaid) {
+                            return (
+                              <button
+                                type="button"
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 transition hover:opacity-80 ${cls}`}
+                                disabled={paidMut.isPending}
+                                onClick={() => paidMut.mutate({ id: exp.id, paid: !paid })}
+                                title={paid ? 'Click to mark unpaid' : 'Click to mark paid'}
+                              >
+                                {paid ? 'Paid' : 'Unpaid'}
+                              </button>
+                            );
+                          }
+                          return (
+                            <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${cls}`}>
+                              {paid ? 'Paid' : 'Unpaid'}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-3 py-2 text-center" onClick={(ev) => ev.stopPropagation()}>
                         <div className="flex items-center justify-center gap-1">

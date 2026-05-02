@@ -91,7 +91,7 @@ export function AnnouncementBanner() {
 
   return (
     <div
-      className="relative w-full overflow-hidden rounded-2xl border border-rose-500/20 shadow-md"
+      className="relative w-full overflow-hidden rounded-2xl border border-blue-500/20 shadow-md"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
@@ -150,7 +150,7 @@ export function AnnouncementBanner() {
 function Slide({ announcement, onDismiss }: { announcement: Announcement; onDismiss: () => void }) {
   const a = announcement;
   return (
-    <div className="relative shrink-0 w-full bg-linear-to-br from-rose-600 via-pink-600 to-purple-700">
+    <div className="relative shrink-0 w-full bg-linear-to-br from-blue-600 to-blue-800">
       <div
         className="absolute inset-0 opacity-10 pointer-events-none"
         style={{

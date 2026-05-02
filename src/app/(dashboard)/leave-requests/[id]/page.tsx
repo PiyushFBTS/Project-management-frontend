@@ -18,27 +18,28 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 
-const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
-  pending: { label: 'Pending', color: 'text-amber-700', bg: 'bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400' },
-  manager_approved: { label: 'Manager Approved', color: 'text-blue-700', bg: 'bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400' },
-  manager_rejected: { label: 'Manager Rejected', color: 'text-red-700', bg: 'bg-red-100 dark:bg-red-900/30 dark:text-red-400' },
-  hr_approved: { label: 'HR Approved', color: 'text-emerald-700', bg: 'bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400' },
-  hr_rejected: { label: 'HR Rejected', color: 'text-red-700', bg: 'bg-red-100 dark:bg-red-900/30 dark:text-red-400' },
-  cancelled: { label: 'Cancelled', color: 'text-slate-700', bg: 'bg-slate-100 dark:bg-slate-900/30 dark:text-slate-400' },
+// Header badge — collapsed to 3 user-facing buckets (Pending / Approved /
+// Rejected). The full RM-then-HR breakdown is shown in the approval
+// timeline lower on the page.
+type SimpleStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+const SIMPLE_STATUS_CONFIG: Record<SimpleStatus, { label: string; bg: string }> = {
+  pending:   { label: 'Pending',   bg: 'bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400' },
+  approved:  { label: 'Approved',  bg: 'bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400' },
+  rejected:  { label: 'Rejected',  bg: 'bg-red-100 dark:bg-red-900/30 dark:text-red-400' },
+  cancelled: { label: 'Cancelled', bg: 'bg-slate-100 dark:bg-slate-900/30 dark:text-slate-400' },
 };
 
-function StatusBadge({ lr }: { lr: { status: string; hrId?: number | null; hrApproverName?: string | null } }) {
-  const c = statusConfig[lr.status] ?? { label: lr.status, bg: 'bg-slate-100' };
-  // Admins live outside the employees table — when the final-action row has
-  // no hr_id but a stamped hr_approver_name, an admin took the action.
-  const adminFinal =
-    (lr.status === 'hr_approved' || lr.status === 'hr_rejected') &&
-    lr.hrId == null &&
-    !!lr.hrApproverName;
-  let label = c.label;
-  if (adminFinal && lr.status === 'hr_approved') label = 'Admin Approved';
-  if (adminFinal && lr.status === 'hr_rejected') label = 'Admin Rejected';
-  return <Badge className={`${c.bg} border-0 text-xs font-semibold`}>{label}</Badge>;
+function toSimpleStatus(raw: string): SimpleStatus {
+  if (raw === 'hr_approved') return 'approved';
+  if (raw === 'manager_rejected' || raw === 'hr_rejected') return 'rejected';
+  if (raw === 'cancelled') return 'cancelled';
+  return 'pending';
+}
+
+function StatusBadge({ lr }: { lr: { status: string } }) {
+  const c = SIMPLE_STATUS_CONFIG[toSimpleStatus(lr.status)];
+  return <Badge className={`${c.bg} border-0 text-xs font-semibold`}>{c.label}</Badge>;
 }
 
 function fmtDate(d: string | null | undefined) {
@@ -75,22 +76,41 @@ export default function LeaveRequestDetailPage() {
   // Determine if current user can act. Reject can be triggered in more
   // states than approve — specifically, an admin may reject an already-
   // HR-approved leave (revoke a mistaken approval).
+  //
+  // Self-approval guard: admins can't approve/reject their own admin-
+  // submitted leaves; HR can't approve/reject leaves they themselves
+  // submitted. The backend enforces these too (see leave-requests.service
+  // `approve` / `adminApprove`), but the UI mirrors the rule so the
+  // buttons don't appear in the first place.
   const canAct = (() => {
     if (!detail || !user) return { canApprove: false, canReject: false, canCancel: false };
-    const isOwn = isEmployee && detail.employeeId === (user as any).id;
+    const userId = (user as { id: number }).id;
+    const isOwnEmployeeLeave = isEmployee && detail.employeeId === userId;
+    const isOwnAdminLeave = isAdmin && detail.adminId != null && detail.adminId === userId;
+    const isOwn = isOwnEmployeeLeave || isOwnAdminLeave;
     const canCancel = isOwn && !['cancelled', 'hr_approved', 'hr_rejected', 'manager_rejected'].includes(detail.status);
 
     let canApprove = false;
     let canReject = false;
     if (isAdmin) {
-      canApprove = ['pending', 'manager_approved'].includes(detail.status);
-      // Admin can also reject an already-approved leave to revoke it.
-      canReject = ['pending', 'manager_approved', 'hr_approved'].includes(detail.status);
+      // Block admin from acting on their own admin-submitted leave.
+      if (!isOwnAdminLeave) {
+        canApprove = ['pending', 'manager_approved'].includes(detail.status);
+        // Admin can also reject an already-approved leave to revoke it.
+        canReject = ['pending', 'manager_approved', 'hr_approved'].includes(detail.status);
+      }
     } else if (isEmployee) {
-      const isManager = detail.employee?.reportsToId === (user as any).id;
-      const isHr = !!(user as any).isHr;
-      if (isManager && detail.status === 'pending') { canApprove = true; canReject = true; }
-      if (isHr && ['pending', 'manager_approved'].includes(detail.status)) { canApprove = true; canReject = true; }
+      const isManager = detail.employee?.reportsToId === userId;
+      const isHr = !!(user as { isHr?: boolean }).isHr;
+      // RM acts on a peer's pending request — and never on their own.
+      if (isManager && detail.status === 'pending' && !isOwnEmployeeLeave) {
+        canApprove = true; canReject = true;
+      }
+      // HR acts as the second gate. Block HR from rubber-stamping their
+      // own PTO; another HR / RM / admin must step in.
+      if (isHr && ['pending', 'manager_approved'].includes(detail.status) && !isOwnEmployeeLeave) {
+        canApprove = true; canReject = true;
+      }
     }
     return { canApprove, canReject, canCancel };
   })();

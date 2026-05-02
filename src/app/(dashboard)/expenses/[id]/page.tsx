@@ -33,6 +33,8 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
   const isAdmin = user?._type === 'admin';
   const isEmployee = user?._type === 'employee';
   const isHr = isEmployee && !!(user as any)?.isHr;
+  const isAccounts = isEmployee && !!(user as any)?.isAccounts;
+  const canMarkPaid = isAdmin || isHr || isAccounts;
   const expenseId = Number(params.id);
   const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:8000';
 
@@ -69,6 +71,20 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
       setApproveOpen(false);
       setApproveAmount('');
       setApproveRemarks('');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
+  });
+
+  // Admin / Accounts: toggle paid status (only on approved expenses).
+  const paidMut = useMutation({
+    mutationFn: (paid: boolean) =>
+      isAdmin
+        ? adminExpensesApi.markPaid(expenseId, paid)
+        : hrExpensesApi.markPaid(expenseId, paid),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['expense-detail', expenseId] });
+      qc.invalidateQueries({ queryKey: ['expenses'] });
+      toast.success('Payment status updated');
     },
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
   });
@@ -211,6 +227,39 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
                 {e.approvedAt && <p>{e.status === 'approved' ? 'Approved' : 'Reviewed'}: {format(new Date(e.approvedAt), 'dd MMM yyyy, hh:mm a')}</p>}
                 <p>Created: {format(new Date(e.createdAt), 'dd MMM yyyy, hh:mm a')}</p>
               </div>
+
+              {/* Payment status — only on approved expenses. Admin / Accounts
+                  permissioned employees can flip the bit; everyone else
+                  sees a read-only pill. */}
+              {e.status === 'approved' && (
+                <div className={`rounded-xl border p-4 space-y-2 ${e.paid ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800' : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800'}`}>
+                  <div className="flex items-center justify-between">
+                    <p className={`text-[10px] font-bold uppercase tracking-widest ${e.paid ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                      Payment
+                    </p>
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${e.paid ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 ring-emerald-500/30' : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-amber-500/30'}`}>
+                      {e.paid ? 'Paid' : 'Unpaid'}
+                    </span>
+                  </div>
+                  {e.paid && e.paidAt && (
+                    <p className="text-xs text-muted-foreground">
+                      Marked paid {e.paidByName ? `by ${e.paidByName} ` : ''}on {format(new Date(e.paidAt), 'dd MMM yyyy, hh:mm a')}
+                    </p>
+                  )}
+                  {canMarkPaid && (
+                    <Button
+                      size="sm"
+                      variant={e.paid ? 'outline' : 'default'}
+                      className={`w-full ${e.paid ? '' : 'bg-emerald-600 hover:bg-emerald-700'}`}
+                      disabled={paidMut.isPending}
+                      onClick={() => paidMut.mutate(!e.paid)}
+                    >
+                      {paidMut.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1.5" />}
+                      {e.paid ? 'Mark Unpaid' : 'Mark as Paid'}
+                    </Button>
+                  )}
+                </div>
+              )}
               {(() => {
                 // Self-approval guard: an admin can't action their own
                 // admin-bridged expense; an HR can't action a leave they

@@ -26,38 +26,46 @@ import {
 } from '@/components/ui/table';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 
-const statusConfig: Record<LeaveRequestStatus, { label: string; color: string }> = {
-  pending:          { label: 'Pending',            color: 'bg-amber-500/15 text-amber-600 ring-amber-500/30 dark:text-amber-400' },
-  manager_approved: { label: 'RM Approved',        color: 'bg-blue-500/15 text-blue-600 ring-blue-500/30 dark:text-blue-400' },
-  manager_rejected: { label: 'RM Rejected',        color: 'bg-red-500/15 text-red-600 ring-red-500/30 dark:text-red-400' },
-  hr_approved:      { label: 'HR Approved',        color: 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30 dark:text-emerald-400' },
-  hr_rejected:      { label: 'HR Rejected',        color: 'bg-red-500/15 text-red-600 ring-red-500/30 dark:text-red-400' },
-  cancelled:        { label: 'Cancelled',          color: 'bg-gray-500/15 text-gray-500 ring-gray-500/30 dark:text-gray-400' },
+// Simplified, user-facing status — collapses RM/HR steps into 3 buckets
+// (Pending / Approved / Rejected). The full RM-then-HR breakdown is shown
+// in the leave-detail timeline; the list/filter only shows these.
+type SimpleStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+const SIMPLE_STATUS_CONFIG: Record<SimpleStatus, { label: string; color: string }> = {
+  pending:   { label: 'Pending',   color: 'bg-amber-500/15 text-amber-600 ring-amber-500/30 dark:text-amber-400' },
+  approved:  { label: 'Approved',  color: 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30 dark:text-emerald-400' },
+  rejected:  { label: 'Rejected',  color: 'bg-red-500/15 text-red-600 ring-red-500/30 dark:text-red-400' },
+  cancelled: { label: 'Cancelled', color: 'bg-gray-500/15 text-gray-500 ring-gray-500/30 dark:text-gray-400' },
 };
 
 /**
- * Render the status pill. Pass the whole leave request (not just `status`)
- * so we can distinguish an admin-final-approval from an HR approval — admins
- * have no row in the employees table, so when the backend records a final
- * action with `hr_id` null but `hr_approver_name` set, it was an admin.
+ * Map a raw backend leave status to its simplified bucket:
+ *  - pending / manager_approved → pending  (still needs HR action)
+ *  - hr_approved                → approved (RM + HR both approved)
+ *  - manager_rejected / hr_rejected → rejected
+ *  - cancelled                  → cancelled
  */
-function StatusBadge({ lr }: { lr: { status: LeaveRequestStatus; hrId?: number | null; hrApproverName?: string | null } }) {
-  const cfg = statusConfig[lr.status] ?? statusConfig.pending;
-  const adminFinal =
-    (lr.status === 'hr_approved' || lr.status === 'hr_rejected') &&
-    lr.hrId == null &&
-    !!lr.hrApproverName;
-  let label = cfg.label;
-  if (adminFinal && lr.status === 'hr_approved') label = 'Admin Approved';
-  if (adminFinal && lr.status === 'hr_rejected') label = 'Admin Rejected';
+function toSimpleStatus(raw: LeaveRequestStatus): SimpleStatus {
+  if (raw === 'hr_approved') return 'approved';
+  if (raw === 'manager_rejected' || raw === 'hr_rejected') return 'rejected';
+  if (raw === 'cancelled') return 'cancelled';
+  return 'pending';
+}
+
+function StatusBadge({ lr }: { lr: { status: LeaveRequestStatus } }) {
+  const simple = toSimpleStatus(lr.status);
+  const cfg = SIMPLE_STATUS_CONFIG[simple];
   return (
     <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cfg.color}`}>
-      {label}
+      {cfg.label}
     </span>
   );
 }
 
 type Tab = 'my-leaves' | 'pending-approvals' | 'team-leaves' | 'calendar';
+// Admin uses a simpler 3-tab layout (My / Team / Calendar). Pending-Approvals
+// is an employee-only concept — admins act on requests from the team list.
+type AdminTab = 'my-leaves' | 'team-leaves' | 'calendar';
 
 export default function LeaveRequestsPage() {
   return (
@@ -81,8 +89,11 @@ function LeaveRequestsContent() {
   const [dateTo, setDateTo] = useState('');
   const [selected, setSelected] = useState<LeaveRequest | null>(null);
   const [tab, setTab] = useState<Tab>('my-leaves');
+  // Admin landing tab is "team-leaves" — the existing default for admins
+  // before tabs existed. Switching to "my-leaves" filters to leaves the
+  // current admin submitted themselves.
+  const [adminTab, setAdminTab] = useState<AdminTab>('team-leaves');
   const [calMonth, setCalMonth] = useState(() => new Date());
-  const [showCalendar, setShowCalendar] = useState(false);
   const [teamEmployeeId, setTeamEmployeeId] = useState<string>('');
   const [actionRemarks, setActionRemarks] = useState('');
   const [acting, setActing] = useState(false);
@@ -99,35 +110,52 @@ function LeaveRequestsContent() {
 
   // Auto-open apply dialog from dashboard link (?apply=true)
   useEffect(() => {
-    if (searchParams.get('apply') === 'true' && isEmployee) {
+    if (searchParams.get('apply') === 'true' && (isEmployee || isAdmin)) {
       setApplyOpen(true);
       window.history.replaceState(null, '', '/leave-requests');
     }
-  }, [searchParams, isEmployee]);
+  }, [searchParams, isEmployee, isAdmin]);
 
-  // Fetch leave types for the form
+  // Fetch leave types for the form. Admin and employee use different
+  // endpoints — same shape, different guards. Wait for `user` to resolve
+  // before firing: otherwise `isAdmin` may be briefly false during auth
+  // bootstrap and the query would silently 401 against the employee
+  // endpoint (admin token can't read /employee/leave-types).
   const { data: leaveReasons } = useQuery({
-    queryKey: ['leave-types-dropdown'],
-    queryFn: () => leaveRequestsApi.getLeaveReasons().then((r) => r.data.data),
-    enabled: isEmployee,
+    queryKey: ['leave-types-dropdown', isAdmin ? 'admin' : 'emp'],
+    queryFn: () =>
+      (isAdmin
+        ? leaveRequestsApi.getAdminLeaveTypes()
+        : leaveRequestsApi.getLeaveReasons()
+      ).then((r) => r.data.data),
+    enabled: applyOpen && !!user,
   });
 
   // Fetch colleagues for watcher selection + team employee filter
   const { data: colleagues } = useQuery({
-    queryKey: ['colleagues-dropdown'],
-    queryFn: () => leaveRequestsApi.getColleagues().then((r) => r.data.data),
-    enabled: isEmployee && (applyOpen || tab === 'team-leaves'),
+    queryKey: ['colleagues-dropdown', isAdmin ? 'admin' : 'emp'],
+    queryFn: () =>
+      (isAdmin
+        ? leaveRequestsApi.getAdminColleagues()
+        : leaveRequestsApi.getColleagues()
+      ).then((r) => r.data.data),
+    enabled:
+      !!user && (applyOpen || (isEmployee && tab === 'team-leaves')),
   });
 
   const submitLeaveMutation = useMutation({
-    mutationFn: () =>
-      leaveRequestsApi.submitLeave({
+    mutationFn: () => {
+      const payload = {
         leaveReasonId: Number(applyForm.leaveReasonId),
         dateFrom: applyForm.dateFrom,
         dateTo: applyForm.dateTo,
         remarks: applyForm.remarks || undefined,
         watcherIds: applyForm.watcherIds.length > 0 ? applyForm.watcherIds : undefined,
-      }),
+      };
+      return isAdmin
+        ? leaveRequestsApi.submitAdminLeave(payload)
+        : leaveRequestsApi.submitLeave(payload);
+    },
     onSuccess: () => {
       toast.success('Leave request submitted successfully');
       setApplyOpen(false);
@@ -160,14 +188,15 @@ function LeaveRequestsContent() {
     }));
   };
 
-  // Admin: all leave requests
+  // Admin: all leave requests. Status is filtered client-side now (the
+  // simplified Pending bucket spans 2 raw statuses, so a single backend
+  // status filter no longer maps cleanly).
   const { data: adminData, isLoading: adminLoading } = useQuery({
-    queryKey: ['leave-requests', search, statusFilter, dateFrom, dateTo],
+    queryKey: ['leave-requests', search, dateFrom, dateTo],
     queryFn: () =>
       leaveRequestsApi
         .getAll({
           search: search || undefined,
-          status: statusFilter !== 'all' ? (statusFilter as LeaveRequestStatus) : undefined,
           dateFrom: dateFrom || undefined,
           dateTo: dateTo || undefined,
           limit: 100,
@@ -180,11 +209,10 @@ function LeaveRequestsContent() {
 
   // Employee: my leaves
   const { data: myLeaves, isLoading: myLeavesLoading } = useQuery({
-    queryKey: ['my-leave-requests', statusFilter, dateFrom, dateTo],
+    queryKey: ['my-leave-requests', dateFrom, dateTo],
     queryFn: () =>
       leaveRequestsApi
         .getMyLeaves({
-          status: statusFilter !== 'all' ? (statusFilter as LeaveRequestStatus) : undefined,
           dateFrom: dateFrom || undefined,
           dateTo: dateTo || undefined,
           limit: 100,
@@ -197,11 +225,10 @@ function LeaveRequestsContent() {
 
   // Employee: pending approvals (RM/HR)
   const { data: pendingData, isLoading: pendingLoading } = useQuery({
-    queryKey: ['pending-approvals', statusFilter, dateFrom, dateTo],
+    queryKey: ['pending-approvals', dateFrom, dateTo],
     queryFn: () =>
       leaveRequestsApi
         .getPendingApprovals({
-          status: statusFilter !== 'all' ? (statusFilter as LeaveRequestStatus) : undefined,
           dateFrom: dateFrom || undefined,
           dateTo: dateTo || undefined,
           limit: 100,
@@ -214,11 +241,10 @@ function LeaveRequestsContent() {
 
   // Employee: team leaves
   const { data: teamData, isLoading: teamLoading } = useQuery({
-    queryKey: ['team-leave-requests', statusFilter, teamEmployeeId, dateFrom, dateTo],
+    queryKey: ['team-leave-requests', teamEmployeeId, dateFrom, dateTo],
     queryFn: () =>
       leaveRequestsApi
         .getTeamLeaves({
-          status: statusFilter !== 'all' ? (statusFilter as LeaveRequestStatus) : undefined,
           employeeId: teamEmployeeId ? Number(teamEmployeeId) : undefined,
           dateFrom: dateFrom || undefined,
           dateTo: dateTo || undefined,
@@ -241,11 +267,26 @@ function LeaveRequestsContent() {
     enabled: !!selected,
   });
 
-  const data = isEmployee
+  // Admin: narrow the company-wide list to either "team" (everyone) or
+  // "my" (only leaves submitted by the current admin — adminId match).
+  const currentAdminId = isAdmin ? (user as { id: number })?.id : null;
+  const adminFiltered = !isAdmin
+    ? adminData
+    : adminTab === 'my-leaves'
+        ? adminData?.filter((lr) => lr.adminId != null && lr.adminId === currentAdminId)
+        : adminData;
+
+  const rawData = isEmployee
     ? tab === 'my-leaves' ? myLeaves
     : tab === 'pending-approvals' ? pendingData
     : teamData
-    : adminData;
+    : adminFiltered;
+
+  // Apply the simplified status filter client-side. `statusFilter` is one
+  // of: 'all' | 'pending' | 'approved' | 'rejected' | 'cancelled'.
+  const data = statusFilter === 'all'
+    ? rawData
+    : rawData?.filter((lr) => toSimpleStatus(lr.status) === statusFilter);
 
   const isLoading = isEmployee
     ? tab === 'my-leaves' ? myLeavesLoading
@@ -305,28 +346,35 @@ function LeaveRequestsContent() {
     }
   };
 
-  // Determine if current employee can act on the selected detail
+  // Determine if current employee can act on the selected detail.
+  // HR / RM cannot approve a leave they themselves submitted — another
+  // HR / RM / admin has to act on it instead.
   const canActOnDetail = (() => {
     if (!isEmployee || !detail) return { canApprove: false, canCancel: false };
     const empId = (user as { id: number })?.id;
     const isHr = (user as { isHr?: boolean })?.isHr ?? false;
+    const isOwn = detail.employeeId === empId;
 
     const CANCELLABLE_STATUSES: LeaveRequestStatus[] = ['pending', 'manager_approved'];
-    const canCancel = detail.employeeId === empId && CANCELLABLE_STATUSES.includes(detail.status);
+    const canCancel = isOwn && CANCELLABLE_STATUSES.includes(detail.status);
 
-    // RM can approve/reject pending requests
-    const isRmAction = detail.managerId === empId && detail.status === 'pending';
-    // HR can approve/reject at any stage
+    // RM can approve/reject pending requests — but never their own.
+    const isRmAction = !isOwn && detail.managerId === empId && detail.status === 'pending';
+    // HR can approve/reject at any stage — but never their own.
     const HR_ACTIONABLE: LeaveRequestStatus[] = ['pending', 'manager_approved'];
-    const isHrAction = isHr && HR_ACTIONABLE.includes(detail.status);
+    const isHrAction = !isOwn && isHr && HR_ACTIONABLE.includes(detail.status);
 
     const canApprove = isRmAction || isHrAction;
 
     return { canApprove, canCancel };
   })();
 
-  // Show employee column when not on my-leaves tab
-  const showEmployeeCol = !isEmployee || tab !== 'my-leaves';
+  // Hide the employee column on the "My Leaves" tab — every row is the
+  // viewer themselves, so the column is dead weight. Applies to both
+  // employee and admin "My Leaves".
+  const onMyLeavesTab =
+    (isEmployee && tab === 'my-leaves') || (isAdmin && adminTab === 'my-leaves');
+  const showEmployeeCol = !onMyLeavesTab;
 
   return (
     <div className="space-y-4">
@@ -344,7 +392,7 @@ function LeaveRequestsContent() {
               <p className="text-sm text-white/60">Leave requests & approvals</p>
             </div>
           </div>
-          {isEmployee && (
+          {(isEmployee || isAdmin) && (
             <Button
               onClick={() => setApplyOpen(true)}
               className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg"
@@ -376,17 +424,22 @@ function LeaveRequestsContent() {
         </div>
       )}
 
-      {/* Calendar toggle for admin */}
+      {/* Admin tabs — My Leaves / Team Leaves / Calendar */}
       {isAdmin && (
         <div className="flex rounded-lg border border-border bg-muted/50 p-1 w-fit">
-          <button onClick={() => setShowCalendar(false)}
-            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${!showCalendar ? 'bg-white dark:bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
-            Table
-          </button>
-          <button onClick={() => setShowCalendar(true)}
-            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${showCalendar ? 'bg-white dark:bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
-            Calendar
-          </button>
+          {(['my-leaves', 'team-leaves', 'calendar'] as AdminTab[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => setAdminTab(t)}
+              className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
+                adminTab === t
+                  ? 'bg-white dark:bg-card shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {t === 'my-leaves' ? 'My Leaves' : t === 'team-leaves' ? 'Team Leaves' : 'Calendar'}
+            </button>
+          ))}
         </div>
       )}
 
@@ -419,7 +472,7 @@ function LeaveRequestsContent() {
             <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
-              {Object.entries(statusConfig).map(([k, v]) => (
+              {(Object.entries(SIMPLE_STATUS_CONFIG) as [SimpleStatus, { label: string }][]).map(([k, v]) => (
                 <SelectItem key={k} value={k}>{v.label}</SelectItem>
               ))}
             </SelectContent>
@@ -443,7 +496,7 @@ function LeaveRequestsContent() {
       </div>
 
       {/* Calendar View */}
-      {(tab === 'calendar' || (isAdmin && showCalendar)) && (() => {
+      {((isEmployee && tab === 'calendar') || (isAdmin && adminTab === 'calendar')) && (() => {
         const allLeaves: LeaveRequest[] = isAdmin ? (data ?? []) : [...(myLeaves ?? []), ...(teamData ?? [])];
         const monthStart = startOfMonth(calMonth);
         const monthEnd = endOfMonth(calMonth);
@@ -598,7 +651,7 @@ function LeaveRequestsContent() {
       })()}
 
       {/* Table */}
-      {tab !== 'calendar' && !(isAdmin && showCalendar) && <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
+      {((isEmployee && tab !== 'calendar') || (isAdmin && adminTab !== 'calendar')) && <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
         <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-orange-500 via-rose-500 to-violet-500" />
         <Table>
           <TableHeader>
@@ -641,8 +694,12 @@ function LeaveRequestsContent() {
                   <TableRow key={lr.id} className="cursor-pointer hover:bg-accent/50" onClick={() => router.push(`/leave-requests/${lr.id}`)}>
                     {showEmployeeCol && (
                       <TableCell className="font-medium text-sm">
-                        {lr.employee?.empName ?? `#${lr.employeeId}`}
-                        <span className="block text-xs text-muted-foreground">{lr.employee?.empCode}</span>
+                        {lr.adminId != null
+                          ? (lr as { admin?: { name?: string } }).admin?.name ?? `Admin #${lr.adminId}`
+                          : lr.employee?.empName ?? `#${lr.employeeId ?? '?'}`}
+                        <span className="block text-xs text-muted-foreground">
+                          {lr.adminId != null ? 'Admin' : lr.employee?.empCode}
+                        </span>
                       </TableCell>
                     )}
                     <TableCell className="text-sm">{lr.leaveReason?.reasonName ?? '-'}</TableCell>
@@ -677,8 +734,8 @@ function LeaveRequestsContent() {
         </Table>
       </div>}
 
-      {/* Apply for Leave Dialog */}
-      {isEmployee && (
+      {/* Apply for Leave Dialog — open for both employee and admin */}
+      {(isEmployee || isAdmin) && (
         <Dialog open={applyOpen} onOpenChange={(v) => { if (!v) { setApplyOpen(false); setApplyForm({ leaveReasonId: '', dateFrom: '', dateTo: '', remarks: '', watcherIds: [] }); } }}>
           <DialogContent className="max-w-md overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-orange-500 via-rose-500 to-violet-500" />

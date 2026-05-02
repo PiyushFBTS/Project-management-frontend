@@ -10,6 +10,17 @@ export const reportsApi = {
   getProjectWise: (month: string) =>
     api.get<ApiResponse<ProjectWiseReport[]>>('/admin/reports/project-wise', { params: { month } }),
 
+  // Per-employee breakdown of a single project (drill-down from project-wise list).
+  getProjectEmployees: (projectId: number, month: string) =>
+    api.get(`/admin/reports/project/${projectId}/employees`, { params: { month } }),
+
+  // Per-project / per-ticket hour breakdown for one employee
+  // (drill-down from the employee-wise list).
+  getEmployeeBreakdown: (employeeId: number, fromDate: string, toDate: string) =>
+    api.get(`/admin/reports/employee/${employeeId}/breakdown`, {
+      params: { from_date: fromDate, to_date: toDate },
+    }),
+
   getDailyFill: (date: string) =>
     api.get<ApiResponse<DailyFillReport>>('/admin/reports/daily-fill', { params: { date } }),
 
@@ -39,6 +50,14 @@ export const reportsApi = {
 
   employeeGetProjectWise: (month: string) =>
     api.get<ApiResponse<ProjectWiseReport[]>>('/employee/reports/project-wise', { params: { month } }),
+
+  employeeGetProjectEmployees: (projectId: number, month: string) =>
+    api.get(`/employee/reports/project/${projectId}/employees`, { params: { month } }),
+
+  employeeGetEmployeeBreakdown: (employeeId: number, fromDate: string, toDate: string) =>
+    api.get(`/employee/reports/employee/${employeeId}/breakdown`, {
+      params: { from_date: fromDate, to_date: toDate },
+    }),
 
   employeeGetDailyFill: (date: string) =>
     api.get<ApiResponse<DailyFillReport>>('/employee/reports/daily-fill', { params: { date } }),

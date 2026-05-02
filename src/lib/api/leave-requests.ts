@@ -75,4 +75,23 @@ export const leaveRequestsApi = {
     watcherIds?: number[];
   }) =>
     api.post<ApiResponse<LeaveRequest>>('/employee/leave-requests', data),
+
+  // ── Admin "apply for leave" ────────────────────────────────────────────
+  // Admins submit through the admin-guarded /leave-requests root, not the
+  // /employee path. Backend stamps adminId (employeeId stays null) so the
+  // request still flows through the same approval pipeline.
+  submitAdminLeave: (data: {
+    leaveReasonId: number;
+    dateFrom: string;
+    dateTo: string;
+    remarks?: string;
+    watcherIds?: number[];
+  }) =>
+    api.post<ApiResponse<LeaveRequest>>('/leave-requests', data),
+
+  getAdminLeaveTypes: () =>
+    api.get<ApiResponse<LeaveType[]>>('/leave-requests/leave-types'),
+
+  getAdminColleagues: () =>
+    api.get<ApiResponse<{ id: number; empName: string; empCode: string }[]>>('/leave-requests/colleagues'),
 };
