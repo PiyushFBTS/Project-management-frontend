@@ -25,12 +25,10 @@ export default function ProjectWiseReportPage() {
   const isEmployee = user?._type === 'employee';
   const isAdmin = !isEmployee;
   const isHr = isEmployee && !!(user as any)?.isHr;
-
-  // Regular employees cannot access this page
-  if (!authLoading && isEmployee && !isHr) {
-    router.replace('/reports/employee-wise');
-    return null;
-  }
+  // Plain (non-HR) employees now see their own contributions per project
+  // — the backend automatically scopes the response to `employee.id`. We
+  // no longer redirect them away from this page.
+  void router; // suppress unused-router warning when no redirect runs
 
   const [month, setMonth] = useState(thisMonth);
   const [autoFetch, setAutoFetch] = useState(false);

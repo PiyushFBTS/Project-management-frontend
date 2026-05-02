@@ -62,9 +62,10 @@ function StatusBadge({ lr }: { lr: { status: LeaveRequestStatus } }) {
   );
 }
 
-type Tab = 'my-leaves' | 'pending-approvals' | 'team-leaves' | 'calendar';
-// Admin uses a simpler 3-tab layout (My / Team / Calendar). Pending-Approvals
-// is an employee-only concept — admins act on requests from the team list.
+// Plain (non-HR) employees see a 2-tab layout: Leave (their own) +
+// Calendar (their own data only). HR + admin get a 3-tab layout: My
+// Leaves (own) + Team Leaves (everyone) + Calendar (everyone).
+type Tab = 'my-leaves' | 'team-leaves' | 'calendar';
 type AdminTab = 'my-leaves' | 'team-leaves' | 'calendar';
 
 export default function LeaveRequestsPage() {
@@ -79,6 +80,8 @@ function LeaveRequestsContent() {
   const { user } = useAuth();
   const isEmployee = user?._type === 'employee';
   const isAdmin = user?._type === 'admin';
+  // HR employees get the same 3-tab layout as admins (My / Team / Cal).
+  const isHr = isEmployee && !!(user as { isHr?: boolean })?.isHr;
   const queryClient = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -89,9 +92,9 @@ function LeaveRequestsContent() {
   const [dateTo, setDateTo] = useState('');
   const [selected, setSelected] = useState<LeaveRequest | null>(null);
   const [tab, setTab] = useState<Tab>('my-leaves');
-  // Admin landing tab is "team-leaves" — the existing default for admins
-  // before tabs existed. Switching to "my-leaves" filters to leaves the
-  // current admin submitted themselves.
+  // Admin landing tab is "team-leaves"; HR also defaults there. Plain
+  // employees never see this and stay on "my-leaves" (renamed "Leave"
+  // in the chip strip).
   const [adminTab, setAdminTab] = useState<AdminTab>('team-leaves');
   const [calMonth, setCalMonth] = useState(() => new Date());
   const [teamEmployeeId, setTeamEmployeeId] = useState<string>('');
@@ -207,7 +210,8 @@ function LeaveRequestsContent() {
     enabled: !isEmployee,
   });
 
-  // Employee: my leaves
+  // Employee: my leaves. Loaded for plain employees on their only list
+  // tab and for HR on the My-Leaves tab.
   const { data: myLeaves, isLoading: myLeavesLoading } = useQuery({
     queryKey: ['my-leave-requests', dateFrom, dateTo],
     queryFn: () =>
@@ -223,23 +227,8 @@ function LeaveRequestsContent() {
     enabled: isEmployee && tab === 'my-leaves',
   });
 
-  // Employee: pending approvals (RM/HR)
-  const { data: pendingData, isLoading: pendingLoading } = useQuery({
-    queryKey: ['pending-approvals', dateFrom, dateTo],
-    queryFn: () =>
-      leaveRequestsApi
-        .getPendingApprovals({
-          dateFrom: dateFrom || undefined,
-          dateTo: dateTo || undefined,
-          limit: 100,
-          sort: 'createdAt',
-          order: 'desc',
-        })
-        .then((r) => r.data.data),
-    enabled: isEmployee && tab === 'pending-approvals',
-  });
-
-  // Employee: team leaves
+  // HR (employee + isHr): team leaves — every employee's leaves.
+  // Plain employees no longer see this tab so the query is HR-only.
   const { data: teamData, isLoading: teamLoading } = useQuery({
     queryKey: ['team-leave-requests', teamEmployeeId, dateFrom, dateTo],
     queryFn: () =>
@@ -253,7 +242,7 @@ function LeaveRequestsContent() {
           order: 'desc',
         })
         .then((r) => r.data.data),
-    enabled: isEmployee && tab === 'team-leaves',
+    enabled: isHr && tab === 'team-leaves',
   });
 
   // Detail
@@ -277,9 +266,7 @@ function LeaveRequestsContent() {
         : adminData;
 
   const rawData = isEmployee
-    ? tab === 'my-leaves' ? myLeaves
-    : tab === 'pending-approvals' ? pendingData
-    : teamData
+    ? (tab === 'my-leaves' ? myLeaves : teamData)
     : adminFiltered;
 
   // Apply the simplified status filter client-side. `statusFilter` is one
@@ -289,15 +276,12 @@ function LeaveRequestsContent() {
     : rawData?.filter((lr) => toSimpleStatus(lr.status) === statusFilter);
 
   const isLoading = isEmployee
-    ? tab === 'my-leaves' ? myLeavesLoading
-    : tab === 'pending-approvals' ? pendingLoading
-    : teamLoading
+    ? (tab === 'my-leaves' ? myLeavesLoading : teamLoading)
     : adminLoading;
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['leave-requests'] });
     queryClient.invalidateQueries({ queryKey: ['my-leave-requests'] });
-    queryClient.invalidateQueries({ queryKey: ['pending-approvals'] });
     queryClient.invalidateQueries({ queryKey: ['team-leave-requests'] });
     queryClient.invalidateQueries({ queryKey: ['leave-request-detail'] });
   };
@@ -405,10 +389,14 @@ function LeaveRequestsContent() {
         </div>
       </div>
 
-      {/* Employee tabs */}
+      {/* Employee tabs.
+          Plain employees → 2 tabs: Leave + Calendar.
+          HR employees    → 3 tabs: My Leaves + Team Leaves + Calendar. */}
       {isEmployee && (
         <div className="flex rounded-lg border border-border bg-muted/50 p-1 w-fit">
-          {(['my-leaves', 'pending-approvals', 'team-leaves', 'calendar'] as Tab[]).map((t) => (
+          {((isHr
+            ? ['my-leaves', 'team-leaves', 'calendar']
+            : ['my-leaves', 'calendar']) as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => { setTab(t); if (t !== 'team-leaves') setTeamEmployeeId(''); }}
@@ -418,7 +406,11 @@ function LeaveRequestsContent() {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {t === 'my-leaves' ? 'My Leaves' : t === 'pending-approvals' ? 'Pending Approvals' : t === 'team-leaves' ? 'Team Leave' : 'Calendar'}
+              {t === 'my-leaves'
+                ? (isHr ? 'My Leaves' : 'Leave')
+                : t === 'team-leaves'
+                  ? 'Team Leaves'
+                  : 'Calendar'}
             </button>
           ))}
         </div>
@@ -506,14 +498,23 @@ function LeaveRequestsContent() {
         // Only approved/manager_approved leaves
         const approvedLeaves = allLeaves.filter((l) => ['hr_approved', 'manager_approved', 'pending'].includes(l.status));
 
-        // Group by employee
+        // Group by applicant. A leave row carries either employeeId (the
+        // employee submitted it) or adminId (an admin submitted it via
+        // the admin "Apply for Leave" flow); the corresponding side
+        // relation will be populated. Resolving both means admin-
+        // submitted leaves don't render as "Employee #null" rows.
         const empMap: Record<string, { name: string; code: string; leaves: LeaveRequest[] }> = {};
         approvedLeaves.forEach((l) => {
-          const empId = String(l.employeeId);
-          const name = (l as any).employee?.empName ?? `Employee #${empId}`;
-          const code = (l as any).employee?.empCode ?? '';
-          if (!empMap[empId]) empMap[empId] = { name, code, leaves: [] };
-          empMap[empId].leaves.push(l);
+          const isAdminLeave = l.adminId != null;
+          const groupKey = isAdminLeave ? `adm_${l.adminId}` : `emp_${l.employeeId}`;
+          const adminRel = (l as { admin?: { name?: string } }).admin;
+          const empRel = (l as { employee?: { empName?: string; empCode?: string } }).employee;
+          const name = isAdminLeave
+            ? (adminRel?.name ?? `Admin #${l.adminId}`)
+            : (empRel?.empName ?? `Employee #${l.employeeId}`);
+          const code = isAdminLeave ? 'Admin' : (empRel?.empCode ?? '');
+          if (!empMap[groupKey]) empMap[groupKey] = { name, code, leaves: [] };
+          empMap[groupKey].leaves.push(l);
         });
         const employees = Object.entries(empMap);
 

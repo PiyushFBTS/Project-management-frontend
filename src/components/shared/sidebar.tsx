@@ -101,10 +101,13 @@ const navItems: NavItem[] = [
     iconColor: 'text-amber-400', iconBg: 'bg-amber-500/20',
     activeBg: 'bg-amber-500/20', hoverBg: 'hover:bg-amber-500/10',
     borderColor: 'border-l-amber-400', dotColor: 'bg-amber-400',
+    // Employee-Wise / Project-Wise / Daily Fill are visible to everyone
+    // — backend auto-scopes plain employees to self-only data. The
+    // remaining four stay HR/admin only.
     children: [
       { label: 'Employee-Wise', href: '/reports/employee-wise', dotColor: 'bg-indigo-400' },
-      { label: 'Project-Wise', href: '/reports/project-wise', dotColor: 'bg-violet-400', hrOrAdminOnly: true },
-      { label: 'Daily Fill', href: '/reports/daily-fill', dotColor: 'bg-emerald-400', hrOrAdminOnly: true },
+      { label: 'Project-Wise', href: '/reports/project-wise', dotColor: 'bg-violet-400' },
+      { label: 'Daily Fill', href: '/reports/daily-fill', dotColor: 'bg-emerald-400' },
       { label: 'Last Filled', href: '/reports/last-filled', dotColor: 'bg-rose-400', hrOrAdminOnly: true },
       { label: 'Monthly Grid', href: '/reports/monthly-grid', dotColor: 'bg-cyan-400', hrOrAdminOnly: true },
       { label: 'Employee Costing', href: '/reports/employee-cost', dotColor: 'bg-orange-400', hrOrAdminOnly: true },

@@ -52,7 +52,9 @@ export default function EmployeeBreakdownPage({
         ? reportsApi.employeeGetEmployeeBreakdown(employeeId, fromDate, toDate)
         : reportsApi.getEmployeeBreakdown(employeeId, fromDate, toDate)
       ).then((r: any) => r.data?.data ?? r.data),
-    enabled: !!user && Number.isFinite(employeeId) && (!isEmployee || isHr),
+    // Anyone signed in can open this — backend allows HR (any employee)
+    // or any employee for their own id; others get a 403 they can see.
+    enabled: !!user && Number.isFinite(employeeId),
   });
 
   const employee = data?.employee as

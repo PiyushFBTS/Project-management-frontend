@@ -55,7 +55,9 @@ export default function ProjectBreakdownPage({
         ? reportsApi.employeeGetProjectEmployees(projectId, month)
         : reportsApi.getProjectEmployees(projectId, month)
       ).then((r) => r.data?.data ?? r.data),
-    enabled: !!user && Number.isFinite(projectId) && (!isEmployee || isHr),
+    // Anyone signed in can drill in — backend auto-scopes a non-HR
+    // employee's response to just their own contributor row.
+    enabled: !!user && Number.isFinite(projectId),
   });
 
   const project = data?.project as

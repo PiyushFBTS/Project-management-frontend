@@ -31,12 +31,10 @@ export default function DailyFillReportPage() {
   const router = useRouter();
   const isEmployee = user?._type === 'employee';
   const isHr = isEmployee && !!(user as any)?.isHr;
-
-  // Regular employees cannot access this page
-  if (!authLoading && isEmployee && !isHr) {
-    router.replace('/reports/employee-wise');
-    return null;
-  }
+  // Plain employees now see a self-only response (just their own row),
+  // so we no longer redirect them away from this page. Keep `router`
+  // referenced so its import still has a use.
+  void router;
 
   const [date, setDate] = useState(today);
   const [autoFetch, setAutoFetch] = useState(false);
