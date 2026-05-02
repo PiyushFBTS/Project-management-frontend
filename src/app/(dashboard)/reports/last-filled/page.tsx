@@ -27,6 +27,17 @@ function formatDate(dateStr: string | null): string {
   return new Date(dateStr).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
+// First 1–2 letters of a name — drives the small avatar next to the
+// employee name in the table. Same helper used by the other reports.
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) {
+    return parts[0].slice(0, parts[0].length >= 2 ? 2 : 1).toUpperCase();
+  }
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
 
 export default function LastFilledReportPage() {
   const { user, isLoading: authLoading } = useAuth();
@@ -58,10 +69,13 @@ export default function LastFilledReportPage() {
 
   return (
     <div className="space-y-4">
-      {/* Summary cards */}
+      {/* Summary cards — all three share the brand-blue gradient. The
+          icon (CheckCircle2 / AlertTriangle / CalendarClock) and label
+          differentiate the metric. The per-row table badges below still
+          carry status colour so individual rows are easy to triage. */}
       {!isLoading && rows.length > 0 && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-emerald-500 to-teal-600">
+          <Card className="relative overflow-hidden border-0 bg-linear-to-br from-blue-600 to-blue-800">
             <CardContent className="p-5">
               <div className="flex items-start justify-between">
                 <div>
@@ -74,7 +88,7 @@ export default function LastFilledReportPage() {
               </div>
             </CardContent>
           </Card>
-          <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-amber-500 to-orange-600">
+          <Card className="relative overflow-hidden border-0 bg-linear-to-br from-blue-600 to-blue-800">
             <CardContent className="p-5">
               <div className="flex items-start justify-between">
                 <div>
@@ -87,7 +101,7 @@ export default function LastFilledReportPage() {
               </div>
             </CardContent>
           </Card>
-          <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-rose-500 to-pink-600">
+          <Card className="relative overflow-hidden border-0 bg-linear-to-br from-blue-600 to-blue-800">
             <CardContent className="p-5">
               <div className="flex items-start justify-between">
                 <div>
@@ -105,7 +119,7 @@ export default function LastFilledReportPage() {
 
       {/* Table */}
       <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
-        <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-rose-500 via-pink-500 to-fuchsia-500" />
+        <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-blue-500 to-blue-700" />
         <Table>
           <TableHeader>
             <TableRow>
@@ -144,9 +158,18 @@ export default function LastFilledReportPage() {
                     <TableRow key={row.id} className={notFilledThisMonth ? 'bg-red-50/50 dark:bg-red-950/10' : isOverdue ? 'bg-amber-50/50 dark:bg-amber-950/10' : ''}>
                       <TableCell className="font-mono text-xs">{row.emp_code}</TableCell>
                       <TableCell className="font-medium">
-                        <Link href={`/employees/${row.id}?type=employee`} className="text-violet-600 dark:text-violet-400 hover:underline">
-                          {row.emp_name}
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          {/* Brand-blue avatar — uniform across rows.
+                              The Days-Ago badge column carries the status
+                              colour (Up-to-Date / Overdue / Not this
+                              month). */}
+                          <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-blue-600 to-blue-800 text-[10px] font-bold text-white">
+                            {initialsOf(row.emp_name)}
+                          </span>
+                          <Link href={`/employees/${row.id}?type=employee`} className="text-blue-600 dark:text-blue-400 hover:underline">
+                            {row.emp_name}
+                          </Link>
+                        </div>
                       </TableCell>
                       <TableCell className="text-xs text-slate-600 dark:text-slate-400">
                         {typeLabels[row.consultant_type] ?? row.consultant_type}

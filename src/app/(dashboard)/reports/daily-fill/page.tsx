@@ -26,6 +26,18 @@ const typeLabels: Record<string, string> = {
   core_team: 'Core',
 };
 
+// First 1–2 letters of an employee's name, used to render a small
+// initials avatar next to the name column. Matches the convention used
+// by the leave / project / employee-wise reports.
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) {
+    return parts[0].slice(0, parts[0].length >= 2 ? 2 : 1).toUpperCase();
+  }
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
 export default function DailyFillReportPage() {
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
@@ -55,7 +67,7 @@ export default function DailyFillReportPage() {
     <div className="space-y-4">
       {/* Gradient Header */}
       <div className="relative overflow-hidden rounded-2xl shadow-lg">
-        <div className="absolute inset-0 bg-linear-to-r from-rose-600 via-pink-600 to-fuchsia-600" />
+        <div className="absolute inset-0 bg-linear-to-r from-blue-600 to-blue-800" />
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djZoLTZWMzRoNnptMC0zMHY2aC02VjRoNnptMCAzMHY2aC02di02aDZ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30" />
         <div className="relative px-6 py-5 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
@@ -73,7 +85,7 @@ export default function DailyFillReportPage() {
           <label className="text-xs text-muted-foreground">Date</label>
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-36" />
         </div>
-        <Button size="sm" onClick={() => setAutoFetch(true)} className="bg-linear-to-r from-indigo-500 to-violet-600 text-white hover:opacity-90 shadow-sm shadow-indigo-500/25 border-0">
+        <Button size="sm" onClick={() => setAutoFetch(true)} className="bg-linear-to-r from-blue-600 to-blue-800 text-white hover:opacity-90 shadow-sm shadow-blue-500/25 border-0">
           <Search className="mr-1.5 h-4 w-4" /> Run Report
         </Button>
       </div>
@@ -87,7 +99,11 @@ export default function DailyFillReportPage() {
           {/* Summary cards */}
           {data && (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-indigo-500 to-violet-600">
+              {/* All three KPI cards share the same brand-blue gradient.
+                  The icon (BarChart3 / CheckCircle2 / XCircle) and label
+                  text still differentiate the metric — only the background
+                  was carrying status colour. */}
+              <Card className="relative overflow-hidden border-0 bg-linear-to-br from-blue-600 to-blue-800">
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between">
                     <div>
@@ -100,7 +116,7 @@ export default function DailyFillReportPage() {
                   </div>
                 </CardContent>
               </Card>
-              <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-emerald-500 to-teal-600">
+              <Card className="relative overflow-hidden border-0 bg-linear-to-br from-blue-600 to-blue-800">
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between">
                     <div>
@@ -113,7 +129,7 @@ export default function DailyFillReportPage() {
                   </div>
                 </CardContent>
               </Card>
-              <Card className="relative overflow-hidden border-0 bg-gradient-to-br from-rose-500 to-pink-600">
+              <Card className="relative overflow-hidden border-0 bg-linear-to-br from-blue-600 to-blue-800">
                 <CardContent className="p-5">
                   <div className="flex items-start justify-between">
                     <div>
@@ -130,7 +146,7 @@ export default function DailyFillReportPage() {
           )}
 
           <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
-            <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-rose-500 via-pink-500 to-fuchsia-500" />
+            <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-blue-500 to-blue-700" />
             <Table>
               <TableHeader>
                 <TableRow>
@@ -153,9 +169,17 @@ export default function DailyFillReportPage() {
                       <TableRow key={row.id} className={row.is_filled ? '' : 'bg-red-50/50'}>
                         <TableCell className="font-mono text-xs">{row.emp_code}</TableCell>
                         <TableCell className="font-medium">
-                          <Link href={`/employees/${row.id}?type=employee`} className="text-violet-600 dark:text-violet-400 hover:underline">
-                            {row.emp_name}
-                          </Link>
+                          <div className="flex items-center gap-2">
+                            {/* Brand-blue initials avatar — uniform across
+                                every row (the row tint + Status column
+                                already convey filled / not-filled). */}
+                            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-blue-600 to-blue-800 text-[10px] font-bold text-white">
+                              {initialsOf(row.emp_name)}
+                            </span>
+                            <Link href={`/employees/${row.id}?type=employee`} className="text-blue-600 dark:text-blue-400 hover:underline">
+                              {row.emp_name}
+                            </Link>
+                          </div>
                         </TableCell>
                         <TableCell className="text-xs text-slate-600">
                           {typeLabels[row.consultant_type] ?? row.consultant_type}

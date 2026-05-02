@@ -416,7 +416,7 @@ function FillTaskSheetPage() {
 
       {/* Action buttons */}
       <div className="flex gap-2 justify-end">
-        <Button size="sm" onClick={openAddForm} className="bg-linear-to-r from-violet-500 to-purple-600 text-white hover:opacity-90 shadow-sm shadow-violet-500/25 border-0">
+        <Button size="sm" onClick={openAddForm} className="bg-linear-to-r from-blue-600 to-blue-800 text-white hover:opacity-90 shadow-sm shadow-blue-500/25 border-0">
           <Plus className="mr-1.5 h-4 w-4" />
           Add Entry
         </Button>
@@ -436,7 +436,7 @@ function FillTaskSheetPage() {
 
       {/* Entries table */}
       <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
-        <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-violet-500 via-purple-500 to-indigo-500" />
+        <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-blue-500 to-blue-700" />
         <Table>
           <TableHeader>
             <TableRow>
@@ -509,7 +509,7 @@ function FillTaskSheetPage() {
       {/* Add / Edit Entry Dialog */}
       <Dialog open={formOpen} onOpenChange={(v) => { if (!v) closeForm(); }}>
         <DialogContent className="max-w-md overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-violet-500 via-purple-500 to-indigo-500" />
+          <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-blue-500 to-blue-700" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-violet-500" />
@@ -634,7 +634,7 @@ function FillTaskSheetPage() {
               </Button>
               <Button
                 size="sm"
-                className="bg-linear-to-r from-violet-500 to-purple-600 text-white hover:opacity-90 shadow-sm shadow-violet-500/25 border-0"
+                className="bg-linear-to-r from-blue-600 to-blue-800 text-white hover:opacity-90 shadow-sm shadow-blue-500/25 border-0"
                 disabled={isSaving}
                 onClick={handleSave}
               >

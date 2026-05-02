@@ -91,7 +91,7 @@ export default function TaskSheetsPage() {
     <div className="space-y-4">
       {/* Gradient Header */}
       <div className="relative overflow-hidden rounded-2xl shadow-lg">
-        <div className="absolute inset-0 bg-linear-to-r from-violet-600 via-purple-600 to-indigo-600" />
+        <div className="absolute inset-0 bg-linear-to-r from-blue-600 to-blue-800" />
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djZoLTZWMzRoNnptMC0zMHY2aC02VjRoNnptMCAzMHY2aC02di02aDZ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30" />
         <div className="relative px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -166,7 +166,7 @@ export default function TaskSheetsPage() {
       </div>
 
       <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
-        <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-violet-500 via-purple-500 to-indigo-500" />
+        <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-blue-500 to-blue-700" />
         <Table>
           <TableHeader>
             <TableRow>
