@@ -469,7 +469,39 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
                 <RichTextEditor
                   value={commentText}
                   onChange={setCommentText}
-                  employees={(companyEmployees ?? []).filter((e: any) => e._type !== 'admin').map((e) => ({ id: e.id, empName: e.empName }))}
+                  // JIRA-style @-picker — mention list combines every
+                  // user kind so the author can tag employees, admins
+                  // and clients. IDs are type-prefixed (`emp-N` /
+                  // `admin-N` / `client-N`) so the backend can route
+                  // notifications to the right table.
+                  employees={(() => {
+                    const all = companyEmployees ?? [];
+                    const empOpts = all
+                      .filter((e: any) => !e._type || e._type === 'employee')
+                      .map((e) => ({
+                        id: `emp-${e.id}`,
+                        empName: e.empName,
+                        kind: 'employee' as const,
+                      }));
+                    const adminOpts = all
+                      .filter((e: any) => e._type === 'admin')
+                      .map((a) => ({
+                        id: `admin-${a.id}`,
+                        empName: a.empName,
+                        kind: 'admin' as const,
+                      }));
+                    const clientOpts = (projectClients ?? []).map((c: any) => ({
+                      id: `client-${c.id}`,
+                      empName: c.contactName ?? c.companyName ?? c.empName ?? `Client #${c.id}`,
+                      kind: 'client' as const,
+                    }));
+                    // Dedupe by `id` (string) so the same admin/employee
+                    // can't appear twice if the API returned both.
+                    const merged = [...empOpts, ...adminOpts, ...clientOpts];
+                    return merged.filter(
+                      (m, i, arr) => arr.findIndex((x) => x.id === m.id) === i,
+                    );
+                  })()}
                   onMentionAdded={() => {}}
                   placeholder="Add a comment… type @ to mention"
                   minHeight="80px"

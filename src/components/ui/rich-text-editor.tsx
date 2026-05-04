@@ -15,9 +15,14 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+/// Mention picker entry. `id` is a type-prefixed string token —
+/// `emp-<id>`, `admin-<id>`, or `client-<id>` — so the backend can
+/// route notifications to the right table. `kind` is what the dropdown
+/// shows in the row label (e.g. "Sarah · Admin").
 export interface MentionUser {
-  id: number;
+  id: string;
   empName: string;
+  kind?: 'employee' | 'admin' | 'client';
 }
 
 interface RichTextEditorProps {
@@ -216,11 +221,16 @@ function buildExtensions(withMention: boolean): any[] {
               items.forEach((item, idx) => {
                 const btn = document.createElement('button');
                 btn.className = `mention-item${idx === selectedIndex ? ' is-selected' : ''}`;
-                btn.textContent = item.empName;
+                // Show "Name · Kind" so admin/client rows are visually
+                // distinct from employee rows (they often share names).
+                const kindBadge = item.kind && item.kind !== 'employee'
+                  ? ` · ${item.kind === 'admin' ? 'Admin' : 'Client'}`
+                  : '';
+                btn.textContent = `${item.empName}${kindBadge}`;
                 btn.addEventListener('mousedown', (e) => {
                   e.preventDefault();
                   commandFn?.({ id: String(item.id), label: item.empName });
-                  mentionStore.onMentionAdded?.({ id: item.id, empName: item.empName });
+                  mentionStore.onMentionAdded?.({ id: item.id, empName: item.empName, kind: item.kind });
                 });
                 container!.appendChild(btn);
               });
@@ -269,8 +279,9 @@ function buildExtensions(withMention: boolean): any[] {
                 }
                 if (props.event.key === 'Enter') {
                   if (items[selectedIndex]) {
-                    commandFn?.({ id: String(items[selectedIndex].id), label: items[selectedIndex].empName });
-                    mentionStore.onMentionAdded?.(items[selectedIndex]);
+                    const it = items[selectedIndex];
+                    commandFn?.({ id: String(it.id), label: it.empName });
+                    mentionStore.onMentionAdded?.(it);
                   }
                   return true;
                 }

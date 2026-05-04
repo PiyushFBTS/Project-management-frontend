@@ -184,7 +184,7 @@ function NewCompanyContent() {
           <ArrowLeft className="h-4 w-4 mr-1" /> Back
         </Button>
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-violet-500 to-purple-700 text-white shadow-sm">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-blue-800 text-white shadow-sm">
             <Building2 className="h-5 w-5" />
           </div>
           <h1 className="text-lg font-semibold">{isEditing ? 'Edit Company' : 'New Company'}</h1>
@@ -197,7 +197,7 @@ function NewCompanyContent() {
           <Section title="Basic Information">
             <div className="flex items-center gap-4">
               <div
-                className="relative h-16 w-16 shrink-0 rounded-xl border-2 border-dashed border-muted-foreground/25 flex items-center justify-center overflow-hidden cursor-pointer hover:border-violet-400 transition-colors bg-muted/30"
+                className="relative h-16 w-16 shrink-0 rounded-xl border-2 border-dashed border-muted-foreground/25 flex items-center justify-center overflow-hidden cursor-pointer hover:border-blue-500 transition-colors bg-muted/30"
                 onClick={() => logoInputRef.current?.click()}
               >
                 {logoPreview ? (
@@ -312,7 +312,7 @@ function NewCompanyContent() {
             <Button
               onClick={handleSave}
               disabled={isSaving}
-              className="bg-linear-to-r from-violet-500 to-purple-600 text-white hover:opacity-90 shadow-sm shadow-violet-500/25 border-0"
+              className="bg-linear-to-r from-blue-600 to-blue-800 text-white hover:opacity-90 shadow-sm shadow-blue-600/25 border-0"
             >
               {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isEditing ? 'Update Company' : 'Create Company'}

@@ -109,7 +109,7 @@ const navItems: NavItem[] = [
       { label: 'Project-Wise', href: '/reports/project-wise', dotColor: 'bg-violet-400' },
       { label: 'Daily Fill', href: '/reports/daily-fill', dotColor: 'bg-emerald-400' },
       { label: 'Last Filled', href: '/reports/last-filled', dotColor: 'bg-rose-400', hrOrAdminOnly: true },
-      { label: 'Monthly Grid', href: '/reports/monthly-grid', dotColor: 'bg-cyan-400', hrOrAdminOnly: true },
+      { label: 'Monthly Grid', href: '/reports/monthly-grid', dotColor: 'bg-cyan-400' },
       { label: 'Employee Costing', href: '/reports/employee-cost', dotColor: 'bg-orange-400', hrOrAdminOnly: true },
       { label: 'Project Costing', href: '/reports/project-cost', dotColor: 'bg-teal-400', hrOrAdminOnly: true },
     ],

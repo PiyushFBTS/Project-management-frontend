@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Download, Calendar, ArrowLeft, Search, User } from 'lucide-react';
@@ -32,6 +32,10 @@ export default function MonthlyGridPage() {
   const { user } = useAuth();
   const router = useRouter();
   const isAdmin = user?._type === 'admin';
+  const isHr = !isAdmin && !!(user as any)?.isHr;
+  // Plain employees only get their own row from the API; without HR rights
+  // the full-company export endpoint 403s, so hide that button for them.
+  const canExport = isAdmin || isHr;
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -47,6 +51,14 @@ export default function MonthlyGridPage() {
     },
     enabled: !!user,
   });
+
+  // Single-row payload (employee scoped to themselves) → skip the picker
+  // and drop straight into their calendar grid.
+  useEffect(() => {
+    if (data?.rows?.length === 1 && !selectedEmp) {
+      setSelectedEmp(data.rows[0]);
+    }
+  }, [data, selectedEmp]);
 
   const prevMonth = () => {
     if (month === 1) { setMonth(12); setYear(year - 1); } else setMonth(month - 1);
@@ -92,7 +104,7 @@ export default function MonthlyGridPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
-          {selectedEmp ? (
+          {selectedEmp && (data?.rows ?? []).length > 1 ? (
             <button onClick={() => setSelectedEmp(null)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-1">
               <ArrowLeft className="h-4 w-4" /> Back to Employee List
             </button>
@@ -110,9 +122,11 @@ export default function MonthlyGridPage() {
           <Button variant="outline" size="icon" onClick={prevMonth}><ChevronLeft className="h-4 w-4" /></Button>
           <span className="min-w-[140px] text-center font-semibold">{MONTHS[month - 1]} {year}</span>
           <Button variant="outline" size="icon" onClick={nextMonth}><ChevronRight className="h-4 w-4" /></Button>
-          <Button variant="outline" size="sm" onClick={handleExport} className="ml-2">
-            <Download className="h-4 w-4 mr-1" /> Export All
-          </Button>
+          {canExport && (
+            <Button variant="outline" size="sm" onClick={handleExport} className="ml-2">
+              <Download className="h-4 w-4 mr-1" /> Export All
+            </Button>
+          )}
         </div>
       </div>
 
