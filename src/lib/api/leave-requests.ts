@@ -73,19 +73,25 @@ export const leaveRequestsApi = {
     dateTo: string;
     remarks?: string;
     watcherIds?: number[];
+    // When set, an HR employee files leave for someone else. The backend
+    // stamps the actual caller in `applied_by_*` columns for audit.
+    onBehalfOfEmployeeId?: number;
   }) =>
     api.post<ApiResponse<LeaveRequest>>('/employee/leave-requests', data),
 
   // ── Admin "apply for leave" ────────────────────────────────────────────
   // Admins submit through the admin-guarded /leave-requests root, not the
   // /employee path. Backend stamps adminId (employeeId stays null) so the
-  // request still flows through the same approval pipeline.
+  // request still flows through the same approval pipeline. With
+  // `onBehalfOfEmployeeId` set, the leave's subject becomes that employee
+  // and `applied_by_*` records the admin actor.
   submitAdminLeave: (data: {
     leaveReasonId: number;
     dateFrom: string;
     dateTo: string;
     remarks?: string;
     watcherIds?: number[];
+    onBehalfOfEmployeeId?: number;
   }) =>
     api.post<ApiResponse<LeaveRequest>>('/leave-requests', data),
 

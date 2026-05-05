@@ -447,6 +447,13 @@ export interface LeaveRequest {
   hr?: Employee | null;
   hrActionAt?: string | null;
   hrRemarks?: string | null;
+  hrApproverName?: string | null;
+  // Audit trail of who actually filed the request — for self-submission
+  // this matches the subject; for HR/admin on-behalf submissions it's
+  // the actual filer.
+  appliedById?: number | null;
+  appliedByType?: 'employee' | 'admin' | null;
+  appliedByName?: string | null;
   watchers?: { id: number; employeeId: number; employee?: Employee }[];
   createdAt: string;
   updatedAt: string;

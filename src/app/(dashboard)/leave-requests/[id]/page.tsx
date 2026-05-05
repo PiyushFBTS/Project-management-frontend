@@ -184,6 +184,31 @@ export default function LeaveRequestDetailPage() {
               <p className="font-semibold">{detail.employee?.empName}</p>
               <p className="text-xs text-muted-foreground">{detail.employee?.empCode} · {detail.employee?.email}</p>
             </div>
+            {(() => {
+              // Surface the actual filer when it differs from the
+              // subject — i.e. an HR / admin filed leave on someone
+              // else's behalf.
+              const filedById = detail.appliedById ?? null;
+              const subjId = detail.adminId ?? detail.employeeId ?? null;
+              const subjType = detail.adminId != null ? 'admin' : 'employee';
+              const isOnBehalf =
+                filedById != null &&
+                (filedById !== subjId || detail.appliedByType !== subjType);
+              if (!isOnBehalf || !detail.appliedByName) return null;
+              return (
+                <div className="rounded-md border border-amber-200/40 bg-amber-50/50 dark:bg-amber-500/10 px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-amber-700 dark:text-amber-400">
+                    Applied By
+                  </p>
+                  <p className="text-xs text-amber-800 dark:text-amber-300 mt-0.5">
+                    {detail.appliedByName}
+                    <span className="text-muted-foreground ml-1">
+                      ({detail.appliedByType === 'admin' ? 'Admin' : 'HR'})
+                    </span>
+                  </p>
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
 

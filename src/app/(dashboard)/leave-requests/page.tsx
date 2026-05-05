@@ -103,12 +103,18 @@ function LeaveRequestsContent() {
 
   // ── Apply for Leave dialog ──
   const [applyOpen, setApplyOpen] = useState(false);
+  // 'self'      → caller is filing their own leave
+  // 'on-behalf' → HR / admin is filing for another employee (extra
+  //               Employee dropdown shows up; payload carries
+  //               onBehalfOfEmployeeId).
+  const [applyMode, setApplyMode] = useState<'self' | 'on-behalf'>('self');
   const [applyForm, setApplyForm] = useState({
     leaveReasonId: '',
     dateFrom: '',
     dateTo: '',
     remarks: '',
     watcherIds: [] as number[],
+    onBehalfOfEmployeeId: '' as string,
   });
 
   // Auto-open apply dialog from dashboard link (?apply=true)
@@ -154,6 +160,10 @@ function LeaveRequestsContent() {
         dateTo: applyForm.dateTo,
         remarks: applyForm.remarks || undefined,
         watcherIds: applyForm.watcherIds.length > 0 ? applyForm.watcherIds : undefined,
+        onBehalfOfEmployeeId:
+          applyMode === 'on-behalf' && applyForm.onBehalfOfEmployeeId
+            ? Number(applyForm.onBehalfOfEmployeeId)
+            : undefined,
       };
       return isAdmin
         ? leaveRequestsApi.submitAdminLeave(payload)
@@ -162,17 +172,23 @@ function LeaveRequestsContent() {
     onSuccess: () => {
       toast.success('Leave request submitted successfully');
       setApplyOpen(false);
-      setApplyForm({ leaveReasonId: '', dateFrom: '', dateTo: '', remarks: '', watcherIds: [] });
+      setApplyMode('self');
+      setApplyForm({ leaveReasonId: '', dateFrom: '', dateTo: '', remarks: '', watcherIds: [], onBehalfOfEmployeeId: '' });
       invalidateAll();
     },
-    onError: () => {
-      toast.error('Failed to submit leave request');
+    onError: (e: any) => {
+      const msg = e?.response?.data?.message;
+      toast.error(typeof msg === 'string' ? msg : 'Failed to submit leave request');
     },
   });
 
   const handleSubmitLeave = () => {
     if (!applyForm.leaveReasonId || !applyForm.dateFrom || !applyForm.dateTo) {
       toast.error('Please fill all required fields');
+      return;
+    }
+    if (applyMode === 'on-behalf' && !applyForm.onBehalfOfEmployeeId) {
+      toast.error('Please select an employee');
       return;
     }
     if (applyForm.dateFrom > applyForm.dateTo) {
@@ -376,16 +392,26 @@ function LeaveRequestsContent() {
               <p className="text-sm text-white/60">Leave requests & approvals</p>
             </div>
           </div>
-          {(isEmployee || isAdmin) && (
-            <Button
-              onClick={() => setApplyOpen(true)}
-              className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg"
-              size="sm"
-            >
-              <Plus className="mr-1.5 h-4 w-4" />
-              Apply for Leave
-            </Button>
-          )}
+          {(isEmployee || isAdmin) && (() => {
+            // Team Leaves tab → file leave on someone's behalf. Anywhere
+            // else (My Leaves, Calendar) → file own leave.
+            const onTeamTab =
+              (isEmployee && tab === 'team-leaves') ||
+              (isAdmin && adminTab === 'team-leaves');
+            return (
+              <Button
+                onClick={() => {
+                  setApplyMode(onTeamTab ? 'on-behalf' : 'self');
+                  setApplyOpen(true);
+                }}
+                className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg"
+                size="sm"
+              >
+                <Plus className="mr-1.5 h-4 w-4" />
+                {onTeamTab ? 'Apply on Behalf' : 'Apply for Leave'}
+              </Button>
+            );
+          })()}
         </div>
       </div>
 
@@ -701,6 +727,24 @@ function LeaveRequestsContent() {
                         <span className="block text-xs text-muted-foreground">
                           {lr.adminId != null ? 'Admin' : lr.employee?.empCode}
                         </span>
+                        {/* Surface the actual filer when it differs from
+                            the subject — i.e. an HR / admin filed leave
+                            on someone else's behalf. */}
+                        {(() => {
+                          const filedById = lr.appliedById ?? null;
+                          const subjId = lr.adminId ?? lr.employeeId ?? null;
+                          const subjType = lr.adminId != null ? 'admin' : 'employee';
+                          const isOnBehalf =
+                            filedById != null &&
+                            (filedById !== subjId || lr.appliedByType !== subjType);
+                          if (!isOnBehalf || !lr.appliedByName) return null;
+                          return (
+                            <span className="block text-[10px] italic text-muted-foreground/80 mt-0.5">
+                              Applied by {lr.appliedByName}
+                              {lr.appliedByType === 'admin' ? ' (Admin)' : ' (HR)'}
+                            </span>
+                          );
+                        })()}
                       </TableCell>
                     )}
                     <TableCell className="text-sm">{lr.leaveReason?.reasonName ?? '-'}</TableCell>
@@ -737,16 +781,35 @@ function LeaveRequestsContent() {
 
       {/* Apply for Leave Dialog — open for both employee and admin */}
       {(isEmployee || isAdmin) && (
-        <Dialog open={applyOpen} onOpenChange={(v) => { if (!v) { setApplyOpen(false); setApplyForm({ leaveReasonId: '', dateFrom: '', dateTo: '', remarks: '', watcherIds: [] }); } }}>
+        <Dialog open={applyOpen} onOpenChange={(v) => { if (!v) { setApplyOpen(false); setApplyMode('self'); setApplyForm({ leaveReasonId: '', dateFrom: '', dateTo: '', remarks: '', watcherIds: [], onBehalfOfEmployeeId: '' }); } }}>
           <DialogContent className="max-w-md overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-orange-500 via-rose-500 to-violet-500" />
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <CalendarDays className="h-5 w-5 text-orange-500" />
-                Apply for Leave
+                {applyMode === 'on-behalf' ? 'Apply Leave on Behalf' : 'Apply for Leave'}
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
+              {/* Employee picker — only when filing on someone else's behalf */}
+              {applyMode === 'on-behalf' && (
+                <div className="space-y-1.5">
+                  <Label className="text-sm font-medium">Employee <span className="text-destructive">*</span></Label>
+                  <SearchableSelect
+                    placeholder="Select employee"
+                    value={applyForm.onBehalfOfEmployeeId}
+                    onValueChange={(v) => setApplyForm((p) => ({ ...p, onBehalfOfEmployeeId: v }))}
+                    options={(colleagues ?? []).map((c) => ({
+                      value: String(c.id),
+                      label: `${c.empName} (${c.empCode})`,
+                    }))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The leave will be filed for this employee; you stay on the audit trail.
+                  </p>
+                </div>
+              )}
+
               {/* Leave Type */}
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">Leave Type <span className="text-destructive">*</span></Label>
@@ -849,7 +912,11 @@ function LeaveRequestsContent() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setApplyOpen(false)}
+                  onClick={() => {
+                    setApplyOpen(false);
+                    setApplyMode('self');
+                    setApplyForm({ leaveReasonId: '', dateFrom: '', dateTo: '', remarks: '', watcherIds: [], onBehalfOfEmployeeId: '' });
+                  }}
                 >
                   Cancel
                 </Button>
