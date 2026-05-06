@@ -11,7 +11,7 @@ import {
   Paperclip, FileText, Image as ImageIcon, Trash2, ChevronRight, Users,
   Flag, Layers, Send,
 } from 'lucide-react';
-import { projectTicketsApi, adminTicketsApi, clientTicketsApi } from '@/lib/api/project-planning';
+import { projectTicketsApi, adminTicketsApi, clientTicketsApi, projectPlanningApi } from '@/lib/api/project-planning';
 import { employeesApi } from '@/lib/api/employees';
 import { projectsApi } from '@/lib/api/projects';
 import { useAuth } from '@/providers/auth-provider';
@@ -199,15 +199,15 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
 
   // ── Reassign options ──────────────────────────────────────────────────
 
+  // Tickets are only assignable to employees and admins — clients only
+  // create tickets, they're never on the receiving end. The legacy
+  // client-target options are intentionally omitted here.
   const reassignOptions = (() => {
     const all = companyEmployees ?? [];
     const deduped = all.filter((e, i, arr) => arr.findIndex((x) => x.id === e.id && (x as any)._type === (e as any)._type) === i);
     const empOpts = deduped.filter((e: any) => !e._type || e._type === 'employee').map((emp) => ({ value: `emp-${emp.id}`, label: emp.empName }));
     const adminOpts = deduped.filter((e: any) => e._type === 'admin').map((a) => ({ value: `admin-${a.id}`, label: `${a.empName} (Admin)` }));
-    const clientFromList = deduped.filter((e: any) => e._type === 'client').map((c) => ({ value: `client-${c.id}`, label: `${c.empName} (Client)` }));
-    if (isClient) return [...empOpts, ...adminOpts, ...clientFromList];
-    const clientOpts = ((projectClients ?? []) as any[]).filter((c: any) => c.isActive).map((c: any) => ({ value: `client-${c.id}`, label: `${c.fullName} (Client)` }));
-    return [...empOpts, ...adminOpts, ...clientOpts];
+    return [...empOpts, ...adminOpts];
   })();
 
   // ── Mutations ─────────────────────────────────────────────────────────
@@ -279,6 +279,24 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
       setClosingTaskId(null);
     },
     onError: () => toast.error('Failed to save contributors'),
+  });
+
+  // Permanent ticket delete — admin-only. The button below is also
+  // gated on `isAdmin`, but the mutation defends in depth in case a
+  // non-admin path ever reaches here.
+  const deleteTicketMut = useMutation({
+    mutationFn: () => {
+      const projectId = (t as any)?.projectId ?? (t as any)?.project?.id;
+      if (!projectId) throw new Error('Missing project id on ticket');
+      return projectPlanningApi.deleteTask(projectId, taskId);
+    },
+    onSuccess: () => {
+      toast.success('Ticket deleted');
+      qc.invalidateQueries({ queryKey: ['project-tickets-all'] });
+      qc.invalidateQueries({ queryKey: ['project-tasks'] });
+      router.push('/full-tickets');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Delete failed'),
   });
 
   // ── Handle status change ──────────────────────────────────────────────
@@ -376,7 +394,28 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
 
           {/* Title */}
           <div>
-            <h1 className="text-xl font-bold text-foreground leading-snug">{t.title}</h1>
+            <div className="flex items-start justify-between gap-3">
+              <h1 className="text-xl font-bold text-foreground leading-snug flex-1">{t.title}</h1>
+              {/* Delete ticket — admin-only. Employees & clients never
+                  see this entry, and the mutation also bails out on
+                  non-admin paths as defence in depth. */}
+              {isAdmin && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  disabled={deleteTicketMut.isPending}
+                  onClick={() => {
+                    if (confirm(`Delete ticket "${t.title}"? This permanently removes it and all its history. This action cannot be undone.`)) {
+                      deleteTicketMut.mutate();
+                    }
+                  }}
+                >
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Delete
+                </Button>
+              )}
+            </div>
             {t.description && (
               <div className="mt-2"><RichTextDisplay html={t.description} /></div>
             )}
@@ -646,10 +685,12 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
                   />
                   <div className="max-h-40 overflow-y-auto space-y-0.5">
                     {(companyEmployees ?? [])
+                      // Tickets aren't assignable to clients — exclude them from the picker.
+                      .filter((e: any) => e._type !== 'client')
                       .filter((e: any) => !assignees.some(a => a.userId === e.id && a.userType === (e._type || 'employee')))
                       .filter((e: any) => !assigneeSearch || e.empName?.toLowerCase().includes(assigneeSearch.toLowerCase()))
                       .map((emp: any) => {
-                        const uType = emp._type === 'admin' ? 'admin' : emp._type === 'client' ? 'client' : 'employee';
+                        const uType = emp._type === 'admin' ? 'admin' : 'employee';
                         return (
                           <button key={`${uType}-${emp.id}`}
                             className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-primary/10 flex items-center gap-2"
@@ -661,6 +702,7 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
                         );
                       })}
                     {(companyEmployees ?? [])
+                      .filter((e: any) => e._type !== 'client')
                       .filter((e: any) => !assignees.some(a => a.userId === e.id && a.userType === (e._type || 'employee')))
                       .filter((e: any) => !assigneeSearch || e.empName?.toLowerCase().includes(assigneeSearch.toLowerCase()))
                       .length === 0 && <p className="text-xs text-muted-foreground text-center py-2">No matches found</p>}
