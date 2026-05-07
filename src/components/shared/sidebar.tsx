@@ -105,6 +105,7 @@ const navItems: NavItem[] = [
     // — backend auto-scopes plain employees to self-only data. The
     // remaining four stay HR/admin only.
     children: [
+      { label: 'Sheet History', href: '/reports/sheet-history', dotColor: 'bg-blue-400' },
       { label: 'Employee-Wise', href: '/reports/employee-wise', dotColor: 'bg-indigo-400' },
       { label: 'Project-Wise', href: '/reports/project-wise', dotColor: 'bg-violet-400' },
       { label: 'Daily Fill', href: '/reports/daily-fill', dotColor: 'bg-emerald-400' },

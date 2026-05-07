@@ -76,42 +76,112 @@ export default function TaskSheetDetailPage() {
           <CardTitle className="text-sm font-semibold">Task Entries</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>#</TableHead>
-                <TableHead>Project</TableHead>
-                <TableHead>Task Type</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Time Taken</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {(sheet.taskEntries ?? []).length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-slate-400 py-8">
-                    No entries
-                  </TableCell>
-                </TableRow>
-              ) : (
-                (sheet.taskEntries ?? []).map((entry, i) => (
-                  <TableRow key={entry.id}>
-                    <TableCell className="text-slate-500">{i + 1}</TableCell>
-                    <TableCell className="font-medium text-sm">
-                      {entry.project?.projectName ?? entry.otherProjectName ?? '—'}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{entry.taskType?.typeName ?? (entry.taskTypeId ? `#${entry.taskTypeId}` : '—')}</TableCell>
-                    <TableCell className="max-w-xs truncate text-sm">{entry.taskDescription}</TableCell>
-                    <TableCell className="font-semibold">{Number(entry.durationHours).toFixed(2)}h</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="capitalize text-xs">{entry.status?.replace('_', ' ')}</Badge>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+          {(() => {
+            const entries = sheet.taskEntries ?? [];
+            if (entries.length === 0) {
+              return (
+                <p className="text-center text-sm text-muted-foreground py-8">
+                  No entries
+                </p>
+              );
+            }
+
+            // Group entries by project (or "Other" for entries with no
+            // project link). Preserves the order in which projects first
+            // appear so the user sees them roughly chronologically.
+            const groups = new Map<string, { name: string; entries: typeof entries; total: number }>();
+            for (const e of entries) {
+              const name = e.project?.projectName ?? e.otherProjectName ?? 'Other';
+              if (!groups.has(name)) {
+                groups.set(name, { name, entries: [], total: 0 });
+              }
+              const g = groups.get(name)!;
+              g.entries.push(e);
+              g.total += Number(e.durationHours ?? 0);
+            }
+
+            return (
+              <div className="divide-y">
+                {[...groups.values()].map((g) => (
+                  <div key={g.name}>
+                    {/* Project header */}
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-blue-500/5 border-b">
+                      <p className="text-sm font-semibold text-blue-700 dark:text-blue-400">
+                        {g.name}
+                      </p>
+                      <p className="text-xs font-semibold text-muted-foreground">
+                        {g.entries.length} entr{g.entries.length === 1 ? 'y' : 'ies'} · {g.total.toFixed(2)}h
+                      </p>
+                    </div>
+
+                    {/* Per-project ticket / activity table */}
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-10">#</TableHead>
+                          <TableHead>Ticket / Activity</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead className="text-right w-20">Hours</TableHead>
+                          <TableHead className="w-32">Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {g.entries.map((e, i) => {
+                          const ticketNo = e.ticket?.ticketNumber ?? null;
+                          const ticketTitle = e.ticket?.title ?? null;
+                          // Activity label for non-ticketed entries —
+                          // normalised to Internal Meeting / Client
+                          // Meeting / Other so labels stay consistent.
+                          const rawAct = (e.activityType ?? '').toLowerCase().trim();
+                          const activityLabel = rawAct === 'internal_meeting'
+                            ? 'Internal Meeting'
+                            : rawAct === 'client_meeting'
+                              ? 'Client Meeting'
+                              : 'Other';
+                          // Clip description to 100 chars per spec.
+                          const desc = (e.taskDescription ?? '').length > 100
+                            ? `${e.taskDescription.slice(0, 100)}…`
+                            : (e.taskDescription ?? '');
+                          return (
+                            <TableRow key={e.id}>
+                              <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                              <TableCell>
+                                {ticketNo ? (
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="font-mono text-[10px] text-blue-700 dark:text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded shrink-0">
+                                      {ticketNo}
+                                    </span>
+                                    {ticketTitle && (
+                                      <span className="text-sm truncate">{ticketTitle}</span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded">
+                                    {activityLabel}
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground max-w-md truncate" title={e.taskDescription ?? ''}>
+                                {desc || '—'}
+                              </TableCell>
+                              <TableCell className="text-right font-semibold">
+                                {Number(e.durationHours).toFixed(2)}h
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="capitalize text-xs">
+                                  {e.status?.replace('_', ' ')}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </CardContent>
       </Card>
     </div>

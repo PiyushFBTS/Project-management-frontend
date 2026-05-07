@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { Suspense, useState, useRef, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -92,7 +92,10 @@ const priorityLabels: Record<string, string> = {
   low: 'Low', medium: 'Medium', high: 'High', critical: 'Critical',
 };
 
-export default function FullTicketsPage() {
+// `useSearchParams()` requires the consuming subtree to be inside a Suspense
+// boundary at build time (Next.js 15+ static-export rule). Keep the heavy
+// page component as the inner export and wrap it once at the bottom.
+function FullTicketsPageInner() {
   const router = useRouter();
   const qc = useQueryClient();
   const { user, isLoading: authLoading } = useAuth();
@@ -1260,5 +1263,13 @@ export default function FullTicketsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function FullTicketsPage() {
+  return (
+    <Suspense fallback={null}>
+      <FullTicketsPageInner />
+    </Suspense>
   );
 }

@@ -301,6 +301,9 @@ export interface TaskEntry {
   project?: Project;
   otherProjectName?: string | null;
   ticketId?: number | null;
+  // Backend now joins the project_task row when ticketId is set so the
+  // sheet detail can show the ticket number + title alongside the entry.
+  ticket?: { id: number; ticketNumber?: string | null; title?: string | null; status?: string | null } | null;
   activityType?: string | null;
   taskDescription: string;
   fromTime: string;

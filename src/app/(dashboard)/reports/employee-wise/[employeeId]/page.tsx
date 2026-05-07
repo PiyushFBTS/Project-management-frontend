@@ -72,6 +72,10 @@ export default function EmployeeBreakdownPage({
       ticket_id: number | null;
       ticket_number: string | null;
       title: string;
+      // For non-ticketed rows this is the activity label
+      // (e.g. "Internal Meeting", "Client Meeting", "Other"). null
+      // when the row is a real ticket.
+      activity_type: string | null;
       status: string | null;
       hours: number;
       man_days: number;
@@ -150,35 +154,64 @@ export default function EmployeeBreakdownPage({
                     {proj.total_hours.toFixed(1)} hrs
                   </p>
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                    {proj.total_man_days.toFixed(2)} MD · {proj.tickets.length} ticket{proj.tickets.length === 1 ? '' : 's'}
+                    {(() => {
+                      const ticketCount = proj.tickets.filter((t) => t.ticket_id != null).length;
+                      const activityCount = proj.tickets.length - ticketCount;
+                      const parts: string[] = [`${proj.total_man_days.toFixed(2)} MD`];
+                      if (ticketCount > 0) parts.push(`${ticketCount} ticket${ticketCount === 1 ? '' : 's'}`);
+                      if (activityCount > 0) parts.push(`${activityCount} activit${activityCount === 1 ? 'y' : 'ies'}`);
+                      return parts.join(' · ');
+                    })()}
                   </p>
                 </div>
               </div>
-              {/* Ticket rows */}
+              {/* Ticket / activity rows.
+                  - Ticketed → ticket-number badge + summed hours.
+                  - Non-ticketed → activity_type badge (Internal
+                    Meeting / Client Meeting / Other) so each piece of
+                    work shows up in detail with its own row. */}
               <ul className="divide-y">
-                {proj.tickets.map((t) => (
-                  <li key={`${proj.project_id}-${t.ticket_id ?? 'no_ticket'}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40">
-                    <TicketIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    {t.ticket_number ? (
-                      <span className="font-mono text-[10px] text-blue-700 dark:text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded shrink-0">
-                        {t.ticket_number}
-                      </span>
-                    ) : (
-                      // Non-ticketed entry (meeting / call / internal work).
-                      // The title cell carries the actual description.
-                      <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded shrink-0">
-                        Activity
-                      </span>
-                    )}
-                    {t.status && STATUS_LABEL[t.status] && (
-                      <Badge className={`text-[9px] border-0 ring-1 ${STATUS_BADGE[t.status] ?? ''}`}>
-                        {STATUS_LABEL[t.status]}
-                      </Badge>
-                    )}
-                    <span className="flex-1 min-w-0 truncate text-sm">{t.title}</span>
-                    <span className="text-sm font-semibold shrink-0">{t.hours.toFixed(1)} hrs</span>
-                  </li>
-                ))}
+                {proj.tickets.map((t, idx) => {
+                  const isTicketed = t.ticket_id != null;
+                  return (
+                    <li
+                      key={`${proj.project_id}-${isTicketed ? `t-${t.ticket_id}` : `a-${idx}-${t.activity_type ?? ''}`}`}
+                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40"
+                    >
+                      <TicketIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      {isTicketed && t.ticket_number ? (
+                        <span className="font-mono text-[10px] text-blue-700 dark:text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded shrink-0">
+                          {t.ticket_number}
+                        </span>
+                      ) : (
+                        // Three badge categories — Internal Meeting /
+                        // Client Meeting / Other. Anything that isn't
+                        // one of the meeting enum values collapses to
+                        // "Other" so the report stays consistent.
+                        (() => {
+                          const raw = (t.activity_type ?? '').toLowerCase().trim();
+                          const label = raw === 'internal_meeting'
+                            ? 'Internal Meeting'
+                            : raw === 'client_meeting'
+                              ? 'Client Meeting'
+                              : 'Other';
+                          return (
+                            <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded shrink-0">
+                              {label}
+                            </span>
+                          );
+                        })()
+                      )}
+                      {isTicketed && t.status && STATUS_LABEL[t.status] && (
+                        <Badge className={`text-[9px] border-0 ring-1 ${STATUS_BADGE[t.status] ?? ''}`}>
+                          {STATUS_LABEL[t.status]}
+                        </Badge>
+                      )}
+                      <span className="flex-1 min-w-0 truncate text-sm">{t.title}</span>
+                      <span className="text-sm font-semibold shrink-0">{t.hours.toFixed(1)} hrs</span>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ))}
