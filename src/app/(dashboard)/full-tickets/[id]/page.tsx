@@ -11,7 +11,7 @@ import {
   Paperclip, FileText, Image as ImageIcon, Trash2, ChevronRight, Users,
   Flag, Layers, Send,
 } from 'lucide-react';
-import { projectTicketsApi, adminTicketsApi, clientTicketsApi, projectPlanningApi } from '@/lib/api/project-planning';
+import { projectTicketsApi, adminTicketsApi, clientTicketsApi, projectPlanningApi, employeePlanningApi } from '@/lib/api/project-planning';
 import { employeesApi } from '@/lib/api/employees';
 import { projectsApi } from '@/lib/api/projects';
 import { useAuth } from '@/providers/auth-provider';
@@ -297,6 +297,37 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
       router.push('/full-tickets');
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Delete failed'),
+  });
+
+  // ── Phases (for inline phase change in the Status sidebar) ──────────
+  const ticketProjectId = (t as any)?.projectId ?? (t as any)?.project?.id;
+  const planApi = isAdmin ? projectPlanningApi : isClient ? null : employeePlanningApi;
+
+  const { data: phases = [] } = useQuery({
+    queryKey: ['ticket-phases', ticketProjectId, isAdmin],
+    queryFn: async () => {
+      if (!planApi || !ticketProjectId) return [];
+      const r = await planApi.getPhases(ticketProjectId);
+      return ((r.data?.data ?? r.data) as any[]) ?? [];
+    },
+    enabled: !!ticketProjectId && !!planApi && !isClient,
+  });
+
+  // Inline phase change — clients can't edit, employees + admins can.
+  const updatePhaseMut = useMutation({
+    mutationFn: ({ phaseId }: { phaseId: number | null }) => {
+      if (!planApi || !ticketProjectId) {
+        throw new Error('Missing plan API or project id');
+      }
+      return planApi.updateTask(ticketProjectId, taskId, { phaseId } as any);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project-ticket-detail', taskId] });
+      qc.invalidateQueries({ queryKey: ['project-tickets-all'] });
+      qc.invalidateQueries({ queryKey: ['task-history', taskId] });
+      toast.success('Phase updated');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to update phase'),
   });
 
   // ── Handle status change ──────────────────────────────────────────────
@@ -641,6 +672,34 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
                 {priorityLabels[t.priority]}
               </Badge>
             </div>
+
+            {/* Phase — moved here from the Details card. Clients see it
+                read-only; admins/employees on the project can change it
+                inline (the value `__none__` clears the phase). */}
+            <div>
+              <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5 block">Phase</label>
+              {isClient ? (
+                <p className="text-sm font-medium">{(t as any).phase?.name ?? '—'}</p>
+              ) : (
+                <Select
+                  value={(t as any).phaseId ? String((t as any).phaseId) : '__none__'}
+                  onValueChange={(v) =>
+                    updatePhaseMut.mutate({ phaseId: v === '__none__' ? null : Number(v) })
+                  }
+                  disabled={updatePhaseMut.isPending}
+                >
+                  <SelectTrigger className="w-full h-9">
+                    <SelectValue placeholder="No phase" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— No phase —</SelectItem>
+                    {phases.map((ph: any) => (
+                      <SelectItem key={ph.id} value={String(ph.id)}>{ph.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
           </div>
 
           {/* Details card */}
@@ -728,12 +787,8 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
               <span className="text-sm font-medium">{(t as any).estimatedHours ?? '—'}</span>
             </div>
 
-            {(t as any).phase?.name && (
-              <div className="flex items-center justify-between py-1.5 border-b border-dashed">
-                <span className="text-xs text-muted-foreground flex items-center gap-1.5"><Layers className="h-3.5 w-3.5" /> Phase</span>
-                <span className="text-sm font-medium">{(t as any).phase.name}</span>
-              </div>
-            )}
+            {/* Phase moved into the Status + Priority card above —
+                editable inline there for admins/employees. */}
 
             <div className="flex items-center justify-between py-1.5">
               <span className="text-xs text-muted-foreground flex items-center gap-1.5"><Ticket className="h-3.5 w-3.5" /> Ticket ID</span>

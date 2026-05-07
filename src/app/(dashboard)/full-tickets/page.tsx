@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useRef, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -103,9 +103,24 @@ export default function FullTicketsPage() {
   const ticketsApi = isAdmin ? adminTicketsApi : isClient ? clientTicketsApi : projectTicketsApi;
 
   // Filters
+  const searchParams = useSearchParams();
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
-  const [projectFilter, setProjectFilter] = useState<string>('all');
+  // Initial project filter — honour `?projectId=…` so deep links from
+  // the project-detail "Open All Tickets" button land pre-filtered.
+  const [projectFilter, setProjectFilter] = useState<string>(
+    () => searchParams.get('projectId') ?? 'all',
+  );
+
+  // If the URL changes after mount (e.g. user navigates between projects
+  // via the same /full-tickets route), keep the filter in sync.
+  useEffect(() => {
+    const fromUrl = searchParams.get('projectId');
+    if (fromUrl && fromUrl !== projectFilter) {
+      setProjectFilter(fromUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
   const [dueDateFilter, setDueDateFilter] = useState<string>('all');
 
@@ -123,6 +138,12 @@ export default function FullTicketsPage() {
     enabled: !isClient,
   });
   const projectsList = Array.isArray(projectsListRaw) ? projectsListRaw : [];
+  // Tickets shouldn't be created in inactive / completed projects, so the
+  // "New Ticket" picker only ever shows active ones. The filter dropdown
+  // above keeps the full list so historical tickets stay reachable.
+  const creatableProjects = projectsList.filter(
+    (p: any) => (p.status ?? 'active') === 'active',
+  );
 
   // Detail dialog
   const [detailTask, setDetailTask] = useState<ProjectTask | null>(null);
@@ -141,8 +162,8 @@ export default function FullTicketsPage() {
       router.push(`/projects/${projectFilter}/planning/new-task`);
       return;
     }
-    if (projectsList.length === 1) {
-      router.push(`/projects/${projectsList[0].id}/planning/new-task`);
+    if (creatableProjects.length === 1) {
+      router.push(`/projects/${creatableProjects[0].id}/planning/new-task`);
       return;
     }
     setNewTicketProjectId('');
@@ -551,7 +572,7 @@ export default function FullTicketsPage() {
             size="sm"
             className="h-9 shrink-0 bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-sm"
             onClick={handleNewTicketClick}
-            disabled={!isClient && projectsList.length === 0}
+            disabled={!isClient && creatableProjects.length === 0}
           >
             <Ticket className="h-4 w-4 mr-1.5" />
             New Ticket
@@ -629,7 +650,19 @@ export default function FullTicketsPage() {
               variant="ghost"
               size="sm"
               className="h-9 shrink-0 ml-auto text-red-500 hover:text-red-600 hover:bg-red-500/10"
-              onClick={() => { setStatusFilter('all'); setPriorityFilter('all'); setProjectFilter('all'); setAssigneeFilter('all'); setDueDateFilter('all'); setSearch(''); }}
+              onClick={() => {
+                setStatusFilter('all');
+                setPriorityFilter('all');
+                setProjectFilter('all');
+                setAssigneeFilter('all');
+                setDueDateFilter('all');
+                setSearch('');
+                // Strip any query params (e.g. ?projectId=6 from a deep
+                // link) so the URL reflects the cleared state.
+                if (searchParams.toString().length > 0) {
+                  router.replace('/full-tickets');
+                }
+              }}
             >
               <X className="h-3.5 w-3.5 mr-1" />
               Clear
@@ -1203,7 +1236,7 @@ export default function FullTicketsPage() {
               value={newTicketProjectId}
               onValueChange={setNewTicketProjectId}
               placeholder="Select a project..."
-              options={projectsList.map((p: any) => ({
+              options={creatableProjects.map((p: any) => ({
                 value: String(p.id),
                 label: `${p.projectName ?? p.name}${p.projectCode ? ` (${p.projectCode})` : ''}`,
               }))}

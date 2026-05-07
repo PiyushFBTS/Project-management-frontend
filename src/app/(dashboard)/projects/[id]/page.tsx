@@ -7,13 +7,15 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   ArrowLeft, FolderKanban, Calendar, User, ClipboardList, Clock, FileText, Pencil, Loader2, X, Check,
-  Upload, Trash2, Download, File, UserPlus, Users, Milestone, Plus,
+  Upload, Trash2, Download, File, UserPlus, Users, Milestone, Plus, Layers, Ticket, ExternalLink, Search,
 } from 'lucide-react';
+import Link from 'next/link';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { projectsApi } from '@/lib/api/projects';
+import { projectPlanningApi, employeePlanningApi, clientPlanningApi } from '@/lib/api/project-planning';
 import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -63,6 +65,18 @@ export default function ProjectDetailPage() {
   const [form, setForm] = useState<Record<string, any>>({});
   const [uploadCategory, setUploadCategory] = useState('other');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // 3-tab layout — mirrors the Flutter project detail screen.
+  // Overview = project info + milestones + documents + clients.
+  // Phases   = phase list (full editing in /planning).
+  // Tickets  = task list (full editing in /planning).
+  const [activeTab, setActiveTab] = useState<'overview' | 'phases' | 'tickets'>('overview');
+
+  // Tickets-tab filters (mirrors Flutter project-detail Tickets tab).
+  // KPIs always reflect the search-filtered set so the four counters
+  // don't collapse to the active status; the status pill narrows the
+  // visible list only.
+  const [tasksSearch, setTasksSearch] = useState('');
+  const [tasksStatusFilter, setTasksStatusFilter] = useState<string>('all');
 
   const { data: project, isLoading } = useQuery({
     queryKey: ['project-detail', id, user?._type],
@@ -145,6 +159,22 @@ export default function ProjectDetailPage() {
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
   });
+
+  // ── Phases & Tickets (loaded on demand for their tabs) ──
+  const planApi = isAdmin ? projectPlanningApi : isClient ? clientPlanningApi : employeePlanningApi;
+
+  const { data: phases = [], isLoading: phasesLoading } = useQuery({
+    queryKey: ['project-detail-phases', id, user?._type],
+    queryFn: () => planApi.getPhases(Number(id)).then((r: any) => r.data?.data ?? r.data ?? []),
+    enabled: !!project && activeTab === 'phases',
+  });
+
+  const { data: tasksRes, isLoading: tasksLoading } = useQuery({
+    queryKey: ['project-detail-tasks', id, user?._type],
+    queryFn: () => planApi.getTasks(Number(id), { limit: 200 }).then((r: any) => r.data?.data ?? r.data ?? {}),
+    enabled: !!project && activeTab === 'tickets',
+  });
+  const tasks = Array.isArray(tasksRes) ? tasksRes : ((tasksRes as any)?.data ?? []);
 
   // ── Documents (visible to all roles) ──
   const { data: documents, isLoading: docsLoading } = useQuery({
@@ -303,7 +333,7 @@ export default function ProjectDetailPage() {
                   <span className="hidden sm:inline">Edit</span>
                 </Button>
               )}
-              {canViewMilestones && (
+              {/* {canViewMilestones && (
                 <Button variant="outline" size="sm" onClick={() => setMsDialogOpen(true)}>
                   <Milestone className="h-3.5 w-3.5 sm:mr-1.5" />
                   <span className="hidden sm:inline">Milestones</span>
@@ -321,7 +351,7 @@ export default function ProjectDetailPage() {
               >
                 <ClipboardList className="h-4 w-4 sm:mr-1.5" />
                 <span className="hidden sm:inline">Planning</span>
-              </Button>
+              </Button> */}
             </>
           ) : (
             <>
@@ -339,7 +369,38 @@ export default function ProjectDetailPage() {
         </div>
       </div>
 
-      {/* Info Cards */}
+      {/* Tab bar — Overview / Phases / Tickets (mirrors Flutter). Sits
+          right under the header so the active tab decides what content
+          shows below. Hidden in edit mode (the form uses the cards as
+          its body). */}
+      {!editMode && (
+        <div className="flex rounded-lg border border-border bg-muted/50 p-1 w-fit">
+          {([
+            { key: 'overview', label: 'Overview', Icon: ClipboardList },
+            { key: 'phases', label: 'Phases', Icon: Layers },
+            { key: 'tickets', label: 'Tickets', Icon: Ticket },
+          ] as const).map((t) => {
+            const active = activeTab === t.key;
+            return (
+              <button
+                key={t.key}
+                onClick={() => setActiveTab(t.key)}
+                className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all flex items-center gap-1.5 ${
+                  active
+                    ? 'bg-linear-to-r from-violet-500 to-purple-600 text-white shadow-sm'
+                    : 'text-muted-foreground hover:bg-accent/40'
+                }`}
+              >
+                <t.Icon className="h-3.5 w-3.5" />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Info Cards — Overview tab only (and edit mode, which uses these as the form). */}
+      {(editMode || activeTab === 'overview') && (
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
         {/* Project Code — only shown in edit mode as card, in view mode it's in header */}
         {editMode && (
@@ -453,8 +514,10 @@ export default function ProjectDetailPage() {
           </div>
         )}
       </div>
+      )}
 
-      {/* Description */}
+      {/* Description — Overview tab only (and edit mode). */}
+      {(editMode || activeTab === 'overview') && (
       <div className="rounded-xl border bg-card p-4">
         <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">
           <FileText className="h-3 w-3" /> Description
@@ -470,6 +533,279 @@ export default function ProjectDetailPage() {
           />
         )}
       </div>
+      )}
+
+      {/* ── Inline Milestones (Overview tab only) ──────────────────── */}
+      {!editMode && activeTab === 'overview' && canViewMilestones && (
+        <div className="rounded-xl border bg-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-violet-600 dark:text-violet-400">
+              <Milestone className="h-3 w-3" /> Payment Milestones
+              {(milestones as any[]).length > 0 && (
+                <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white px-1">
+                  {(milestones as any[]).length}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {isAdmin && (
+                <Button size="sm" variant="outline" onClick={() => setMsDialogOpen(true)}>
+                  <Pencil className="mr-1.5 h-3.5 w-3.5" /> Manage
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {milestonesLoading ? (
+            <Skeleton className="h-16 w-full" />
+          ) : (milestones as any[]).length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-6">
+              {isAdmin
+                ? 'No milestones yet. Click Manage to add one.'
+                : 'No milestones recorded for this project.'}
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+                    <th className="py-2 pr-2">Name</th>
+                    <th className="py-2 pr-2 text-right">Exp %</th>
+                    <th className="py-2 pr-2 text-right">Exp Amt</th>
+                    <th className="py-2 pr-2 text-right">Recv %</th>
+                    <th className="py-2 text-right">Recv Amt</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(milestones as any[]).map((ms: any) => (
+                    <tr key={ms.id} className="border-b last:border-0 text-sm">
+                      <td className="py-2 pr-2 font-medium">{ms.name}</td>
+                      <td className="py-2 pr-2 text-right">{Number(ms.expectedPercentage ?? 0)}%</td>
+                      <td className="py-2 pr-2 text-right">₹{Number(ms.expectedAmount ?? 0).toLocaleString('en-IN')}</td>
+                      <td className="py-2 pr-2 text-right">{Number(ms.receivedPercentage ?? 0)}%</td>
+                      <td className="py-2 text-right">₹{Number(ms.receivedAmount ?? 0).toLocaleString('en-IN')}</td>
+                    </tr>
+                  ))}
+                  <tr className="text-sm font-semibold bg-muted/30">
+                    <td className="py-2 pr-2">Total</td>
+                    <td className="py-2 pr-2 text-right">{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.expectedPercentage ?? 0), 0)}%</td>
+                    <td className="py-2 pr-2 text-right">₹{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.expectedAmount ?? 0), 0).toLocaleString('en-IN')}</td>
+                    <td className="py-2 pr-2 text-right">{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.receivedPercentage ?? 0), 0)}%</td>
+                    <td className="py-2 text-right">₹{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.receivedAmount ?? 0), 0).toLocaleString('en-IN')}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Phases tab content ──────────────────────────────────────── */}
+      {!editMode && activeTab === 'phases' && (
+        <div className="rounded-xl border bg-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+              <Layers className="h-3 w-3" /> Phases
+              {(phases as any[]).length > 0 && (
+                <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white px-1">
+                  {(phases as any[]).length}
+                </span>
+              )}
+            </div>
+            {!isClient && (
+              <Link href={`/projects/${id}/planning`}>
+                <Button size="sm" variant="outline">
+                  <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Manage in Planning
+                </Button>
+              </Link>
+            )}
+          </div>
+          {phasesLoading ? (
+            <div className="space-y-2">{[...Array(3)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+          ) : (phases as any[]).length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-6">No phases yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {(phases as any[]).map((ph: any) => (
+                <div key={ph.id} className="flex items-center gap-3 rounded-lg border p-3 hover:bg-accent/30 transition-colors">
+                  <div className="h-9 w-9 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
+                    <Layers className="h-4 w-4 text-violet-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{ph.name}</p>
+                    {ph.description && (
+                      <p className="text-xs text-muted-foreground truncate">{ph.description}</p>
+                    )}
+                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+                      {ph.startDate && <span>{formatDate(ph.startDate)}</span>}
+                      {ph.startDate && ph.endDate && <span>→</span>}
+                      {ph.endDate && <span>{formatDate(ph.endDate)}</span>}
+                    </div>
+                  </div>
+                  <span className="rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ring-violet-500/30 bg-violet-500/10 text-violet-600 capitalize shrink-0">
+                    {ph.status?.replace('_', ' ') ?? 'todo'}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Tickets tab content ─────────────────────────────────────── */}
+      {!editMode && activeTab === 'tickets' && (() => {
+        // Tickets first sliced by search (used as the KPI source — so
+        // the counters track typing without collapsing when a status
+        // pill is selected), then by status pill for the visible list.
+        const q = tasksSearch.trim().toLowerCase();
+        const searchFiltered = q
+          ? tasks.filter((tk: any) =>
+              (tk.title?.toLowerCase().includes(q) ?? false) ||
+              (tk.ticketNumber?.toLowerCase().includes(q) ?? false))
+          : tasks;
+        const visible = tasksStatusFilter === 'all'
+          ? searchFiltered
+          : searchFiltered.filter((tk: any) => tk.status === tasksStatusFilter);
+
+        const countBy = (s: string) => searchFiltered.filter((tk: any) => tk.status === s).length;
+        const kpis = [
+          { key: 'todo',         label: 'To Do',       count: countBy('todo'),        color: 'text-slate-600',  bg: 'bg-slate-500/10',  ring: 'ring-slate-500/30' },
+          { key: 'in_progress',  label: 'In Progress', count: countBy('in_progress'), color: 'text-blue-600',   bg: 'bg-blue-500/10',   ring: 'ring-blue-500/30' },
+          { key: 'in_review',    label: 'In Review',   count: countBy('in_review'),   color: 'text-amber-600',  bg: 'bg-amber-500/10',  ring: 'ring-amber-500/30' },
+          { key: 'done',         label: 'Done',        count: countBy('done'),        color: 'text-emerald-600',bg: 'bg-emerald-500/10',ring: 'ring-emerald-500/30' },
+        ] as const;
+
+        const statusPills: { key: string; label: string }[] = [
+          { key: 'all',         label: 'All' },
+          { key: 'todo',        label: 'To Do' },
+          { key: 'in_progress', label: 'In Progress' },
+          { key: 'in_review',   label: 'In Review' },
+          { key: 'done',        label: 'Done' },
+          { key: 'closed',      label: 'Closed' },
+        ];
+
+        return (
+          <div className="rounded-xl border bg-card p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+                <Ticket className="h-3 w-3" /> Tickets
+                {tasks.length > 0 && (
+                  <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white px-1">
+                    {tasks.length}
+                  </span>
+                )}
+              </div>
+              <Link href={`/full-tickets?projectId=${id}`}>
+                <Button size="sm" variant="outline">
+                  <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Open All Tickets
+                </Button>
+              </Link>
+            </div>
+
+            {/* KPI strip — tap a card to apply that status filter, tap
+                the active card again to clear it. */}
+            {tasks.length > 0 && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {kpis.map((kpi) => {
+                  const active = tasksStatusFilter === kpi.key;
+                  return (
+                    <button
+                      key={kpi.key}
+                      onClick={() => setTasksStatusFilter(active ? 'all' : kpi.key)}
+                      className={`rounded-lg border px-3 py-2 text-left transition-all ${
+                        active
+                          ? `${kpi.bg} ring-1 ${kpi.ring} border-transparent`
+                          : 'border-border hover:bg-accent/30'
+                      }`}
+                    >
+                      <p className={`text-[10px] uppercase tracking-wider font-semibold ${kpi.color}`}>
+                        {kpi.label}
+                      </p>
+                      <p className={`text-lg font-bold leading-tight ${active ? kpi.color : 'text-foreground'}`}>
+                        {kpi.count}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Search by title or ticket number. */}
+            {tasks.length > 0 && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Search tickets…"
+                  value={tasksSearch}
+                  onChange={(e) => setTasksSearch(e.target.value)}
+                  className="pl-9 h-9"
+                />
+                {tasksSearch && (
+                  <button
+                    onClick={() => setTasksSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Status pill row — same options as Flutter (includes Closed). */}
+            {tasks.length > 0 && (
+              <div className="flex gap-1.5 overflow-x-auto pb-1">
+                {statusPills.map((p) => {
+                  const active = tasksStatusFilter === p.key;
+                  return (
+                    <button
+                      key={p.key}
+                      onClick={() => setTasksStatusFilter(p.key)}
+                      className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition-all ${
+                        active
+                          ? 'bg-linear-to-r from-violet-500 to-purple-600 text-white shadow-sm'
+                          : 'bg-muted text-muted-foreground hover:bg-accent/40'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* List */}
+            {tasksLoading ? (
+              <div className="space-y-2">{[...Array(4)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
+            ) : tasks.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-6">No tickets yet.</p>
+            ) : visible.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-6">
+                {tasksSearch || tasksStatusFilter !== 'all'
+                  ? 'No tickets match the current filters.'
+                  : 'No tickets yet.'}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {visible.map((tk: any) => (
+                  <Link key={tk.id} href={`/full-tickets/${tk.id}`} className="block">
+                    <div className="flex items-center gap-3 rounded-lg border p-3 hover:bg-accent/30 transition-colors">
+                      <span className="text-[10px] font-mono font-semibold text-violet-600 dark:text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded shrink-0">
+                        {tk.ticketNumber ?? `#${tk.id}`}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{tk.title}</p>
+                      </div>
+                      <span className="rounded-full px-2 py-0.5 text-[10px] font-medium capitalize shrink-0 ring-1 ring-violet-500/30 bg-violet-500/10 text-violet-600">
+                        {(tk.status ?? 'todo').replace('_', ' ')}
+                      </span>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Milestones Dialog (admin, HR, super admin) ─────────────── */}
       <Dialog open={msDialogOpen} onOpenChange={setMsDialogOpen} >
@@ -640,6 +976,7 @@ export default function ProjectDetailPage() {
       </Dialog>
 
       {/* ── Documents (visible to all, editable by admin/HR/PM) ────── */}
+      {(editMode || activeTab === 'overview') && (
       <div className="rounded-xl border bg-card p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
@@ -722,9 +1059,10 @@ export default function ProjectDetailPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* ── Client Users (admin only) ──────────────────────────────── */}
-      {isAdmin && (
+      {(editMode || activeTab === 'overview') && isAdmin && (
         <div className="rounded-xl border bg-card p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
