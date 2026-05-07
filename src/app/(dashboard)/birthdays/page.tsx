@@ -29,6 +29,7 @@ export default function BirthdaysPage() {
         : employeesApi.getUpcomingEvents(Number(days))
       ).then((r) => r.data.data),
   });
+  
 
   const birthdays = (data ?? []).filter((e) => e.type === 'birthday');
   const anniversaries = (data ?? []).filter((e) => e.type === 'anniversary');
