@@ -26,10 +26,10 @@ import { Button } from '@/components/ui/button';
 import { KpiCard } from '@/components/shared/kpi-card';
 import { AnnouncementBanner } from '@/components/shared/announcement-banner';
 import { dashboardApi } from '@/lib/api/dashboard';
-import { myTasksApi } from '@/lib/api/project-planning';
+import { myTasksApi, clientTicketsApi, clientPlanningApi } from '@/lib/api/project-planning';
 import { companiesApi, PlatformDashboard as PlatformDashboardData } from '@/lib/api/companies';
 import { employeesApi } from '@/lib/api/employees';
-import { TodayEvent } from '@/types';
+import { TodayEvent, ProjectTask } from '@/types';
 
 const thisMonth = format(new Date(), 'yyyy-MM');
 const thisMonthLabel = format(new Date(), 'MMMM yyyy');
@@ -705,6 +705,296 @@ function AdminDashboard() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Client Dashboard — read-only project overview for the assigned client
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function ClientDashboard() {
+  const { user } = useAuth();
+  const client = user as {
+    fullName: string;
+    projectId: number;
+    projectName: string | null;
+    companyName: string | null;
+    companyLogoUrl: string | null;
+  };
+  const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
+
+  // Project-level rollup (totals + by-status + by-priority + progress %)
+  const { data: summary, isLoading: summaryLoading } = useQuery({
+    queryKey: ['client-dashboard-summary', client.projectId],
+    queryFn: () => clientPlanningApi.getSummary(client.projectId).then((r) => r.data.data),
+    enabled: !!client.projectId,
+  });
+
+  // Recent tickets across the project (any status) — show 6 newest
+  const { data: recentTickets, isLoading: ticketsLoading } = useQuery({
+    queryKey: ['client-dashboard-recent-tickets', client.projectId],
+    queryFn: () =>
+      clientTicketsApi.getAll({ limit: 6 }).then((r) => (r.data?.data ?? []) as ProjectTask[]),
+  });
+
+  // Tickets where the client is the assignee — first 5
+  const { data: myTickets, isLoading: myTicketsLoading } = useQuery({
+    queryKey: ['client-dashboard-my-tickets'],
+    queryFn: () =>
+      clientTicketsApi.getMyTasks({ limit: 5 }).then((r) => (r.data?.data ?? []) as ProjectTask[]),
+  });
+
+  // Status colour map — keep aligned with the badges used elsewhere
+  const statusColor = (s: string): { bg: string; text: string; ring: string; label: string } => {
+    const map: Record<string, { bg: string; text: string; ring: string; label: string }> = {
+      todo:        { bg: 'bg-slate-500/10',  text: 'text-slate-700 dark:text-slate-300',  ring: 'ring-slate-500/20',  label: 'To Do' },
+      in_progress: { bg: 'bg-blue-500/10',   text: 'text-blue-700 dark:text-blue-300',    ring: 'ring-blue-500/20',   label: 'In Progress' },
+      in_review:   { bg: 'bg-violet-500/10', text: 'text-violet-700 dark:text-violet-300',ring: 'ring-violet-500/20', label: 'In Review' },
+      done:        { bg: 'bg-emerald-500/10',text: 'text-emerald-700 dark:text-emerald-300', ring: 'ring-emerald-500/20', label: 'Done' },
+      closed:      { bg: 'bg-gray-500/10',   text: 'text-gray-700 dark:text-gray-300',    ring: 'ring-gray-500/20',   label: 'Closed' },
+    };
+    return map[s] ?? { bg: 'bg-slate-500/10', text: 'text-slate-700', ring: 'ring-slate-500/20', label: s };
+  };
+
+  const total = summary?.totalTasks ?? 0;
+  const done = summary?.doneTasks ?? 0;
+  const progress = summary?.progress ?? 0;
+  const inProgress = summary?.byStatus?.find((s) => s.status === 'in_progress')?.count ?? 0;
+  const todo = summary?.byStatus?.find((s) => s.status === 'todo')?.count ?? 0;
+
+  return (
+    <div className="space-y-6">
+      {/* Welcome banner */}
+      <div className="relative overflow-hidden rounded-2xl shadow-lg">
+        <div className="absolute inset-0 bg-linear-to-r from-blue-600 via-blue-700 to-blue-900" />
+        <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
+        <div className="absolute -right-4 bottom-2 h-24 w-24 rounded-full bg-blue-300/20 blur-xl" />
+        <div className="relative px-6 py-6 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4 min-w-0">
+            {client.companyLogoUrl ? (
+              <img
+                src={`${apiBase}${client.companyLogoUrl}`}
+                alt={client.companyName ?? ''}
+                className="h-12 w-12 shrink-0 rounded-xl bg-white/15 object-cover ring-1 ring-white/20 shadow-inner"
+              />
+            ) : (
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white/15 backdrop-blur-sm ring-1 ring-white/20">
+                <FolderKanban className="h-6 w-6 text-white" />
+              </div>
+            )}
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-white/75">
+                Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'},
+              </p>
+              <h1 className="text-2xl font-bold text-white mt-0.5 truncate">{client.fullName}</h1>
+              <p className="text-sm text-white/70 mt-0.5 truncate">
+                {client.projectName ? (
+                  <>
+                    Tracking <span className="font-semibold text-white">{client.projectName}</span>
+                    {client.companyName ? <> · {client.companyName}</> : null}
+                  </>
+                ) : (
+                  'Welcome to your project portal'
+                )}
+              </p>
+            </div>
+          </div>
+          {client.projectId ? (
+            <Button asChild size="sm" className="shrink-0 bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg">
+              <Link href={`/projects/${client.projectId}`}>
+                <FolderKanban className="mr-1.5 h-4 w-4" />
+                View Project
+                <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Active announcements */}
+      <AnnouncementBanner />
+
+      {/* KPI row */}
+      {summaryLoading ? (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <KpiCard
+            title="Total Tickets"
+            value={total}
+            icon={Ticket}
+            gradient="bg-gradient-to-br from-blue-600 to-blue-800"
+            textColor="text-white"
+          />
+          <KpiCard
+            title="In Progress"
+            value={inProgress}
+            icon={PlayCircle}
+            gradient="bg-gradient-to-br from-amber-500 to-orange-600"
+            textColor="text-white"
+          />
+          <KpiCard
+            title="To Do"
+            value={todo}
+            icon={ListTodo}
+            gradient="bg-gradient-to-br from-slate-500 to-slate-700"
+            textColor="text-white"
+          />
+          <KpiCard
+            title="Progress"
+            value={`${Math.round(progress)}%`}
+            sub={`${done} of ${total} done`}
+            icon={CircleCheckBig}
+            gradient="bg-gradient-to-br from-emerald-500 to-teal-600"
+            textColor="text-white"
+          />
+        </div>
+      )}
+
+      {/* Quick actions — 3 brand-blue tiles mirroring the Flutter client view */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {[
+          {
+            label: 'My Project',
+            description: 'Project overview & documents',
+            href: client.projectId ? `/projects/${client.projectId}` : '/projects',
+            icon: FolderKanban,
+            gradient: 'from-blue-600 to-blue-800',
+          },
+          {
+            label: 'All Tickets',
+            description: 'Browse every project ticket',
+            href: '/full-tickets',
+            icon: Ticket,
+            gradient: 'from-blue-500 to-indigo-700',
+          },
+          {
+            label: 'My Tickets',
+            description: 'Tickets assigned to you',
+            href: '/my-tasks',
+            icon: ListTodo,
+            gradient: 'from-indigo-500 to-blue-700',
+          },
+        ].map(({ label, description, href, icon: Icon, gradient }) => (
+          <Link
+            key={label}
+            href={href}
+            className="group relative overflow-hidden rounded-2xl bg-card ring-1 ring-border shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all"
+          >
+            <div className={`absolute inset-x-0 top-0 h-1 bg-linear-to-r ${gradient}`} />
+            <div className="p-5 flex items-center gap-4">
+              <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-linear-to-br ${gradient} text-white shadow-md`}>
+                <Icon className="h-6 w-6" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-base font-semibold text-foreground">{label}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground/60 group-hover:text-blue-600 group-hover:translate-x-0.5 transition" />
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      {/* Two-column: Recent tickets + My tickets */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Recent project tickets */}
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Ticket className="h-4 w-4 text-blue-600" />
+                Recent Project Tickets
+              </CardTitle>
+              <Link href="/full-tickets">
+                <Button variant="ghost" size="sm" className="gap-1 text-xs h-7 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10">
+                  View all <ArrowRight className="h-3 w-3" />
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {ticketsLoading ? (
+              [...Array(4)].map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)
+            ) : (recentTickets ?? []).length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">No tickets yet.</p>
+            ) : (
+              (recentTickets ?? []).map((t) => {
+                const sc = statusColor(t.status as string);
+                return (
+                  <Link
+                    key={t.id}
+                    href={`/full-tickets/${t.id}`}
+                    className="group flex items-center gap-3 rounded-lg p-2.5 hover:bg-blue-500/5 transition"
+                  >
+                    {t.ticketNumber && (
+                      <span className="font-mono text-[10px] font-bold text-blue-700 dark:text-blue-300 bg-blue-500/10 px-2 py-1 rounded ring-1 ring-blue-500/20 shrink-0">
+                        {t.ticketNumber}
+                      </span>
+                    )}
+                    <p className="text-sm font-medium text-foreground truncate flex-1 group-hover:text-blue-600 transition">
+                      {t.title}
+                    </p>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ring-1 shrink-0 ${sc.bg} ${sc.text} ${sc.ring}`}>
+                      {sc.label}
+                    </span>
+                  </Link>
+                );
+              })
+            )}
+          </CardContent>
+        </Card>
+
+        {/* My tickets (assigned to client) */}
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <ListTodo className="h-4 w-4 text-indigo-600" />
+                My Tickets
+              </CardTitle>
+              <Link href="/my-tasks">
+                <Button variant="ghost" size="sm" className="gap-1 text-xs h-7 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10">
+                  View all <ArrowRight className="h-3 w-3" />
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {myTicketsLoading ? (
+              [...Array(4)].map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)
+            ) : (myTickets ?? []).length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">Nothing assigned to you yet.</p>
+            ) : (
+              (myTickets ?? []).map((t) => {
+                const sc = statusColor(t.status as string);
+                return (
+                  <Link
+                    key={t.id}
+                    href={`/full-tickets/${t.id}`}
+                    className="group flex items-center gap-3 rounded-lg p-2.5 hover:bg-blue-500/5 transition"
+                  >
+                    {t.ticketNumber && (
+                      <span className="font-mono text-[10px] font-bold text-blue-700 dark:text-blue-300 bg-blue-500/10 px-2 py-1 rounded ring-1 ring-blue-500/20 shrink-0">
+                        {t.ticketNumber}
+                      </span>
+                    )}
+                    <p className="text-sm font-medium text-foreground truncate flex-1 group-hover:text-blue-600 transition">
+                      {t.title}
+                    </p>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ring-1 shrink-0 ${sc.bg} ${sc.text} ${sc.ring}`}>
+                      {sc.label}
+                    </span>
+                  </Link>
+                );
+              })
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    Platform Dashboard — super admin without company selected
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -790,6 +1080,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const { isSuperAdmin, selectedCompany } = useCompany();
 
+  if (user?._type === 'client') return <ClientDashboard />;
   if (user?._type === 'employee') return <EmployeeDashboard />;
   if (isSuperAdmin && !selectedCompany) return <PlatformDashboard />;
   return <AdminDashboard />;
