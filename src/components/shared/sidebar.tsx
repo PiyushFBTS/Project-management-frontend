@@ -181,7 +181,7 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isClient }: { onN
   // Super admin without company selected → show platform nav
   const baseItems = isSuperAdmin && !selectedCompany ? platformNavItems : navItems;
 
-  const clientAllowedLabels = ['Projects', 'All Tickets', 'My Tasks'];
+  const clientAllowedLabels = ['Dashboard', 'Projects', 'All Tickets', 'My Tasks'];
 
   const visibleItems = (() => {
     if (isClient) return baseItems.filter((item) => clientAllowedLabels.includes(item.label));

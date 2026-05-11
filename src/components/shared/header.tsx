@@ -2,14 +2,14 @@
 'use client';
 
 import { useAuth } from '@/providers/auth-provider';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import Link from 'next/link';
-import { LogOut, User, Menu, ChevronDown, Search, Building2 } from 'lucide-react';
+import { LogOut, User, Menu, ChevronDown, Building2 } from 'lucide-react';
 import { ThemeToggle } from './theme-toggle';
 import { CompanySelector } from './company-selector';
 import { Button } from '@/components/ui/button';
@@ -17,43 +17,12 @@ import { Badge } from '@/components/ui/badge';
 import { useSidebar } from '@/providers/sidebar-provider';
 import { useCompany } from '@/providers/company-provider';
 import { NotificationBell } from './notification-bell';
-import { useState } from 'react';
-
-const pageTitles: Record<string, string> = {
-  '/dashboard':             'Dashboard',
-  '/companies':             'Companies',
-  '/projects':              'Projects',
-  '/task-types':            'Task Types',
-  '/employees':             'Employees',
-  '/task-sheets':           'Task Sheets',
-  '/leave-types':           'Leave Types',
-  '/leave-requests':        'Leave Requests',
-  '/leave-balance':         'Leave Balance',
-  '/task-sheets/fill':      'Fill Task Sheet',
-  '/reports/employee-wise': 'Employee-Wise Report',
-  '/reports/project-wise':  'Project-Wise Report',
-  '/reports/daily-fill':    'Daily Fill Report',
-  '/profile':               'My Profile',
-  '/settings':              'Settings',
-  '/my-tasks':              'My Tasks',
-  '/notifications':         'Notifications',
-  '/announcements':         'Announcements',
-  '/email-inbox':           'Email Inbox',
-};
-
-const pageParents: Record<string, string> = {
-  '/reports/employee-wise': 'Reports',
-  '/reports/project-wise':  'Reports',
-  '/reports/daily-fill':    'Reports',
-};
 
 export function Header() {
   const { user, logout } = useAuth();
   const { toggle } = useSidebar();
   const { selectedCompany, isSuperAdmin } = useCompany();
   const router = useRouter();
-  const pathname = usePathname();
-  const [searchOpen, setSearchOpen] = useState(false);
   const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
 
   const handleLogout = () => { logout(); router.push('/login'); };
@@ -73,14 +42,6 @@ export function Header() {
   const initials = displayName
     ? displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
     : 'U';
-
-  const title = Object.entries(pageTitles).find(([k]) =>
-    pathname === k || pathname.startsWith(k + '/')
-  )?.[1] ?? 'Portal';
-
-  const parent = Object.entries(pageParents).find(([k]) =>
-    pathname === k || pathname.startsWith(k + '/')
-  )?.[1];
 
   const roleLabel = user?._type === 'employee'
     ? 'Employee'
@@ -103,20 +64,26 @@ export function Header() {
         </Button>
 
         <div className="flex items-center gap-2 min-w-0">
-          {/* Company logo: own company for admin/employee, selected company for super admin */}
-          {logoUrl && (
-            <>
-              <img src={`${apiBase}${logoUrl}`} alt={logoName ?? ''} className="h-7 w-7 rounded-md object-cover ring-1 ring-border/50 shrink-0" />
-              <div className="h-4 w-px bg-border/60 shrink-0" />
-            </>
-          )}
-          {parent && (
-            <>
-              <span className="hidden text-xs font-medium text-muted-foreground sm:block">{parent}</span>
-              <span className="hidden text-muted-foreground/40 sm:block">/</span>
-            </>
-          )}
-          <h1 className="text-sm font-semibold text-foreground truncate">{title}</h1>
+          {/* Company logo / icon doubles as a "home" link — clicking
+              jumps back to the dashboard. Own company for admin /
+              employee, selected company for super admin. */}
+          <Link
+            href="/dashboard"
+            aria-label="Go to dashboard"
+            className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary/40 hover:opacity-90 transition"
+          >
+            {logoUrl ? (
+              <img
+                src={`${apiBase}${logoUrl}`}
+                alt={logoName ?? ''}
+                className="h-7 w-7 rounded-md object-cover ring-1 ring-border/50 shrink-0"
+              />
+            ) : (
+              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 ring-1 ring-border/50 shrink-0">
+                <Building2 className="h-4 w-4 text-primary" />
+              </div>
+            )}
+          </Link>
           <Badge
             variant="outline"
             className="hidden text-[10px] font-medium sm:inline-flex bg-primary/8 text-primary border-primary/20"

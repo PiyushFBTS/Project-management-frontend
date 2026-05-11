@@ -95,7 +95,7 @@ export default function LoginPage() {
           </ul>
         </div>
 
-        <p className="text-xs text-indigo-300">&copy; 2026 IT Project Management System &middot; v3.0</p>
+        <p className="text-xs text-indigo-300">&copy; 2026 Flamboyant Technologies pvt ltd IT Project Management System &middot; v3.0</p>
       </div>
 
       {/* ── Right panel: login form ── */}

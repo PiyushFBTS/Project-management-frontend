@@ -753,8 +753,6 @@ function ClientDashboard() {
   };
 
   const total = summary?.totalTasks ?? 0;
-  const done = summary?.doneTasks ?? 0;
-  const progress = summary?.progress ?? 0;
   const inProgress = summary?.byStatus?.find((s) => s.status === 'in_progress')?.count ?? 0;
   const todo = summary?.byStatus?.find((s) => s.status === 'todo')?.count ?? 0;
 
@@ -812,11 +810,11 @@ function ClientDashboard() {
 
       {/* KPI row */}
       {summaryLoading ? (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <KpiCard
             title="Total Tickets"
             value={total}
@@ -836,14 +834,6 @@ function ClientDashboard() {
             value={todo}
             icon={ListTodo}
             gradient="bg-gradient-to-br from-slate-500 to-slate-700"
-            textColor="text-white"
-          />
-          <KpiCard
-            title="Progress"
-            value={`${Math.round(progress)}%`}
-            sub={`${done} of ${total} done`}
-            icon={CircleCheckBig}
-            gradient="bg-gradient-to-br from-emerald-500 to-teal-600"
             textColor="text-white"
           />
         </div>
