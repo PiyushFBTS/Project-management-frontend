@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 const EXPENSE_TYPES = [
   'Travel', 'Food', 'Accommodation', 'Transport', 'Office Supplies',
@@ -46,17 +47,35 @@ export default function NewExpensePage() {
   };
 
   const { data: projectsRaw } = useQuery({
-    queryKey: ['projects-for-expenses'],
+    queryKey: ['projects-for-expenses', isAdmin],
     queryFn: async () => {
       const { api } = await import('@/lib/api/axios-instance');
-      const prefix = isAdmin ? '/admin' : '/employee';
-      const r = await api.get(`${prefix}/projects`);
+      // Use the dropdown-friendly `all-active` endpoint. Admin lives at
+      // `/projects/all-active` (the admin controller mounts at `/projects`,
+      // NOT `/admin/projects`); employee lives at `/employee/projects/all-active`.
+      const path = isAdmin ? '/projects/all-active' : '/employee/projects/all-active';
+      const r = await api.get(path);
       const d = r.data;
-      return Array.isArray(d?.data) ? d.data : Array.isArray(d) ? d : [];
+      // Walk every wrapped shape: raw array, single-wrap, double-wrap (paginated).
+      if (Array.isArray(d)) return d;
+      if (Array.isArray(d?.data)) return d.data;
+      if (Array.isArray(d?.data?.data)) return d.data.data;
+      return [];
     },
     enabled: !!user,
   });
   const projects: any[] = Array.isArray(projectsRaw) ? projectsRaw : [];
+
+  // Options for the searchable project picker — mirrors how Flutter
+  // builds its dropdown source list. "None" is always available so the
+  // expense can be filed without a project.
+  const projectOptions = [
+    { value: 'none', label: 'None' },
+    ...projects.map((p: any) => ({
+      value: String(p.id),
+      label: p.projectCode ? `${p.projectCode} · ${p.projectName}` : p.projectName,
+    })),
+  ];
 
   const createMut = useMutation({
     mutationFn: async () => {
@@ -159,13 +178,12 @@ export default function NewExpensePage() {
                   <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5 mb-2">
                     <FolderKanban className="h-3.5 w-3.5 text-primary" /> Project
                   </label>
-                  <Select value={formProjectId || 'none'} onValueChange={(v) => setFormProjectId(v === 'none' ? '' : v)}>
-                    <SelectTrigger className='w-full'><SelectValue placeholder="Select project..." /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {projects.map((p: any) => <SelectItem key={p.id} value={String(p.id)}>{p.projectName}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    value={formProjectId || 'none'}
+                    onValueChange={(v) => setFormProjectId(v === 'none' ? '' : v)}
+                    options={projectOptions}
+                    placeholder="Search projects..."
+                  />
                 </div>
 
                 <div>

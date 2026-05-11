@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, use } from 'react';
+import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -43,6 +43,12 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
   const [approveOpen, setApproveOpen] = useState(false);
   const [approveAmount, setApproveAmount] = useState('');
   const [approveRemarks, setApproveRemarks] = useState('');
+  // Set to true when the inline image preview fails to load (e.g. the
+  // file was uploaded to an ephemeral disk that's since been wiped, or
+  // CORS / server hiccup). We then fall back to the same file-card UI
+  // used for non-image attachments so the user always has a working
+  // download path.
+  const [imgFailed, setImgFailed] = useState(false);
 
   const { data: expense, isLoading } = useQuery({
     queryKey: ['expense-detail', expenseId],
@@ -53,6 +59,14 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
     },
     enabled: !!user && !!expenseId,
   });
+
+  // Reset the broken-image flag whenever the underlying attachment path
+  // changes (e.g. after the user edited and replaced the receipt). Keeps
+  // the inline preview from staying stuck on a stale failure.
+  const attachmentPath = (expense as any)?.attachmentPath;
+  useEffect(() => {
+    setImgFailed(false);
+  }, [attachmentPath]);
 
   const statusMut = useMutation({
     mutationFn: ({ status, remarks, approvedAmount: amt }: { status: 'approved' | 'rejected'; remarks?: string; approvedAmount?: number }) =>
@@ -123,8 +137,30 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
 
   const e = expense;
   const sc = STATUS_CONFIG[e.status] ?? STATUS_CONFIG.pending;
+
+  // Edit affordance — only while pending and only for the originator.
+  // Backend enforces both guards; mirror them so the button doesn't
+  // appear in dead states.
+  const canEdit = e.status === 'pending' && (() => {
+    const isOwnAdmin =
+      isAdmin && e.submitterAdminId != null && e.submitterAdminId === (user as any)?.id;
+    const isOwnAdminLegacy =
+      isAdmin && e.submitterType === 'admin' && e.submitterAdminId == null
+      && e.submitterName != null && e.submitterName === (user as any)?.name;
+    const isOwnEmployee =
+      isEmployee && e.employeeId != null && e.employeeId === (user as any)?.id;
+    return isOwnAdmin || isOwnAdminLegacy || isOwnEmployee;
+  })();
   const StatusIcon = sc.icon;
-  const isImage = e.attachmentName?.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+  // Detect "is an image" from BOTH the original filename and the stored
+  // path. Users sometimes upload files with no extension as the display
+  // name (e.g. "Receipt"), but the stored path always preserves the real
+  // extension via multer's `extname()`, so the path is the source of
+  // truth.
+  const isImage = !!(
+    (e.attachmentPath && /\.(jpg|jpeg|png|gif|webp)$/i.test(e.attachmentPath)) ||
+    (e.attachmentName && /\.(jpg|jpeg|png|gif|webp)$/i.test(e.attachmentName))
+  );
 
   return (
     <div className="space-y-6">
@@ -144,10 +180,21 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
             </div>
           </div>
         </div>
-        <Badge className={`text-sm border px-3 py-1.5 ${sc.bg} ${sc.color} ${sc.border}`}>
-          <StatusIcon className="h-4 w-4 mr-1.5" />
-          {sc.label}
-        </Badge>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {canEdit && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push(`/expenses/${expenseId}/edit`)}
+            >
+              <Receipt className="h-4 w-4 mr-1.5" /> Edit Expense
+            </Button>
+          )}
+          <Badge className={`text-sm border px-3 py-1.5 ${sc.bg} ${sc.color} ${sc.border}`}>
+            <StatusIcon className="h-4 w-4 mr-1.5" />
+            {sc.label}
+          </Badge>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -296,22 +343,58 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
             <Card>
               <CardContent className="p-6">
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Receipt / Proof</h3>
-                {isImage ? (
-                  <a href={`${apiBase}${e.attachmentPath}`} target="_blank" rel="noreferrer" className="block">
-                    <img src={`${apiBase}${e.attachmentPath}`} alt="Receipt" className="max-h-80 rounded-xl border shadow-sm mx-auto hover:shadow-md transition-shadow" />
-                  </a>
+                {isImage && !imgFailed ? (
+                  // Inline preview for image attachments. Click to open
+                  // full-size in a new tab; a separate Download button
+                  // below lets the user save the original file. If the
+                  // image src fails to load (network / wiped uploads),
+                  // we swap to the file-card UI below.
+                  <div className="space-y-3">
+                    <a href={`${apiBase}${e.attachmentPath}`} target="_blank" rel="noreferrer" className="block">
+                      <img
+                        src={`${apiBase}${e.attachmentPath}`}
+                        alt={e.attachmentName || 'Receipt'}
+                        onError={() => setImgFailed(true)}
+                        className="max-h-80 w-auto mx-auto rounded-xl border shadow-sm hover:shadow-md transition-shadow"
+                      />
+                    </a>
+                    <div className="flex items-center justify-center">
+                      <a
+                        href={`${apiBase}${e.attachmentPath}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        download={e.attachmentName || undefined}
+                        className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Download
+                      </a>
+                    </div>
+                  </div>
                 ) : (
-                  <a href={`${apiBase}${e.attachmentPath}`} target="_blank" rel="noreferrer"
-                    className="flex items-center gap-4 p-4 bg-muted/30 rounded-xl hover:bg-muted/50 transition-colors border border-dashed">
-                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                  // Non-image OR failed image → file-card with explicit
+                  // Download button so the user can always grab the file.
+                  <div className="flex items-center gap-4 p-4 bg-muted/30 rounded-xl border border-dashed">
+                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                       <FileText className="h-6 w-6 text-primary" />
                     </div>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold">{e.attachmentName}</p>
-                      <p className="text-xs text-muted-foreground">Click to download</p>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate">{e.attachmentName || 'Receipt'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {imgFailed ? 'Inline preview unavailable — download instead' : 'Click to download'}
+                      </p>
                     </div>
-                    <Download className="h-5 w-5 text-muted-foreground" />
-                  </a>
+                    <a
+                      href={`${apiBase}${e.attachmentPath}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      download={e.attachmentName || undefined}
+                      className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent shrink-0"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Download
+                    </a>
+                  </div>
                 )}
               </CardContent>
             </Card>

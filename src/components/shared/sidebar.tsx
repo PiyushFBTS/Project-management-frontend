@@ -107,7 +107,7 @@ const navItems: NavItem[] = [
     children: [
       { label: 'Sheet History', href: '/reports/sheet-history', dotColor: 'bg-blue-400' },
       { label: 'Employee-Wise', href: '/reports/employee-wise', dotColor: 'bg-indigo-400' },
-      { label: 'Project-Wise', href: '/reports/project-wise', dotColor: 'bg-violet-400' },
+      { label: 'Project-Wise', href: '/reports/project-wise', dotColor: 'bg-violet-400', hrOrAdminOnly: true },
       { label: 'Daily Fill', href: '/reports/daily-fill', dotColor: 'bg-emerald-400' },
       { label: 'Last Filled', href: '/reports/last-filled', dotColor: 'bg-rose-400', hrOrAdminOnly: true },
       { label: 'Monthly Grid', href: '/reports/monthly-grid', dotColor: 'bg-cyan-400' },

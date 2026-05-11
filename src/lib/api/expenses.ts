@@ -45,6 +45,11 @@ export const adminExpensesApi = {
   create: (data: FormData) =>
     api.post('/admin/expenses', data),
 
+  // Admin edits own pending expense. Backend enforces both "own" (via
+  // submitterAdminId) and "pending" — the UI mirrors the gate.
+  update: (id: number, data: FormData) =>
+    api.patch(`/admin/expenses/${id}`, data),
+
   updateStatus: (id: number, status: 'approved' | 'rejected', remarks?: string, approvedAmount?: number) =>
     api.patch(`/admin/expenses/${id}/status`, { status, ...(approvedAmount !== undefined ? { approvedAmount } : {}), ...(remarks ? { remarks } : {}) }),
 
