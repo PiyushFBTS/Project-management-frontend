@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/providers/auth-provider';
 import { useRouter } from 'next/navigation';
 import {
@@ -9,7 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import Link from 'next/link';
-import { LogOut, User, Menu, ChevronDown, Building2 } from 'lucide-react';
+import { LogOut, User, Menu, ChevronDown, Building2, Search } from 'lucide-react';
 import { ThemeToggle } from './theme-toggle';
 import { CompanySelector } from './company-selector';
 import { Button } from '@/components/ui/button';
@@ -17,13 +18,27 @@ import { Badge } from '@/components/ui/badge';
 import { useSidebar } from '@/providers/sidebar-provider';
 import { useCompany } from '@/providers/company-provider';
 import { NotificationBell } from './notification-bell';
+import { useGlobalSearch } from './global-search';
 
 export function Header() {
   const { user, logout } = useAuth();
   const { toggle } = useSidebar();
   const { selectedCompany, isSuperAdmin } = useCompany();
+  const { open: openGlobalSearch } = useGlobalSearch();
   const router = useRouter();
   const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
+  // Hide the search trigger for client logins — backend rejects their
+  // token at /admin/search and /employee/search, and clients have a
+  // narrow visibility surface anyway.
+  const showGlobalSearch = user && user._type !== 'client';
+  // Detect macOS for the keyboard-hint label (Cmd vs Ctrl). Done in
+  // useEffect to avoid SSR/hydration drift.
+  const [isMac, setIsMac] = useState(false);
+  useEffect(() => {
+    if (typeof navigator !== 'undefined') {
+      setIsMac(/Mac|iPhone|iPod|iPad/i.test(navigator.platform));
+    }
+  }, []);
 
   const handleLogout = () => { logout(); router.push('/login'); };
 
@@ -97,6 +112,33 @@ export function Header() {
 
       {/* Right: actions */}
       <div className="flex items-center gap-1.5">
+        {/* Global search — opens the command palette. Full pill on
+            ≥md screens (with the Cmd/Ctrl+K keyboard hint), compact
+            icon on smaller widths. Hidden for client logins. */}
+        {showGlobalSearch && (
+          <>
+            <button
+              onClick={openGlobalSearch}
+              className="hidden md:inline-flex items-center gap-2 rounded-md border border-border/60 bg-background/60 hover:bg-accent/50 hover:border-blue-500/30 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors min-w-56"
+              aria-label="Open global search"
+            >
+              <Search className="h-3.5 w-3.5" />
+              <span className="flex-1 text-left">Search…</span>
+              <kbd className="inline-flex items-center gap-0.5 rounded border px-1 py-0.5 text-[10px] font-mono">
+                {isMac ? '⌘' : 'Ctrl'}<span>K</span>
+              </kbd>
+            </button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="md:hidden h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={openGlobalSearch}
+              aria-label="Open global search"
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+          </>
+        )}
 
         <ThemeToggle />
 
