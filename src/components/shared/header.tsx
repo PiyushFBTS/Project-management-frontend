@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
@@ -106,12 +107,6 @@ export function Header() {
             {roleLabel}
           </Badge>
         </div>
-
-        <CompanySelector />
-      </div>
-
-      {/* Right: actions */}
-      <div className="flex items-center gap-1.5">
         {/* Global search — opens the command palette. Full pill on
             ≥md screens (with the Cmd/Ctrl+K keyboard hint), compact
             icon on smaller widths. Hidden for client logins. */}
@@ -139,6 +134,14 @@ export function Header() {
             </Button>
           </>
         )}
+
+
+        <CompanySelector />
+
+      </div>
+
+      {/* Right: actions */}
+      <div className="flex items-center gap-1.5">
 
         <ThemeToggle />
 
