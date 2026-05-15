@@ -89,8 +89,8 @@ export default function EmailLogDetailPage() {
     <div className="space-y-4 p-4 md:p-6">
       {/* Back + header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" className="gap-1.5 -ml-1" onClick={() => router.push('/email-inbox')}>
-          <ArrowLeft className="h-4 w-4" /> Back to Inbox
+        <Button variant="ghost" size="sm" className="gap-1.5 -ml-1" onClick={() => router.push('/email-outbox')}>
+          <ArrowLeft className="h-4 w-4" /> Back to Outbox
         </Button>
       </div>
 

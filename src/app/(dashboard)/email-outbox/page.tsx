@@ -58,7 +58,7 @@ function StatusBadge({ status }: { status: string }) {
 
 // ── Main Page Content ─────────────────────────────────────────────────────────
 
-function EmailInboxContent() {
+function EmailOutboxContent() {
   const { isSuperAdmin, selectedCompany } = useCompany();
   const router = useRouter();
 
@@ -107,7 +107,7 @@ function EmailInboxContent() {
               <Mail className="h-6 w-6 text-white" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Email Inbox</h1>
+              <h1 className="text-2xl font-bold tracking-tight">Email Outbox</h1>
               <p className="text-sky-100 text-sm mt-0.5">
                 {isSuperAdmin && selectedCompany
                   ? `Emails for ${selectedCompany.name}`
@@ -202,7 +202,7 @@ function EmailInboxContent() {
                 <TableRow
                   key={log.id}
                   className="cursor-pointer transition-colors hover:bg-muted/50"
-                  onClick={() => router.push(`/email-inbox/${log.id}`)}
+                  onClick={() => router.push(`/email-outbox/${log.id}`)}
                 >
                   <TableCell className="font-medium max-w-48 truncate">
                     {log.subject ?? <span className="text-muted-foreground italic">(No subject)</span>}
@@ -224,7 +224,7 @@ function EmailInboxContent() {
                   </TableCell>
                   <TableCell>
                     <button
-                      onClick={(e) => { e.stopPropagation(); router.push(`/email-inbox/${log.id}`); }}
+                      onClick={(e) => { e.stopPropagation(); router.push(`/email-outbox/${log.id}`); }}
                       className="rounded p-1 hover:bg-muted transition-colors"
                       title="View details"
                     >
@@ -267,10 +267,10 @@ function EmailInboxContent() {
   );
 }
 
-export default function EmailInboxPage() {
+export default function EmailOutboxPage() {
   return (
     <Suspense>
-      <EmailInboxContent />
+      <EmailOutboxContent />
     </Suspense>
   );
 }

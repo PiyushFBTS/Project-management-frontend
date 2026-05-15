@@ -21,6 +21,13 @@ export const reportsApi = {
       params: { from_date: fromDate, to_date: toDate },
     }),
 
+  // Admin Excel export of an employee's breakdown.
+  exportEmployeeBreakdown: (employeeId: number, fromDate: string, toDate: string) =>
+    api.get(`/admin/reports/employee/${employeeId}/breakdown/export`, {
+      params: { from_date: fromDate, to_date: toDate },
+      responseType: 'blob',
+    }),
+
   getDailyFill: (date: string) =>
     api.get<ApiResponse<DailyFillReport>>('/admin/reports/daily-fill', { params: { date } }),
 
@@ -57,6 +64,13 @@ export const reportsApi = {
   employeeGetEmployeeBreakdown: (employeeId: number, fromDate: string, toDate: string) =>
     api.get(`/employee/reports/employee/${employeeId}/breakdown`, {
       params: { from_date: fromDate, to_date: toDate },
+    }),
+
+  // Employee Excel export of own (or HR-viewed) breakdown.
+  employeeExportEmployeeBreakdown: (employeeId: number, fromDate: string, toDate: string) =>
+    api.get(`/employee/reports/employee/${employeeId}/breakdown/export`, {
+      params: { from_date: fromDate, to_date: toDate },
+      responseType: 'blob',
     }),
 
   employeeGetDailyFill: (date: string) =>

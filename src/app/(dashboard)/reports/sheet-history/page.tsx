@@ -7,10 +7,12 @@ import Link from 'next/link';
 import {
   Search, ClipboardList, Eye, X, CalendarDays, Clock, Award,
   CheckCircle2, FileEdit, ChevronRight, User, Users, Building2,
-  AlertCircle, Filter, RefreshCw,
+  AlertCircle, Filter, RefreshCw, Download,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { taskSheetsApi } from '@/lib/api/task-sheets';
 import { employeesApi } from '@/lib/api/employees';
+import { downloadBlob } from '@/lib/utils/download';
 import { useAuth } from '@/providers/auth-provider';
 import { useCompany } from '@/providers/company-provider';
 import { Button } from '@/components/ui/button';
@@ -141,6 +143,37 @@ export default function SheetHistoryReportPage() {
     queryClient.invalidateQueries({ queryKey: ['sheet-history-team'] });
   };
 
+  const [exporting, setExporting] = useState(false);
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const dateRange = {
+        ...(fromDate ? { fromDate } : {}),
+        ...(toDate ? { toDate } : {}),
+      };
+      const isTeam = canSeeTeam && tab === 'team';
+      // Mirror the active tab's filters so the export matches what the user sees.
+      const res = isTeam
+        ? await taskSheetsApi.adminExportTeam({
+            ...dateRange,
+            ...(employeeId !== 'all' ? { employeeId: Number(employeeId) } : {}),
+            ...(statusFilter !== 'all' ? { isSubmitted: statusFilter === 'submitted' } : {}),
+          })
+        : await taskSheetsApi.exportHistory(dateRange);
+      const tag = `${fromDate || 'all'}_${toDate || 'all'}`;
+      const filename = isTeam
+        ? `task-sheet-history-team-${tag}.xlsx`
+        : `task-sheet-history-${tag}.xlsx`;
+      downloadBlob(res.data as Blob, filename);
+      toast.success('Export downloaded');
+    } catch {
+      toast.error('Export failed');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   // ── Sub-renderers ────────────────────────────────────────────────────────
 
   const renderSummaryStrip = (rows: DailyTaskSheet[]) => {
@@ -258,17 +291,16 @@ export default function SheetHistoryReportPage() {
             </div>
 
             <div className="ml-auto flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-blue-600 hover:bg-blue-500/10"
-                onClick={(e) => e.stopPropagation()}
-                asChild
+              {/* The whole card is already a <Link> to /task-sheets/:id —
+                  rendering a second <Link> here for the Eye icon nested
+                  an <a> inside an <a> (invalid HTML, hydration error).
+                  Keep the Eye as a non-interactive icon-button shape. */}
+              <span
+                aria-hidden
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground group-hover:text-blue-600 group-hover:bg-blue-500/10 transition-colors"
               >
-                <Link href={`/task-sheets/${s.id}`}>
-                  <Eye className="h-4 w-4" />
-                </Link>
-              </Button>
+                <Eye className="h-4 w-4" />
+              </span>
               <ChevronRight className="h-4 w-4 text-muted-foreground/60 group-hover:text-blue-600 group-hover:translate-x-0.5 transition" />
             </div>
           </div>
@@ -291,7 +323,7 @@ export default function SheetHistoryReportPage() {
           <p className="text-sm font-semibold text-foreground">Select a company first</p>
           <p className="mt-1 text-xs text-muted-foreground max-w-md mx-auto">
             You&apos;re signed in as a super admin. Pick a company from the
-            switcher in the header to view its sheet history.
+            switcher in the header to view its task sheet history.
           </p>
         </div>
       );
@@ -438,6 +470,15 @@ export default function SheetHistoryReportPage() {
             <X className="h-3.5 w-3.5 mr-1" /> Clear
           </Button>
         )}
+        <Button
+          size="sm"
+          onClick={handleExport}
+          disabled={exporting || needsCompanyContext}
+          className="h-9 bg-linear-to-r from-blue-600 to-blue-800 text-white hover:opacity-90 shadow-sm shadow-blue-500/25 border-0"
+        >
+          <Download className="h-3.5 w-3.5 mr-1.5" />
+          {exporting ? 'Exporting…' : 'Export Excel'}
+        </Button>
       </div>
     </div>
   );
@@ -458,7 +499,7 @@ export default function SheetHistoryReportPage() {
               <ClipboardList className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white">Sheet History</h1>
+              <h1 className="text-xl font-bold text-white">Task Sheet History</h1>
               <p className="text-sm text-white/75">Daily task-sheet submissions and drafts</p>
             </div>
           </div>

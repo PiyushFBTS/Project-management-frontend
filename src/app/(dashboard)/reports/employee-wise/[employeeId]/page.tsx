@@ -1,12 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { use } from 'react';
+import { use, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { format } from 'date-fns';
-import { ArrowLeft, BarChart3, FolderKanban, Ticket as TicketIcon } from 'lucide-react';
+import { ArrowLeft, BarChart3, FolderKanban, Ticket as TicketIcon, Download } from 'lucide-react';
+import { toast } from 'sonner';
 import { reportsApi } from '@/lib/api/reports';
+import { downloadBlob } from '@/lib/utils/download';
 import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -86,6 +88,24 @@ export default function EmployeeBreakdownPage({
     total_man_days: number;
   };
 
+  const [exporting, setExporting] = useState(false);
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const res = isEmployee
+        ? await reportsApi.employeeExportEmployeeBreakdown(employeeId, fromDate, toDate)
+        : await reportsApi.exportEmployeeBreakdown(employeeId, fromDate, toDate);
+      const filename = `employee-breakdown-${employee?.emp_code ?? employeeId}-${fromDate}_${toDate}.xlsx`;
+      downloadBlob(res.data as Blob, filename);
+      toast.success('Export downloaded');
+    } catch {
+      toast.error('Export failed');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const fromLabel = (() => {
     try { return format(new Date(`${fromDate}T00:00:00`), 'd MMM yyyy'); } catch { return fromDate; }
   })();
@@ -121,6 +141,15 @@ export default function EmployeeBreakdownPage({
               </p>
             </div>
           </div>
+          <Button
+            size="sm"
+            onClick={handleExport}
+            disabled={exporting || isLoading || projects.length === 0}
+            className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg"
+          >
+            <Download className="mr-1.5 h-4 w-4" />
+            {exporting ? 'Exporting…' : 'Export Excel'}
+          </Button>
         </div>
       </div>
 

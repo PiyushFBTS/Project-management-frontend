@@ -49,7 +49,8 @@ const emptyForm = {
   projectId: '',
   otherProjectName: '',
   ticketId: '', // 'meeting' or ticket ID
-  hoursSpent: '',
+  fromTime: '',
+  toTime: '',
   taskDescription: '',
   status: 'in_progress' as string,
 };
@@ -69,21 +70,37 @@ function resolveTicketRef(value: string): { ticketId?: number | null; activityTy
   return { ticketId: null, activityType: null };
 }
 
-/**
- * Build sequential fromTime/toTime based on existing entries.
- * New entry starts after the last entry ends, or at 09:00 if no entries.
- */
-function buildTimesFromHours(hours: number, entries: TaskEntry[]): { fromTime: string; toTime: string } {
-  let startMinutes = 9 * 60; // default 09:00
-  if (entries.length > 0) {
-    const lastEnd = entries[entries.length - 1].toTime;
-    const [h, m] = lastEnd.split(':').map(Number);
-    startMinutes = h * 60 + m;
-  }
-  const endMinutes = startMinutes + Math.round(hours * 60);
-  const fromTime = `${String(Math.floor(startMinutes / 60)).padStart(2, '0')}:${String(startMinutes % 60).padStart(2, '0')}`;
-  const toTime = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`;
-  return { fromTime, toTime };
+/// Parse "HH:MM" or "HH:MM:SS" → minutes-since-midnight. Returns null on bad input.
+function parseTimeToMinutes(s: string): number | null {
+  if (!s) return null;
+  const parts = s.split(':');
+  if (parts.length < 2) return null;
+  const h = Number(parts[0]);
+  const m = Number(parts[1]);
+  if (!Number.isFinite(h) || !Number.isFinite(m) || h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return h * 60 + m;
+}
+
+/// Normalize a "HH:MM:SS" string from MySQL or the date picker to "HH:MM".
+function normalizeTime(s: string): string {
+  if (!s) return '';
+  const [h = '00', m = '00'] = s.split(':');
+  return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
+}
+
+/// Compute hours between two HH:MM strings, rounded to 2 dp. Returns 0 if invalid.
+function diffHours(from: string, to: string): number {
+  const a = parseTimeToMinutes(from);
+  const b = parseTimeToMinutes(to);
+  if (a == null || b == null || b <= a) return 0;
+  return Math.round(((b - a) / 60) * 100) / 100;
+}
+
+/// Suggest a default fromTime for a new entry — picks the last entry's
+/// toTime, or 09:00 if the sheet is empty. The user can override.
+function suggestFromTime(entries: TaskEntry[]): string {
+  if (entries.length === 0) return '09:00';
+  return normalizeTime(entries[entries.length - 1].toTime);
 }
 
 export default function FillTaskSheetPageWrapper() {
@@ -156,16 +173,14 @@ function FillTaskSheetPage() {
   // Add entry
   const addMutation = useMutation({
     mutationFn: (data: typeof emptyForm) => {
-      const hours = parseFloat(data.hoursSpent);
-      const { fromTime, toTime } = buildTimesFromHours(hours, sheet?.taskEntries ?? []);
       const isOther = data.projectId === 'other';
       const ticketRef = resolveTicketRef(data.ticketId);
       return taskSheetsApi.addEntry(sheet!.id, {
         ...(isOther
           ? { otherProjectName: data.otherProjectName }
           : { projectId: Number(data.projectId) }),
-        fromTime,
-        toTime,
+        fromTime: normalizeTime(data.fromTime),
+        toTime: normalizeTime(data.toTime),
         taskDescription: data.taskDescription,
         status: data.status as TaskStatus,
         ...ticketRef,
@@ -184,22 +199,14 @@ function FillTaskSheetPage() {
   // Update entry
   const updateMutation = useMutation({
     mutationFn: ({ entryId, data }: { entryId: number; data: typeof emptyForm }) => {
-      const hours = parseFloat(data.hoursSpent);
-      // Keep the original fromTime, only adjust toTime.
-      // MySQL returns time as "HH:MM:SS"; the backend DTO requires "HH:MM".
-      const origFromRaw = editingEntry!.fromTime;
-      const [fh, fm] = origFromRaw.split(':').map(Number);
-      const origFrom = `${String(fh).padStart(2, '0')}:${String(fm).padStart(2, '0')}`;
-      const endMinutes = fh * 60 + fm + Math.round(hours * 60);
-      const toTime = `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`;
       const isOther = data.projectId === 'other';
       const ticketRef = resolveTicketRef(data.ticketId);
       return taskSheetsApi.updateEntry(sheet!.id, entryId, {
         ...(isOther
           ? { otherProjectName: data.otherProjectName, projectId: undefined }
           : { projectId: Number(data.projectId), otherProjectName: undefined }),
-        fromTime: origFrom,
-        toTime,
+        fromTime: normalizeTime(data.fromTime),
+        toTime: normalizeTime(data.toTime),
         taskDescription: data.taskDescription,
         status: data.status as TaskStatus,
         ...ticketRef,
@@ -254,7 +261,12 @@ function FillTaskSheetPage() {
 
   const openAddForm = () => {
     setEditingEntry(null);
-    setForm(emptyForm);
+    // Pre-fill fromTime with the suggested next slot so the user only
+    // has to pick an end time (or override the start).
+    setForm({
+      ...emptyForm,
+      fromTime: suggestFromTime(sheet?.taskEntries ?? []),
+    });
     setFormOpen(true);
   };
 
@@ -268,16 +280,19 @@ function FillTaskSheetPage() {
       projectId: entry.projectId ? String(entry.projectId) : 'other',
       otherProjectName: entry.otherProjectName ?? '',
       ticketId: ticketRef,
-      hoursSpent: String(Number(entry.durationHours).toFixed(2)),
+      fromTime: normalizeTime(entry.fromTime),
+      toTime: normalizeTime(entry.toTime),
       taskDescription: entry.taskDescription,
       status: entry.status,
     });
     setFormOpen(true);
   };
 
+  const computedHours = diffHours(form.fromTime, form.toTime);
+
   const handleSave = () => {
     const isOther = form.projectId === 'other';
-    if (!form.projectId || !form.hoursSpent || !form.taskDescription) {
+    if (!form.projectId || !form.fromTime || !form.toTime || !form.taskDescription) {
       toast.error('Please fill all required fields');
       return;
     }
@@ -285,9 +300,18 @@ function FillTaskSheetPage() {
       toast.error('Please enter a project name');
       return;
     }
-    const hours = parseFloat(form.hoursSpent);
-    if (isNaN(hours) || hours <= 0 || hours > 24) {
-      toast.error('Hours must be between 0 and 24');
+    const fromM = parseTimeToMinutes(form.fromTime);
+    const toM = parseTimeToMinutes(form.toTime);
+    if (fromM == null || toM == null) {
+      toast.error('Invalid time format');
+      return;
+    }
+    if (toM <= fromM) {
+      toast.error('End time must be after start time');
+      return;
+    }
+    if (computedHours <= 0 || computedHours > 24) {
+      toast.error('Duration must be between 0 and 24 hours');
       return;
     }
     if (form.taskDescription.length < 10) {
@@ -597,20 +621,32 @@ function FillTaskSheetPage() {
               <p className="text-xs text-muted-foreground">{form.taskDescription.length}/10 min characters</p>
             </div>
 
-            {/* 5. Time Taken */}
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">Time Taken (hours) <span className="text-destructive">*</span></Label>
-              <Input
-                type="number"
-                step="0.25"
-                min="0.25"
-                max="24"
-                placeholder="e.g. 2.5"
-                value={form.hoursSpent}
-                onChange={(e) => setForm((p) => ({ ...p, hoursSpent: e.target.value }))}
-              />
-              <p className="text-xs text-muted-foreground">Enter time in hours (e.g. 1, 1.5, 2.25)</p>
+            {/* 5. Start / End Time */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">Start Time <span className="text-destructive">*</span></Label>
+                <Input
+                  type="time"
+                  value={form.fromTime}
+                  onChange={(e) => setForm((p) => ({ ...p, fromTime: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-sm font-medium">End Time <span className="text-destructive">*</span></Label>
+                <Input
+                  type="time"
+                  value={form.toTime}
+                  onChange={(e) => setForm((p) => ({ ...p, toTime: e.target.value }))}
+                />
+              </div>
             </div>
+            <p className="text-xs text-muted-foreground -mt-2">
+              Time taken:{' '}
+              <span className="font-semibold text-foreground">
+                {computedHours > 0 ? `${computedHours.toFixed(2)} h` : '—'}
+              </span>
+              {' '}(end − start, auto-calculated)
+            </p>
 
             {/* 6. Status */}
             <div className="space-y-1.5">

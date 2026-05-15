@@ -177,27 +177,6 @@ export interface CreateProjectDto {
 
 export type UpdateProjectDto = Partial<CreateProjectDto>;
 
-// ── Task Types ────────────────────────────────────────────────────────────
-
-export type TaskCategory = 'project_customization' | 'support_customization' | 'cr';
-
-export interface TaskType {
-  id: number;
-  typeCode: string;
-  typeName: string;
-  category: TaskCategory;
-  isActive: boolean;
-  createdAt: string;
-}
-
-export interface CreateTaskTypeDto {
-  typeCode: string;
-  typeName: string;
-  category: TaskCategory;
-}
-
-export type UpdateTaskTypeDto = Partial<CreateTaskTypeDto>;
-
 // ── Employees ─────────────────────────────────────────────────────────────
 
 export type ConsultantType = 'project_manager' | 'functional' | 'technical' | 'management' | 'core_team';
@@ -295,8 +274,6 @@ export type TaskStatus = 'in_progress' | 'finished' | 'failed' | 'awaiting_respo
 export interface TaskEntry {
   id: number;
   taskSheetId: number;
-  taskTypeId?: number;
-  taskType?: TaskType;
   projectId?: number | null;
   project?: Project;
   otherProjectName?: string | null;

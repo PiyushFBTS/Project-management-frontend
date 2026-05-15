@@ -2,10 +2,11 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, FolderKanban, Tags, Users, Receipt,
-  ClipboardList, BarChart3, ChevronDown, TrendingUp, X,
+  ClipboardList, BarChart3, ChevronDown, X,
   ChevronLeft, ChevronRight, CalendarDays, Building2, LogOut, Settings, ListTodo, Ticket, Mail,
   Megaphone,
 } from 'lucide-react';
@@ -46,6 +47,7 @@ const navItems: NavItem[] = [
     iconColor: 'text-cyan-400', iconBg: 'bg-cyan-500/20',
     activeBg: 'bg-cyan-500/20', hoverBg: 'hover:bg-cyan-500/10',
     borderColor: 'border-l-cyan-400', dotColor: 'bg-cyan-400',
+    adminOnly: true,
   },
 
   {
@@ -105,7 +107,7 @@ const navItems: NavItem[] = [
     // — backend auto-scopes plain employees to self-only data. The
     // remaining four stay HR/admin only.
     children: [
-      { label: 'Sheet History', href: '/reports/sheet-history', dotColor: 'bg-blue-400' },
+      { label: 'Task Sheet History', href: '/reports/sheet-history', dotColor: 'bg-blue-400' },
       { label: 'Employee-Wise', href: '/reports/employee-wise', dotColor: 'bg-indigo-400' },
       { label: 'Project-Wise', href: '/reports/project-wise', dotColor: 'bg-violet-400', hrOrAdminOnly: true },
       { label: 'Daily Fill', href: '/reports/daily-fill', dotColor: 'bg-emerald-400' },
@@ -122,7 +124,7 @@ const navItems: NavItem[] = [
     borderColor: 'border-l-rose-400', dotColor: 'bg-rose-400',
   },
   {
-    label: 'Email Inbox', href: '/email-inbox', icon: Mail,
+    label: 'Email Outbox', href: '/email-outbox', icon: Mail,
     iconColor: 'text-sky-400', iconBg: 'bg-sky-500/20',
     activeBg: 'bg-sky-500/20', hoverBg: 'hover:bg-sky-500/10',
     borderColor: 'border-l-sky-400', dotColor: 'bg-sky-400',
@@ -151,7 +153,7 @@ const platformNavItems: NavItem[] = [
     borderColor: 'border-l-violet-400', dotColor: 'bg-violet-400',
   },
   {
-    label: 'Email Inbox', href: '/email-inbox', icon: Mail,
+    label: 'Email Outbox', href: '/email-outbox', icon: Mail,
     iconColor: 'text-sky-400', iconBg: 'bg-sky-500/20',
     activeBg: 'bg-sky-500/20', hoverBg: 'hover:bg-sky-500/10',
     borderColor: 'border-l-sky-400', dotColor: 'bg-sky-400',
@@ -346,7 +348,7 @@ function Footer({ collapsed, isEmployee }: { collapsed?: boolean; isEmployee?: b
     <div className="border-t border-sidebar-border px-4 py-3 shrink-0">
       {!collapsed && (
         <p className="text-[10px] text-gray-400 dark:text-slate-600 text-center">
-          v3.0 · {isEmployee ? 'Employee Portal' : 'Admin Portal'}
+          v1.0 · {isEmployee ? 'Employee Portal' : 'Admin Portal'}
         </p>
       )}
     </div>
@@ -383,12 +385,12 @@ export function Sidebar() {
           </button>
         ) : (
           <>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-linear-to-br from-indigo-500 to-violet-600 shadow-md shadow-indigo-500/30">
-              <TrendingUp className="h-4 w-4 text-white" />
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white shadow-md shadow-indigo-500/30 overflow-hidden">
+              <Image src="/ITSM_LOGO.png" alt="ITSM logo" width={32} height={32} unoptimized className="h-full w-full object-contain p-0.5" />
             </div>
             <div className="leading-tight min-w-0 flex-1">
-              <p className="text-sm font-bold text-gray-900 dark:text-white truncate">IT Project</p>
-              <p className="text-[10px] font-medium text-gray-500 dark:text-slate-400">Management System</p>
+              <p className="text-sm font-bold text-gray-900 dark:text-white truncate tracking-wide">ITSM</p>
+              {/* <p className="text-[10px] font-medium text-gray-500 dark:text-slate-400">Management System</p> */}
             </div>
             <button
               onClick={toggleCollapse}
@@ -426,12 +428,12 @@ export function MobileSidebar() {
         <div className="flex h-full flex-col">
           <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-linear-to-br from-indigo-500 to-violet-600 shadow-md shadow-indigo-500/30">
-                <TrendingUp className="h-4 w-4 text-white" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white shadow-md shadow-indigo-500/30 overflow-hidden">
+                <Image src="/ITSM_LOGO.png" alt="ITSM logo" width={32} height={32} unoptimized className="h-full w-full object-contain p-0.5" />
               </div>
               <div className="leading-tight">
-                <p className="text-sm font-bold text-gray-900 dark:text-white">IT Project</p>
-                <p className="text-[10px] text-gray-500 dark:text-slate-400">Management System</p>
+                <p className="text-sm font-bold text-gray-900 dark:text-white tracking-wide">ITSM</p>
+                {/* <p className="text-[10px] text-gray-500 dark:text-slate-400">Management System</p> */}
               </div>
             </div>
             <button onClick={close} className="text-gray-400 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white transition-colors">

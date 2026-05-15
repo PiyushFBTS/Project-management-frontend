@@ -1,3 +1,4 @@
+/* eslint-disable react/jsx-no-undef */
 'use client';
 
 import { useState } from 'react';
@@ -12,7 +13,6 @@ import { LoginType } from '@/lib/auth/token-storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-
 const schema = z.object({
   email: z.string().email('Invalid email'),
   password: z.string().min(1, 'Password is required'),
@@ -48,8 +48,8 @@ export default function LoginPage() {
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } };
       const msg = axiosErr?.response?.data?.message ?? 'Login failed. Check credentials.';
-      console.log("msg===>",msg);
-      
+      console.log("msg===>", msg);
+
       toast.error(msg, {
         id,
         duration: 5000
@@ -64,12 +64,12 @@ export default function LoginPage() {
       {/* ── Left panel: brand / features ── */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-800 p-12 text-white">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
-            <TrendingUp className="h-5 w-5 text-white" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-md overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/ITSM_LOGO.png" alt="ITSM logo" className="h-full w-full object-contain p-1" />
           </div>
           <div>
-            <p className="font-bold text-lg leading-none">IT Project</p>
-            <p className="text-xs text-indigo-200 mt-0.5">Management System</p>
+            <p className="font-bold text-lg leading-none tracking-wide">ITSM</p>
           </div>
         </div>
 
@@ -95,7 +95,7 @@ export default function LoginPage() {
           </ul>
         </div>
 
-        <p className="text-xs text-indigo-300">&copy; 2026 Flamboyant Technologies pvt ltd IT Project Management System &middot; v3.0</p>
+        <p className="text-xs text-indigo-300">&copy; 2026 Flamboyant Technologies pvt ltd  &middot; v1.0</p>
       </div>
 
       {/* ── Right panel: login form ── */}
@@ -103,11 +103,12 @@ export default function LoginPage() {
         <div className="w-full max-w-sm space-y-8">
           {/* Mobile brand */}
           <div className="flex items-center gap-3 lg:hidden">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600">
-              <TrendingUp className="h-5 w-5 text-white" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-md overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/ITSM_LOGO.png" alt="ITSM logo" className="h-full w-full object-contain p-1" />
             </div>
             <div>
-              <p className="font-bold leading-none">IT Project Mgmt</p>
+              <p className="font-bold leading-none tracking-wide">ITSM</p>
               <p className="text-xs text-muted-foreground">Portal</p>
             </div>
           </div>
@@ -125,8 +126,8 @@ export default function LoginPage() {
               type="button"
               onClick={() => setLoginType('admin')}
               className={`flex-1 rounded-md py-2 text-sm font-medium transition-all ${loginType === 'admin'
-                  ? 'bg-white dark:bg-card shadow-sm text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
+                ? 'bg-white dark:bg-card shadow-sm text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
                 }`}
             >
               Admin
@@ -135,8 +136,8 @@ export default function LoginPage() {
               type="button"
               onClick={() => setLoginType('employee')}
               className={`flex-1 rounded-md py-2 text-sm font-medium transition-all ${loginType === 'employee'
-                  ? 'bg-white dark:bg-card shadow-sm text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
+                ? 'bg-white dark:bg-card shadow-sm text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
                 }`}
             >
               Employee
@@ -145,8 +146,8 @@ export default function LoginPage() {
               type="button"
               onClick={() => setLoginType('client')}
               className={`flex-1 rounded-md py-2 text-sm font-medium transition-all ${loginType === 'client'
-                  ? 'bg-white dark:bg-card shadow-sm text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
+                ? 'bg-white dark:bg-card shadow-sm text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
                 }`}
             >
               Client

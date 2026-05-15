@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -31,9 +32,16 @@ export default function ProjectTypesPage() {
   const isHr = user?._type === 'employee' && !!(user as any)?.isHr;
   const canManage = isAdmin || isHr;
 
+  // Admin-only page — non-admins (employees, HR, clients) get bounced to
+  // the dashboard even if they deep-link here.
+  useEffect(() => {
+    if (user && !isAdmin) router.replace('/dashboard');
+  }, [user, isAdmin, router]);
+
   const { data: types, isLoading } = useQuery({
     queryKey: ['project-types'],
     queryFn: () => projectsApi.getProjectTypes().then((r: any) => r.data?.data ?? r.data ?? []),
+    enabled: isAdmin,
   });
 
   const deleteMut = useMutation({

@@ -1,6 +1,6 @@
 import { api } from './axios-instance';
 import { tokenStorage } from '@/lib/auth/token-storage';
-import { ApiResponse, DailyTaskSheet, TaskEntry, TaskStatus, PaginationParams, Project, TaskType } from '@/types';
+import { ApiResponse, DailyTaskSheet, TaskEntry, TaskStatus, PaginationParams, Project } from '@/types';
 
 // Auto-route "my task sheet" endpoints based on login type.
 // Admin → /admin/task-sheets/my/* (bridged via email to an employee record)
@@ -40,7 +40,6 @@ export const taskSheetsApi = {
   addEntry: (sheetId: number, data: {
     projectId?: number;
     otherProjectName?: string;
-    taskTypeId?: number;
     ticketId?: number | null;
     activityType?: string | null;
     fromTime: string;
@@ -53,7 +52,6 @@ export const taskSheetsApi = {
   updateEntry: (sheetId: number, entryId: number, data: {
     projectId?: number;
     otherProjectName?: string;
-    taskTypeId?: number;
     ticketId?: number | null;
     activityType?: string | null;
     fromTime?: string;
@@ -66,14 +64,29 @@ export const taskSheetsApi = {
   deleteEntry: (sheetId: number, entryId: number) =>
     api.delete<ApiResponse<null>>(`${base()}/${sheetId}/entries/${entryId}`),
 
+  // ── Export Task Sheet History (Excel) ──
+  // Self export — routed by login type (admin → my/export-history, employee → /export-history).
+  exportHistory: (params?: { fromDate?: string; toDate?: string }) =>
+    api.get(`${base()}/export-history`, {
+      params,
+      responseType: 'blob',
+    }),
+
+  // Admin team export — full company sheets with filters.
+  adminExportTeam: (params?: {
+    fromDate?: string;
+    toDate?: string;
+    employeeId?: number;
+    isSubmitted?: boolean;
+  }) =>
+    api.get('/admin/task-sheets/export', {
+      params,
+      responseType: 'blob',
+    }),
+
   // ── Dropdown data (admin uses admin endpoints, employees the scoped ones) ──
   getProjects: () => {
     const isAdmin = tokenStorage.getLoginType() === 'admin';
     return api.get<ApiResponse<Project[]>>(isAdmin ? '/projects/all-active' : '/employee/projects/all-active');
-  },
-
-  getTaskTypes: () => {
-    const isAdmin = tokenStorage.getLoginType() === 'admin';
-    return api.get<ApiResponse<TaskType[]>>(isAdmin ? '/task-types' : '/employee/task-types');
   },
 };
