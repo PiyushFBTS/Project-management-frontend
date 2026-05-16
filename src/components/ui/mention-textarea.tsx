@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 
 export interface MentionEmployee {
   id: number;
-  empName: string;
+  name: string;
 }
 
 interface MentionTextareaProps {
@@ -19,7 +19,7 @@ interface MentionTextareaProps {
   disabled?: boolean;
 }
 
-/** Renders a stored @[empName](empId) token as a highlighted chip inside comment text. */
+/** Renders a stored @[name](empId) token as a highlighted chip inside comment text. */
 export function renderMentions(content: string): React.ReactNode[] {
   const parts: React.ReactNode[] = [];
   const regex = /@\[([^\]]+)\]\(\d+\)/g;
@@ -45,8 +45,8 @@ export function renderMentions(content: string): React.ReactNode[] {
 }
 
 /**
- * Transforms the display text (containing "@empName") back to the storage format
- * "@[empName](empId)" for each tracked mention before submitting.
+ * Transforms the display text (containing "@name") back to the storage format
+ * "@[name](empId)" for each tracked mention before submitting.
  */
 export function buildMentionContent(
   text: string,
@@ -55,10 +55,10 @@ export function buildMentionContent(
   let result = text;
   for (const emp of mentions) {
     // Escape special regex chars in the name, then replace @name (full word boundary)
-    const escaped = emp.empName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escaped = emp.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     result = result.replace(
       new RegExp(`@${escaped}(?=\\s|$)`, 'g'),
-      `@[${emp.empName}](${emp.id})`,
+      `@[${emp.name}](${emp.id})`,
     );
   }
   return result;
@@ -94,7 +94,7 @@ export function MentionTextarea({
     if (match) {
       const partial = match[1].toLowerCase();
       const filtered = uniqueEmployees
-        .filter((emp) => emp.empName.toLowerCase().includes(partial))
+        .filter((emp) => emp.name.toLowerCase().includes(partial))
         .slice(0, 6);
       setSuggestions(filtered);
       setTriggerStart(match.index);
@@ -110,7 +110,7 @@ export function MentionTextarea({
     const before = value.slice(0, triggerStart);
     const after = value.slice(cursor);
     // Only insert the readable name — no raw ID visible to the user
-    const display = `@${emp.empName} `;
+    const display = `@${emp.name} `;
     const newValue = `${before}${display}${after}`;
     onChange(newValue);
     onMentionAdded?.(emp);
@@ -177,9 +177,9 @@ export function MentionTextarea({
               )}
             >
               <div className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-500/20 text-xs font-bold text-violet-600 dark:text-violet-400 shrink-0">
-                {emp.empName[0]?.toUpperCase()}
+                {emp.name[0]?.toUpperCase()}
               </div>
-              {emp.empName}
+              {emp.name}
             </button>
           ))}
         </div>

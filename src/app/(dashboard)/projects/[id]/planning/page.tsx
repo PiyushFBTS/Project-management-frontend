@@ -46,11 +46,14 @@ import { SearchableSelect } from '@/components/ui/searchable-select';
 // ── Schemas ──────────────────────────────────────────────────────────────────
 
 const phaseSchema = z.object({
-  name: z.string().min(1, 'Required'),
+  name: z.string().min(1, 'Phase name is required'),
   description: z.string().optional(),
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
+  startDate: z.string().min(1, 'Start date is required'),
+  endDate: z.string().min(1, 'End date is required'),
   status: z.enum(['not_started', 'in_progress', 'completed']).optional(),
+}).refine((v) => !v.startDate || !v.endDate || v.endDate >= v.startDate, {
+  message: 'End date must be on or after start date',
+  path: ['endDate'],
 });
 
 const taskSchema = z.object({
@@ -215,7 +218,10 @@ export default function ProjectPlanningPage() {
 
   // ── Phase mutations ──────────────────────────────────────────────────────
 
-  const phaseForm = useForm<PhaseForm>({ resolver: zodResolver(phaseSchema) });
+  const phaseForm = useForm<PhaseForm>({
+    resolver: zodResolver(phaseSchema),
+    defaultValues: { name: '', description: '', startDate: '', endDate: '', status: 'not_started' },
+  });
 
   const createPhaseMut = useMutation({
     mutationFn: (dto: CreatePhaseDto) => planApi.createPhase(projectId, dto),
@@ -277,7 +283,7 @@ export default function ProjectPlanningPage() {
 
   const openCreatePhase = () => {
     setEditingPhase(null);
-    phaseForm.reset({ status: 'not_started' });
+    phaseForm.reset({ name: '', description: '', startDate: '', endDate: '', status: 'not_started' });
     setPhaseOpen(true);
   };
 
@@ -304,7 +310,13 @@ export default function ProjectPlanningPage() {
 
   // ── Task mutations ───────────────────────────────────────────────────────
 
-  const taskForm = useForm<TaskForm>({ resolver: zodResolver(taskSchema) });
+  const taskForm = useForm<TaskForm>({
+    resolver: zodResolver(taskSchema),
+    defaultValues: {
+      title: '', description: '', phaseId: '__none__', assigneeId: '__none__',
+      priority: 'medium', status: 'todo', dueDate: '', estimatedHours: '',
+    },
+  });
 
   // Pick the right ticket API for attachment uploads
   const ticketAttApi = isAdmin ? adminTicketsApi : isClient ? clientTicketsApi : projectTicketsApi;
@@ -541,9 +553,9 @@ export default function ProjectPlanningPage() {
   const reassignOpts = (() => {
     const all = employees ?? [];
     const deduped = all.filter((e: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.id === e.id && x._type === e._type) === i);
-    const empOpts = deduped.filter((e: any) => !e._type || e._type === 'employee').map((e: any) => ({ value: `emp-${e.id}`, label: e.empName }));
-    const adminOpts = deduped.filter((e: any) => e._type === 'admin').map((a: any) => ({ value: `admin-${a.id}`, label: `${a.empName} (Admin)` }));
-    const clientOpts = deduped.filter((e: any) => e._type === 'client').map((c: any) => ({ value: `client-${c.id}`, label: `${c.empName} (Client)` }));
+    const empOpts = deduped.filter((e: any) => !e._type || e._type === 'employee').map((e: any) => ({ value: `emp-${e.id}`, label: e.name }));
+    const adminOpts = deduped.filter((e: any) => e._type === 'admin').map((a: any) => ({ value: `admin-${a.id}`, label: `${a.name} (Admin)` }));
+    const clientOpts = deduped.filter((e: any) => e._type === 'client').map((c: any) => ({ value: `client-${c.id}`, label: `${c.name} (Client)` }));
     return [...empOpts, ...adminOpts, ...clientOpts];
   })();
 
@@ -807,7 +819,7 @@ export default function ProjectPlanningPage() {
             <form onSubmit={phaseForm.handleSubmit(onPhaseSubmit)} className="space-y-3">
               <FormField control={phaseForm.control} name="name" render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Phase Name</FormLabel>
+                  <FormLabel>Phase Name <span className="text-red-500">*</span></FormLabel>
                   <FormControl><Input {...field} onChange={(e) => field.onChange(capitalizeFirst(e.target.value))} /></FormControl>
                   <FormMessage />
                 </FormItem>
@@ -822,14 +834,14 @@ export default function ProjectPlanningPage() {
               <div className="grid grid-cols-2 gap-3">
                 <FormField control={phaseForm.control} name="startDate" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Start Date</FormLabel>
+                    <FormLabel>Start Date <span className="text-red-500">*</span></FormLabel>
                     <FormControl><Input type="date" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
                 <FormField control={phaseForm.control} name="endDate" render={({ field }) => (
                   <FormItem>
-                    <FormLabel>End Date</FormLabel>
+                    <FormLabel>End Date <span className="text-red-500">*</span></FormLabel>
                     <FormControl><Input type="date" {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
@@ -909,7 +921,7 @@ export default function ProjectPlanningPage() {
                         <SelectContent>
                           <SelectItem value="__none__">Unassigned</SelectItem>
                           {employeeList.map((e: Employee) => (
-                            <SelectItem key={e.id} value={String(e.id)}>{e.empName}</SelectItem>
+                            <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -1053,7 +1065,7 @@ export default function ProjectPlanningPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-lg border p-3">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1"><User className="h-3 w-3" /> Assignee</p>
-                    <p className="text-sm font-medium truncate">{taskDetail.assignee?.empName ?? (taskDetail as any).assignedAdmin?.name ?? (taskDetail as any).assignedClient?.fullName ?? 'Unassigned'}</p>
+                    <p className="text-sm font-medium truncate">{taskDetail.assignee?.name ?? (taskDetail as any).assignedAdmin?.name ?? (taskDetail as any).assignedClient?.fullName ?? 'Unassigned'}</p>
                   </div>
                   <div className="rounded-lg border p-3">
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1"><Calendar className="h-3 w-3" /> Due Date</p>
@@ -1362,7 +1374,7 @@ function TaskTable({
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
               <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${statusColors[t.status]}`}>{statusLabels[t.status]}</span>
-              <span>{t.assignee?.empName ?? 'Unassigned'}</span>
+              <span>{t.assignee?.name ?? 'Unassigned'}</span>
               {t.dueDate && <span>{t.dueDate}</span>}
             </div>
             <div className="flex gap-1 mt-2" onClick={(e) => e.stopPropagation()}>
@@ -1397,7 +1409,7 @@ function TaskTable({
                 <TableCell className="text-xs font-mono text-violet-600 dark:text-violet-400 whitespace-nowrap">{t.ticketNumber ?? '—'}</TableCell>
                 <TableCell className="font-medium">{t.title}</TableCell>
                 <TableCell className="text-muted-foreground text-sm">
-                  {t.assignee?.empName ?? t.assignedAdmin?.name ?? <span className="italic text-muted-foreground/50">Unassigned</span>}
+                  {t.assignee?.name ?? t.assignedAdmin?.name ?? <span className="italic text-muted-foreground/50">Unassigned</span>}
                 </TableCell>
                 <TableCell>
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${priorityColors[t.priority]}`}>

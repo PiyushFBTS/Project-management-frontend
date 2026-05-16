@@ -480,7 +480,7 @@ function LeaveRequestsContent() {
               onValueChange={setTeamEmployeeId}
               options={(colleagues ?? []).map((c) => ({
                 value: String(c.id),
-                label: `${c.empName} (${c.empCode})`,
+                label: `${c.name} (${c.empCode})`,
               }))}
             />
           </div>
@@ -534,10 +534,10 @@ function LeaveRequestsContent() {
           const isAdminLeave = l.adminId != null;
           const groupKey = isAdminLeave ? `adm_${l.adminId}` : `emp_${l.employeeId}`;
           const adminRel = (l as { admin?: { name?: string } }).admin;
-          const empRel = (l as { employee?: { empName?: string; empCode?: string } }).employee;
+          const empRel = (l as { employee?: { name?: string; empCode?: string } }).employee;
           const name = isAdminLeave
             ? (adminRel?.name ?? `Admin #${l.adminId}`)
-            : (empRel?.empName ?? `Employee #${l.employeeId}`);
+            : (empRel?.name ?? `Employee #${l.employeeId}`);
           const code = isAdminLeave ? 'Admin' : (empRel?.empCode ?? '');
           if (!empMap[groupKey]) empMap[groupKey] = { name, code, leaves: [] };
           empMap[groupKey].leaves.push(l);
@@ -723,7 +723,7 @@ function LeaveRequestsContent() {
                       <TableCell className="font-medium text-sm">
                         {lr.adminId != null
                           ? (lr as { admin?: { name?: string } }).admin?.name ?? `Admin #${lr.adminId}`
-                          : lr.employee?.empName ?? `#${lr.employeeId ?? '?'}`}
+                          : lr.employee?.name ?? `#${lr.employeeId ?? '?'}`}
                         <span className="block text-xs text-muted-foreground">
                           {lr.adminId != null ? 'Admin' : lr.employee?.empCode}
                         </span>
@@ -753,7 +753,7 @@ function LeaveRequestsContent() {
                     <TableCell className="text-center font-semibold">{lr.totalDays}</TableCell>
                     <TableCell><StatusBadge lr={lr as any} /></TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {lr.manager?.empName ?? '-'}
+                      {lr.manager?.name ?? '-'}
                       {lr.managerActionAt && (
                         <span className="block text-[10px] text-muted-foreground/60">
                           {format(new Date(lr.managerActionAt), 'dd MMM yyyy')}
@@ -761,7 +761,7 @@ function LeaveRequestsContent() {
                       )}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {(lr as any).hrApproverName ?? lr.hr?.empName ?? '-'}
+                      {(lr as any).hrApproverName ?? lr.hr?.name ?? '-'}
                       {lr.hrActionAt && (
                         <span className="block text-[10px] text-muted-foreground/60">
                           {format(new Date(lr.hrActionAt), 'dd MMM yyyy')}
@@ -801,7 +801,7 @@ function LeaveRequestsContent() {
                     onValueChange={(v) => setApplyForm((p) => ({ ...p, onBehalfOfEmployeeId: v }))}
                     options={(colleagues ?? []).map((c) => ({
                       value: String(c.id),
-                      label: `${c.empName} (${c.empCode})`,
+                      label: `${c.name} (${c.empCode})`,
                     }))}
                   />
                   <p className="text-xs text-muted-foreground">
@@ -875,7 +875,7 @@ function LeaveRequestsContent() {
                       const col = colleagues?.find((c) => c.id === wId);
                       return (
                         <Badge key={wId} variant="secondary" className="gap-1 text-xs pr-1">
-                          {col?.empName ?? `#${wId}`}
+                          {col?.name ?? `#${wId}`}
                           <button onClick={() => toggleWatcher(wId)} className="ml-0.5 hover:text-destructive">
                             <X className="h-3 w-3" />
                           </button>
@@ -899,7 +899,7 @@ function LeaveRequestsContent() {
                           onChange={() => toggleWatcher(c.id)}
                           className="rounded border-gray-300"
                         />
-                        <span>{c.empName}</span>
+                        <span>{c.name}</span>
                         <span className="text-xs text-muted-foreground ml-auto">{c.empCode}</span>
                       </label>
                     ))
@@ -954,7 +954,7 @@ function LeaveRequestsContent() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-muted-foreground text-xs">Employee</p>
-                  <p className="font-medium">{detail.employee?.empName} ({detail.employee?.empCode})</p>
+                  <p className="font-medium">{detail.employee?.name} ({detail.employee?.empCode})</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground text-xs">Status</p>
@@ -1016,7 +1016,7 @@ function LeaveRequestsContent() {
                           adminFinal ? 'bg-emerald-500' : 'bg-amber-400'
                         }`} />
                         <div>
-                          <p className="text-xs font-medium">Manager: {detail.manager?.empName ?? '—'}</p>
+                          <p className="text-xs font-medium">Manager: {detail.manager?.name ?? '—'}</p>
                           {detail.managerActionAt ? (
                             <>
                               <p className="text-xs text-muted-foreground">
@@ -1041,7 +1041,7 @@ function LeaveRequestsContent() {
                           }`} />
                           <div>
                             <p className="text-xs font-medium">
-                              HR: {adminFinal ? '—' : (detail.hr?.empName ?? hrApproverName ?? 'Pending')}
+                              HR: {adminFinal ? '—' : (detail.hr?.name ?? hrApproverName ?? 'Pending')}
                             </p>
                             {adminFinal ? (
                               <p className="text-xs text-muted-foreground">{autoWord}</p>
@@ -1087,7 +1087,7 @@ function LeaveRequestsContent() {
                   <div className="flex flex-wrap gap-1.5">
                     {detail.watchers.map((w) => (
                       <Badge key={w.id} variant="outline" className="text-xs">
-                        {w.employee?.empName ?? `Employee #${w.employeeId}`}
+                        {w.employee?.name ?? `Employee #${w.employeeId}`}
                       </Badge>
                     ))}
                   </div>

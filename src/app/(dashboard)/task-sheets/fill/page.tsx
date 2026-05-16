@@ -88,6 +88,119 @@ function normalizeTime(s: string): string {
   return `${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
 }
 
+/// Split a "HH:MM" 24-hour string into 12-hour parts.
+function to12Parts(v: string): { h: string; m: string; ampm: 'AM' | 'PM' } {
+  if (!v) return { h: '', m: '', ampm: 'AM' };
+  const [hStr, mStr] = v.split(':');
+  const h24 = Number(hStr);
+  if (!Number.isFinite(h24)) return { h: '', m: mStr ?? '', ampm: 'AM' };
+  const ampm: 'AM' | 'PM' = h24 >= 12 ? 'PM' : 'AM';
+  let h12 = h24 % 12;
+  if (h12 === 0) h12 = 12;
+  return { h: String(h12), m: mStr ?? '', ampm };
+}
+
+/// 12-hour time picker: typed hour (1-12), typed minute (00-59), AM/PM
+/// select. Emits "HH:MM" 24-hour upward so the rest of the form
+/// (diffHours, parseTimeToMinutes, the API contract) stays unchanged.
+/// Emits an empty string while the input is incomplete or invalid so the
+/// existing required-validation kicks in naturally.
+function Time12Picker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { h: initH, m: initM, ampm: initAmpm } = to12Parts(value);
+  const [h, setH] = useState(initH);
+  const [m, setM] = useState(initM);
+  const [ampm, setAmpm] = useState<'AM' | 'PM'>(initAmpm);
+
+  // Re-sync when the parent value changes (edit-mode prefill, suggestFromTime).
+  useEffect(() => {
+    const parts = to12Parts(value);
+    setH(parts.h);
+    setM(parts.m);
+    setAmpm(parts.ampm);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  const emit = (nh: string, nm: string, nAmpm: 'AM' | 'PM') => {
+    const hh = parseInt(nh, 10);
+    const mm = parseInt(nm, 10);
+    if (!Number.isFinite(hh) || !Number.isFinite(mm) || hh < 1 || hh > 12 || mm < 0 || mm > 59) {
+      onChange('');
+      return;
+    }
+    let h24 = hh % 12;
+    if (nAmpm === 'PM') h24 += 12;
+    onChange(`${String(h24).padStart(2, '0')}:${String(mm).padStart(2, '0')}`);
+  };
+
+  const wrap = (n: number, min: number, max: number) => {
+    const span = max - min + 1;
+    return ((((n - min) % span) + span) % span) + min;
+  };
+
+  const bumpHour = (delta: 1 | -1) => {
+    const current = parseInt(h, 10);
+    const next = Number.isFinite(current) ? wrap(current + delta, 1, 12) : (delta === 1 ? 1 : 12);
+    const nh = String(next);
+    setH(nh);
+    emit(nh, m || '00', ampm);
+  };
+
+  const bumpMinute = (delta: 1 | -1) => {
+    const current = parseInt(m, 10);
+    const next = Number.isFinite(current) ? wrap(current + delta, 0, 59) : (delta === 1 ? 0 : 59);
+    const nm = String(next).padStart(2, '0');
+    setM(nm);
+    emit(h || '12', nm, ampm);
+  };
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <Input
+        type="text"
+        inputMode="numeric"
+        maxLength={2}
+        placeholder="HH"
+        value={h}
+        onChange={(e) => {
+          const v = e.target.value.replace(/\D/g, '').slice(0, 2);
+          setH(v);
+          emit(v, m, ampm);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowUp') { e.preventDefault(); bumpHour(1); }
+          else if (e.key === 'ArrowDown') { e.preventDefault(); bumpHour(-1); }
+        }}
+        className="w-12 text-center"
+      />
+      <span className="text-muted-foreground">:</span>
+      <Input
+        type="text"
+        inputMode="numeric"
+        maxLength={2}
+        placeholder="MM"
+        value={m}
+        onChange={(e) => {
+          const v = e.target.value.replace(/\D/g, '').slice(0, 2);
+          setM(v);
+          emit(h, v, ampm);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowUp') { e.preventDefault(); bumpMinute(1); }
+          else if (e.key === 'ArrowDown') { e.preventDefault(); bumpMinute(-1); }
+        }}
+        className="w-12 text-center"
+      />
+      <Select value={ampm} onValueChange={(v) => { const nv = v as 'AM' | 'PM'; setAmpm(nv); emit(h, m, nv); }}>
+        <SelectTrigger className="w-18"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="AM">AM</SelectItem>
+          <SelectItem value="PM">PM</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 /// Compute hours between two HH:MM strings, rounded to 2 dp. Returns 0 if invalid.
 function diffHours(from: string, to: string): number {
   const a = parseTimeToMinutes(from);
@@ -625,18 +738,16 @@ function FillTaskSheetPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">Start Time <span className="text-destructive">*</span></Label>
-                <Input
-                  type="time"
+                <Time12Picker
                   value={form.fromTime}
-                  onChange={(e) => setForm((p) => ({ ...p, fromTime: e.target.value }))}
+                  onChange={(v) => setForm((p) => ({ ...p, fromTime: v }))}
                 />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">End Time <span className="text-destructive">*</span></Label>
-                <Input
-                  type="time"
+                <Time12Picker
                   value={form.toTime}
-                  onChange={(e) => setForm((p) => ({ ...p, toTime: e.target.value }))}
+                  onChange={(v) => setForm((p) => ({ ...p, toTime: v }))}
                 />
               </div>
             </div>

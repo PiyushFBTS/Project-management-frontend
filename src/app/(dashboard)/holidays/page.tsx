@@ -65,7 +65,11 @@ export default function HolidaysPage() {
       qc.invalidateQueries({ queryKey: ['holidays'] });
       closeDialog();
     },
-    onError: () => toast.error('Failed to save'),
+    onError: (e: any) => {
+      const msg = e?.response?.data?.message;
+      const text = Array.isArray(msg) ? msg.join(', ') : (typeof msg === 'string' ? msg : 'Failed to save holiday');
+      toast.error(text);
+    },
   });
 
   const deleteMut = useMutation({
@@ -179,11 +183,11 @@ export default function HolidaysPage() {
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Name *</label>
+              <label className="text-xs font-medium text-muted-foreground">Name <span className="text-red-500">*</span></label>
               <Input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="e.g. Republic Day" />
             </div>
             <div>
-              <label className="text-xs font-medium text-muted-foreground">Date *</label>
+              <label className="text-xs font-medium text-muted-foreground">Date <span className="text-red-500">*</span></label>
               <Input type="date" value={formDate} onChange={(e) => setFormDate(e.target.value)} />
             </div>
             <div>

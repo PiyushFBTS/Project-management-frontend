@@ -82,13 +82,13 @@ export default function EmployeesPage() {
   });
 
   const assignMutation = useMutation({
-    mutationFn: ({ id, projectId }: { id: number; projectId: number | null; empName: string }) =>
+    mutationFn: ({ id, projectId }: { id: number; projectId: number | null; name: string }) =>
       employeesApi.assignProject(id, projectId),
-    onMutate: ({ empName }) => ({ id: toast.loading(`Assigning project to "${empName}"…`) }),
-    onSuccess: (_, { empName, projectId }, ctx) => {
+    onMutate: ({ name }) => ({ id: toast.loading(`Assigning project to "${name}"…`) }),
+    onSuccess: (_, { name, projectId }, ctx) => {
       qc.invalidateQueries({ queryKey: ['employees'] });
       toast.success(
-        projectId ? `Project assigned to "${empName}"` : `Project unassigned from "${empName}"`,
+        projectId ? `Project assigned to "${name}"` : `Project unassigned from "${name}"`,
         { id: ctx?.id },
       );
       setAssignOpen(false);
@@ -183,10 +183,10 @@ export default function EmployeesPage() {
                   className="flex items-center gap-3"
                 >
                   <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br ${AVATAR_GRADIENT} text-white text-sm font-bold shadow-sm ring-2 ring-white dark:ring-slate-900 transition-transform duration-300 group-hover:scale-110 group-hover:shadow-blue-500/40 group-hover:shadow-lg`}>
-                    {getInitials(emp.empName)}
+                    {getInitials(emp.name)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{emp.empName}</p>
+                    <p className="text-sm font-semibold truncate">{emp.name}</p>
                     <p className="text-xs text-muted-foreground truncate">{roleLabel}</p>
                     <div className="mt-1.5 flex items-center gap-2 flex-wrap">
                       <span className="inline-flex items-center text-[9px] font-bold tracking-wider uppercase text-muted-foreground/80">
@@ -234,7 +234,7 @@ export default function EmployeesPage() {
                     </Button>
                     <Button
                       variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:text-red-600" title="Deactivate"
-                      onClick={(e) => { e.preventDefault(); if (confirm(`Deactivate "${emp.empName}"?`)) deleteMutation.mutate({ id: emp.id, name: emp.empName }); }}
+                      onClick={(e) => { e.preventDefault(); if (confirm(`Deactivate "${emp.name}"?`)) deleteMutation.mutate({ id: emp.id, name: emp.name }); }}
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
@@ -255,7 +255,7 @@ export default function EmployeesPage() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <FolderInput className="h-4 w-4 text-indigo-500" />
-                Assign Project — {assignEmp?.empName}
+                Assign Project — {assignEmp?.name}
               </DialogTitle>
             </DialogHeader>
             <div className="py-2">
@@ -277,7 +277,7 @@ export default function EmployeesPage() {
                   assignMutation.mutate({
                     id: assignEmp!.id,
                     projectId: assignProjectId === 'none' ? null : Number(assignProjectId),
-                    empName: assignEmp!.empName,
+                    name: assignEmp!.name,
                   })
                 }
               >

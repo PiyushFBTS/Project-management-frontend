@@ -469,14 +469,14 @@ export default function ProjectDetailPage() {
             <User className="h-3 w-3" /> Project Manager
           </div>
           {!editMode ? (
-            <p className="text-sm font-medium">{project.projectManager?.empName ?? '—'}</p>
+            <p className="text-sm font-medium">{project.projectManager?.name ?? '—'}</p>
           ) : (
             <Select value={form.projectManagerId} onValueChange={(v) => setForm((p) => ({ ...p, projectManagerId: v }))}>
               <SelectTrigger className="h-8 text-sm  w-full"><SelectValue placeholder="Select manager" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">None</SelectItem>
                 {(managers ?? []).map((m: any) => (
-                  <SelectItem key={m.id} value={String(m.id)}>{m.empName}</SelectItem>
+                  <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -695,11 +695,18 @@ export default function ProjectDetailPage() {
                   </span>
                 )}
               </div>
-              <Link href={`/full-tickets?projectId=${id}`}>
-                <Button size="sm" variant="outline">
-                  <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Open All Tickets
-                </Button>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link href={`/projects/${id}/planning/new-task`}>
+                  <Button size="sm">
+                    <Plus className="mr-1.5 h-3.5 w-3.5" /> New Ticket
+                  </Button>
+                </Link>
+                <Link href={`/full-tickets?projectId=${id}`}>
+                  <Button size="sm" variant="outline">
+                    <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Open All Tickets
+                  </Button>
+                </Link>
+              </div>
             </div>
 
             {/* KPI strip — tap a card to apply that status filter, tap

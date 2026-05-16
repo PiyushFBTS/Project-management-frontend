@@ -250,11 +250,11 @@ function TodayEventsWidget({ isEmployee }: { isEmployee?: boolean }) {
 
 function EmployeeDashboard() {
   const { user } = useAuth();
-  const displayName = user?._type === 'employee'
-    ? (user as { empName: string }).empName
-    : user?._type === 'client'
-      ? (user as { fullName: string }).fullName
-      : (user as any)?.name ?? '';
+  // Post-merge: admin + employee users both expose `name`. Clients keep
+  // their own `fullName` field.
+  const displayName = user?._type === 'client'
+    ? (user as { fullName: string }).fullName
+    : (user as { name?: string })?.name ?? '';
 
   const { data: personal, isLoading } = useQuery({
     queryKey: ['emp-personal-dashboard'],
@@ -657,7 +657,7 @@ function AdminDashboard() {
         <CardContent>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={(topEmps ?? []).map((d) => ({
-              name: d.emp_name.split(' ')[0],
+              name: d.name.split(' ')[0],
               hours: Number(d.total_hours),
             }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="currentColor" strokeOpacity={0.07} />

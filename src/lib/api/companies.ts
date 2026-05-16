@@ -1,5 +1,6 @@
 import { api } from './axios-instance';
-import { ApiResponse, Company, AdminUser, PaginationMeta } from '@/types';
+import { ApiResponse, Company, PaginationMeta } from '@/types';
+import { MergedUser } from './auth';
 
 export interface CreateCompanyDto {
   name: string;
@@ -76,17 +77,17 @@ export const companiesApi = {
     api.patch<ApiResponse<Company>>(`/platform/companies/${id}/license`, dto),
 
   getAdmins: (id: number) =>
-    api.get<ApiResponse<AdminUser[]>>(`/platform/companies/${id}/admins`),
+    api.get<ApiResponse<MergedUser[]>>(`/platform/companies/${id}/admins`),
 
   createAdmin: (id: number, dto: CreateCompanyAdminDto) =>
-    api.post<ApiResponse<AdminUser>>(`/platform/companies/${id}/admins`, dto),
+    api.post<ApiResponse<MergedUser>>(`/platform/companies/${id}/admins`, dto),
 
   updateAdmin: (
     id: number,
     adminId: number,
     dto: { name?: string; email?: string; password?: string; isActive?: boolean },
   ) =>
-    api.patch<ApiResponse<AdminUser>>(`/platform/companies/${id}/admins/${adminId}`, dto),
+    api.patch<ApiResponse<MergedUser>>(`/platform/companies/${id}/admins/${adminId}`, dto),
 
   uploadLogo: (id: number, file: File) => {
     const formData = new FormData();

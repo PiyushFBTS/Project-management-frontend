@@ -17,8 +17,8 @@ export interface SearchTicket {
 }
 export interface SearchEmployee {
   id: number;
-  empCode: string;
-  empName: string;
+  code: string;
+  name: string;
   email: string;
   consultantType: string | null;
   isActive: boolean;

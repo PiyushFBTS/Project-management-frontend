@@ -221,12 +221,12 @@ export default function LeaveTypesPage() {
             <DialogHeader><DialogTitle className="flex items-center gap-2"><FileText className="h-4 w-4 text-orange-500" />{editing ? 'Edit Leave Type' : 'New Leave Type'}</DialogTitle></DialogHeader>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
               <div className="space-y-1">
-                <label className="text-sm font-medium">Reason Code</label>
+                <label className="text-sm font-medium">Reason Code <span className="text-red-500">*</span></label>
                 <Input {...register('reasonCode')} disabled={!!editing} />
                 {errors.reasonCode && <p className="text-xs text-red-500">{errors.reasonCode.message}</p>}
               </div>
               <div className="space-y-1">
-                <label className="text-sm font-medium">Reason Name</label>
+                <label className="text-sm font-medium">Reason Name <span className="text-red-500">*</span></label>
                 <Input {...register('reasonName')} />
                 {errors.reasonName && <p className="text-xs text-red-500">{errors.reasonName.message}</p>}
               </div>

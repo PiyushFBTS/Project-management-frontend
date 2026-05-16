@@ -584,7 +584,7 @@ export default function MyTasksPage() {
                     onValueChange={setReassignTo}
                     options={(companyEmployees ?? [])
                       .filter((emp: any) => emp._type !== 'admin')
-                      .map((emp) => ({ value: String(emp.id), label: emp.empName }))}
+                      .map((emp) => ({ value: String(emp.id), label: emp.name }))}
                     placeholder="Select employee..."
                     disabled={taskDetail.status === 'closed'}
                     className="w-full sm:w-52"
@@ -643,7 +643,7 @@ export default function MyTasksPage() {
                   value={commentText}
                   onChange={setCommentText}
                   onMentionAdded={(emp) => setTaggedMentions((prev) => [...prev, emp])}
-                  employees={(companyEmployees ?? []).filter((e: any) => e._type !== 'admin').map((e) => ({ id: e.id, empName: e.empName }))}
+                  employees={(companyEmployees ?? []).filter((e: any) => e._type !== 'admin').map((e) => ({ id: e.id, name: e.name }))}
                   placeholder="Add a comment… type @ to mention someone"
                   rows={2}
                 />

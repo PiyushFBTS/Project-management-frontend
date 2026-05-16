@@ -443,11 +443,11 @@ export function GlobalSearchProvider({ children }: { children: React.ReactNode }
                             dataIdx={idx}
                           >
                             <div className="flex items-center gap-3 min-w-0 flex-1">
-                              <Avatar name={emp.empName} />
+                              <Avatar name={emp.name} />
                               <div className="min-w-0">
-                                <p className="text-sm font-medium truncate">{highlight(emp.empName, query)}</p>
+                                <p className="text-sm font-medium truncate">{highlight(emp.name, query)}</p>
                                 <p className="text-[11px] text-muted-foreground truncate font-mono">
-                                  {emp.empCode} · {emp.email}
+                                  {emp.code} · {emp.email}
                                 </p>
                               </div>
                             </div>

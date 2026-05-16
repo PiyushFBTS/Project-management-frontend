@@ -215,7 +215,7 @@ export default function ProjectCostPage() {
                             <TableRow key={`${p.id}-emp-${idx}`} className="bg-muted/20">
                               <TableCell></TableCell>
                               <TableCell className="pl-8 text-sm">
-                                <span className="text-muted-foreground">{emp.emp_name}</span>
+                                <span className="text-muted-foreground">{emp.name}</span>
                                 <span className="text-xs text-muted-foreground ml-2 font-mono">{emp.emp_code}</span>
                               </TableCell>
                               <TableCell className="text-right text-xs text-muted-foreground">CTC: {'\u20B9'}{fmt(emp.monthly_ctc)}/mo</TableCell>

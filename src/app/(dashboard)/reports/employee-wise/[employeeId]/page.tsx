@@ -60,7 +60,7 @@ export default function EmployeeBreakdownPage({
   });
 
   const employee = data?.employee as
-    | { id: number; emp_code: string; emp_name: string; consultant_type: string }
+    | { id: number; emp_code: string; name: string; consultant_type: string }
     | null
     | undefined;
   const projects = (data?.projects ?? []) as Array<{
@@ -133,7 +133,7 @@ export default function EmployeeBreakdownPage({
             </div>
             <div className="min-w-0">
               <h1 className="text-xl font-bold text-white truncate">
-                {employee?.emp_name ?? 'Employee Breakdown'}
+                {employee?.name ?? 'Employee Breakdown'}
               </h1>
               <p className="text-sm text-white/70 truncate">
                 {employee?.emp_code ? `${employee.emp_code} · ` : ''}

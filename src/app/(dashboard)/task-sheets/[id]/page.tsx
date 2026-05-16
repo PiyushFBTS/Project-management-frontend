@@ -48,7 +48,7 @@ export default function TaskSheetDetailPage() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <h1 className="text-xl font-semibold text-foreground">
-          Task Sheet {!isEmployee && <>— {sheet.employee?.empName ?? `#${sheet.employeeId}`}</>}
+          Task Sheet {!isEmployee && <>— {sheet.employee?.name ?? `#${sheet.employeeId}`}</>}
         </h1>
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${sheet.isSubmitted ? 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30 dark:text-emerald-400' : 'bg-amber-500/15 text-amber-600 ring-amber-500/30'}`}>
           {sheet.isSubmitted ? 'Submitted' : 'Draft'}

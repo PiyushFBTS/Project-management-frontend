@@ -55,7 +55,7 @@ export default function EmployeeCostPage() {
 
   const exportToExcel = () => {
     const rows = employeeCosts.map((r: any) => ({
-      'Employee': r.emp_name, 'Code': r.emp_code, 'Annual CTC': Number(r.annual_ctc), 'Monthly CTC': Number(r.monthly_ctc), 'Daily Rate': Number(r.daily_rate),
+      'Employee': r.name, 'Code': r.emp_code, 'Annual CTC': Number(r.annual_ctc), 'Monthly CTC': Number(r.monthly_ctc), 'Daily Rate': Number(r.daily_rate),
       'Project': r.project_name ?? '—', 'Hours': Number(r.total_hours), 'Man-Days': Number(r.man_days), 'Cost': Number(r.cost),
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -148,7 +148,7 @@ export default function EmployeeCostPage() {
                             {idx === 0 ? (
                               <>
                                 <TableCell rowSpan={emp.projects.length} className="font-medium border-r align-top">
-                                  <div>{row.emp_name}</div>
+                                  <div>{row.name}</div>
                                   <div className="text-xs text-muted-foreground font-mono">{row.emp_code}</div>
                                 </TableCell>
                                 <TableCell rowSpan={emp.projects.length} className="border-r align-top">{'\u20B9'}{fmt(row.annual_ctc)}</TableCell>
@@ -164,7 +164,7 @@ export default function EmployeeCostPage() {
                         {emp.projects.length > 1 && (
                           <TableRow className="bg-muted/30 border-b-2">
                             <TableCell colSpan={3} className="text-right text-xs font-semibold text-muted-foreground border-r">Subtotal</TableCell>
-                            <TableCell className="text-xs font-semibold text-muted-foreground">{emp.employee.emp_name}</TableCell>
+                            <TableCell className="text-xs font-semibold text-muted-foreground">{emp.employee.name}</TableCell>
                             <TableCell className="text-right text-xs font-semibold">{emp.totalHours.toFixed(1)}</TableCell>
                             <TableCell className="text-right text-xs font-semibold">{emp.totalManDays.toFixed(1)}</TableCell>
                             <TableCell className="text-right text-xs font-bold">{'\u20B9'}{fmt(emp.totalCost)}</TableCell>

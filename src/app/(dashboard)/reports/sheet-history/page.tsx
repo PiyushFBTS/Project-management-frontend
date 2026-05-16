@@ -109,7 +109,7 @@ export default function SheetHistoryReportPage() {
       if (statusFilter === 'submitted' && !s.isSubmitted) return false;
       if (statusFilter === 'draft' && s.isSubmitted) return false;
       if (q) {
-        const name = (s.employee?.empName ?? '').toLowerCase();
+        const name = (s.employee?.name ?? '').toLowerCase();
         const code = (s.employee?.empCode ?? '').toLowerCase();
         if (!name.includes(q) && !code.includes(q)) return false;
       }
@@ -253,10 +253,10 @@ export default function SheetHistoryReportPage() {
             {showEmployeeCol ? (
               <div className="flex items-center gap-2.5 min-w-0 w-56">
                 <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-linear-to-br from-blue-500 to-blue-700 text-white text-xs font-bold shadow-sm">
-                  {initialsOf(s.employee?.empName ?? '?')}
+                  {initialsOf(s.employee?.name ?? '?')}
                 </span>
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">{s.employee?.empName ?? '—'}</p>
+                  <p className="text-sm font-semibold text-foreground truncate">{s.employee?.name ?? '—'}</p>
                   <p className="text-[10px] text-muted-foreground font-mono">{s.employee?.empCode ?? ''}</p>
                 </div>
               </div>
@@ -440,7 +440,7 @@ export default function SheetHistoryReportPage() {
               <SelectContent>
                 <SelectItem value="all">All employees</SelectItem>
                 {(employees ?? []).map((e) => (
-                  <SelectItem key={e.id} value={String(e.id)}>{e.empName} ({e.empCode})</SelectItem>
+                  <SelectItem key={e.id} value={String(e.id)}>{e.name} ({e.empCode})</SelectItem>
                 ))}
               </SelectContent>
             </Select>

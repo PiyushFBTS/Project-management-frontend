@@ -29,12 +29,12 @@ const maritalStatuses = ['single', 'married', 'divorced', 'widowed'];
 
 const defaultForm = {
   empCode: '',
-  empName: '',
+  name: '',
   email: '',
   mobileNumber: '',
   password: '',
   consultantType: 'functional' as Employee['consultantType'],
-  reportsTo: 'none', // encoded "emp-123" or "adm-456" or "none"
+  reportsTo: 'none', // user id as string, or 'none'
   isHr: false,
   isAccounts: false,
   dateOfBirth: '',
@@ -88,7 +88,7 @@ function NewEmployeeContent() {
     mutationFn: (dto: CreateEmployeeDto) => employeesApi.create(dto),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['employees'] });
-      toast.success(`"${res.data.data.empName}" added`);
+      toast.success(`"${res.data.data.name}" added`);
       router.push('/employees');
     },
     onError: (e: unknown) => setError(apiErrorMessage(e, 'Failed to create employee')),
@@ -98,26 +98,21 @@ function NewEmployeeContent() {
 
   function handleSave() {
     setError(null);
-    if (!form.empName.trim()) { toast.error('Full name is required'); return; }
+    if (!form.name.trim()) { toast.error('Full name is required'); return; }
     if (!form.email.trim()) { toast.error('Email is required'); return; }
     if (!form.empCode.trim()) { toast.error('Employee code is required'); return; }
     if (!form.password.trim() || form.password.length < 8) { toast.error('Password must be at least 8 characters'); return; }
 
-    const [kind, idStr] = form.reportsTo && form.reportsTo !== 'none' ? form.reportsTo.split('-') : [null, null];
-    const reportsToId = kind === 'emp' ? Number(idStr) : null;
-    const reportsToAdminId = kind === 'adm' ? Number(idStr) : null;
-    const isReportToAdmin = kind === 'adm';
+    const reportsToId = form.reportsTo && form.reportsTo !== 'none' ? Number(form.reportsTo) : null;
 
     createMutation.mutate({
       empCode: form.empCode.trim(),
-      empName: form.empName.trim(),
+      name: form.name.trim(),
       email: form.email.trim(),
       mobileNumber: form.mobileNumber.trim() || undefined,
       password: form.password,
       consultantType: form.consultantType,
       reportsToId,
-      reportsToAdminId,
-      isReportToAdmin,
       isHr: form.isHr,
       isAccounts: form.isAccounts,
       dateOfBirth: form.dateOfBirth || undefined,
@@ -135,10 +130,10 @@ function NewEmployeeContent() {
     { value: 'none', label: 'None' },
     ...employeesList
       .filter((e: any) => e.isActive !== false)
-      .filter((e: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.id === e.id && x._type === e._type) === i)
+      .filter((e: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.id === e.id) === i)
       .map((e: any) => ({
-        value: `${e._type === 'admin' ? 'adm' : 'emp'}-${e.id}`,
-        label: `${e.empName}${e._type === 'admin' ? ' (Admin)' : ''} — ${e.empCode}`,
+        value: String(e.id),
+        label: `${e.name}${e._type === 'admin' ? ' (Admin)' : ''} — ${e.empCode}`,
       })),
   ];
 
@@ -173,7 +168,7 @@ function NewEmployeeContent() {
                 <Input value={form.empCode} onChange={(e) => setForm((p) => ({ ...p, empCode: e.target.value }))} placeholder="EMP-010" />
               </Field>
               <Field label="Full Name" required>
-                <Input value={form.empName} onChange={(e) => setForm((p) => ({ ...p, empName: e.target.value }))} placeholder="Rahul Sharma" />
+                <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="Rahul Sharma" />
               </Field>
               <Field label="Email" required>
                 <Input type="email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} placeholder="rahul@company.com" />

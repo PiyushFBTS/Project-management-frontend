@@ -174,10 +174,10 @@ export default function DailyFillReportPage() {
                                 every row (the row tint + Status column
                                 already convey filled / not-filled). */}
                             <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-blue-600 to-blue-800 text-[10px] font-bold text-white">
-                              {initialsOf(row.emp_name)}
+                              {initialsOf(row.name)}
                             </span>
                             <Link href={`/employees/${row.id}?type=employee`} className="text-blue-600 dark:text-blue-400 hover:underline">
-                              {row.emp_name}
+                              {row.name}
                             </Link>
                           </div>
                         </TableCell>

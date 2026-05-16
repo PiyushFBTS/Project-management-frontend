@@ -227,9 +227,9 @@ function NewCompanyContent() {
                 )}
               </div>
             </div>
-            <div className="space-y-1.5"><Label>Name *</Label><Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="Acme Corp" /></div>
+            <div className="space-y-1.5"><Label>Name <span className="text-red-500">*</span></Label><Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="Acme Corp" /></div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label>Slug *</Label><Input value={form.slug} onChange={(e) => setForm((p) => ({ ...p, slug: e.target.value }))} placeholder="acme" disabled={isEditing} /></div>
+              <div className="space-y-1.5"><Label>Slug <span className="text-red-500">*</span></Label><Input value={form.slug} onChange={(e) => setForm((p) => ({ ...p, slug: e.target.value }))} placeholder="acme" disabled={isEditing} /></div>
               <div className="space-y-1.5"><Label>Company Code</Label><Input value={form.companyCode} onChange={(e) => setForm((p) => ({ ...p, companyCode: e.target.value }))} placeholder="ACME-001" /></div>
             </div>
             <div className="space-y-1.5"><Label>Contact Person Name</Label><Input value={form.contactPersonName} onChange={(e) => setForm((p) => ({ ...p, contactPersonName: e.target.value }))} /></div>
@@ -304,7 +304,7 @@ function NewCompanyContent() {
               </div>
             </div>
             <div className="space-y-1.5"><Label>User Limit</Label><Input type="number" value={form.userLimit} onChange={(e) => setForm((p) => ({ ...p, userLimit: e.target.value }))} /></div>
-            <div className="space-y-1.5"><Label>License Expiry *</Label><Input type="date" value={form.licenseExpiryDate} onChange={(e) => setForm((p) => ({ ...p, licenseExpiryDate: e.target.value }))} /></div>
+            <div className="space-y-1.5"><Label>License Expiry <span className="text-red-500">*</span></Label><Input type="date" value={form.licenseExpiryDate} onChange={(e) => setForm((p) => ({ ...p, licenseExpiryDate: e.target.value }))} /></div>
           </Section>
 
           <div className="flex justify-end gap-2 pt-2 border-t">

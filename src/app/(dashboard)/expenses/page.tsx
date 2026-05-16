@@ -115,7 +115,7 @@ export default function ExpensesPage() {
   const expenses = allExpenses.filter((exp: any) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
-    return (exp.employee?.empName ?? '').toLowerCase().includes(q)
+    return (exp.employee?.name ?? '').toLowerCase().includes(q)
       || (exp.expenseType ?? '').toLowerCase().includes(q)
       || (exp.project?.projectName ?? '').toLowerCase().includes(q);
   });
@@ -207,7 +207,7 @@ export default function ExpensesPage() {
     const rows = expenses.map((exp: any) => ({
       'Date': exp.expenseDate ? format(new Date(exp.expenseDate + 'T00:00:00'), 'dd MMM yyyy') : '',
       ...(exp.expenseDateTo && exp.expenseDateTo !== exp.expenseDate ? { 'To Date': format(new Date(exp.expenseDateTo + 'T00:00:00'), 'dd MMM yyyy') } : {}),
-      ...(isAdmin && activeTab === 'team' ? { 'Employee': exp.employee?.empName ?? exp.submitterName ?? '' } : {}),
+      ...(isAdmin && activeTab === 'team' ? { 'Employee': exp.employee?.name ?? exp.submitterName ?? '' } : {}),
       'Project': exp.project?.projectName ?? '',
       'Type': exp.expenseType,
       'Amount': Number(exp.amount || 0),
@@ -413,7 +413,7 @@ export default function ExpensesPage() {
                         {exp.expenseDate ? format(new Date(exp.expenseDate + 'T00:00:00'), 'dd MMM yyyy') : '—'}
                         {exp.expenseDateTo && exp.expenseDateTo !== exp.expenseDate ? ` — ${format(new Date(exp.expenseDateTo + 'T00:00:00'), 'dd MMM')}` : ''}
                       </td>
-                      {canApprove && activeTab === 'team' && <td className="px-3 py-2">{exp.employee?.empName ?? exp.submitterName ?? '—'}{exp.submitterType === 'admin' ? ' (Admin)' : ''}</td>}
+                      {canApprove && activeTab === 'team' && <td className="px-3 py-2">{exp.employee?.name ?? exp.submitterName ?? '—'}{exp.submitterType === 'admin' ? ' (Admin)' : ''}</td>}
                       <td className="px-3 py-2">{exp.project?.projectName ?? '—'}</td>
                       <td className="px-3 py-2">{exp.expenseType}</td>
                       <td className="px-3 py-2 text-right font-semibold">₹{Number(exp.amount).toLocaleString('en-IN')}</td>

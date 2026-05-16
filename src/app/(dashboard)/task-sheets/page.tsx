@@ -148,7 +148,7 @@ export default function TaskSheetsPage() {
               <SelectContent>
                 <SelectItem value="all">All Employees</SelectItem>
                 {(employees ?? []).map((e) => (
-                  <SelectItem key={e.id} value={String(e.id)}>{e.empName}</SelectItem>
+                  <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -202,7 +202,7 @@ export default function TaskSheetsPage() {
               : (data ?? []).map((s) => (
                   <TableRow key={s.id}>
                     {activeTab === 'team' && (
-                      <TableCell className="font-medium">{s.employee?.empName ?? `#${s.employeeId}`}</TableCell>
+                      <TableCell className="font-medium">{s.employee?.name ?? `#${s.employeeId}`}</TableCell>
                     )}
                     <TableCell>{s.sheetDate?.slice(0, 10)}</TableCell>
                     <TableCell>{Number(s.totalHours).toFixed(1)}h</TableCell>

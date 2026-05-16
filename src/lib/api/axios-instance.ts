@@ -57,8 +57,12 @@ api.interceptors.response.use(
 
     const refreshToken = tokenStorage.getRefresh();
     if (!refreshToken) {
-      tokenStorage.clear();
-      window.location.href = '/login';
+      // Post-merge: the unified /auth/login no longer issues a refresh
+      // token, so the absence of one doesn't mean the session expired —
+      // it means we never had one. A 401 here is more likely a
+      // legitimate "wrong role for this route" from a stale or
+      // unswept controller. Surface the error instead of bouncing the
+      // user back to /login.
       return Promise.reject(error);
     }
 

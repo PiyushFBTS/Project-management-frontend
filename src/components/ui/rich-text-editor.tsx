@@ -21,7 +21,7 @@ import { useEffect, useRef, useState } from 'react';
 /// shows in the row label (e.g. "Sarah · Admin").
 export interface MentionUser {
   id: string;
-  empName: string;
+  name: string;
   kind?: 'employee' | 'admin' | 'client';
 }
 
@@ -203,7 +203,7 @@ function buildExtensions(withMention: boolean): any[] {
             const list = mentionStore.employees ?? [];
             const deduped = list.filter((e, i, a) => a.findIndex((x) => x.id === e.id) === i);
             if (!query) return deduped.slice(0, 8);
-            return deduped.filter((e) => e.empName.toLowerCase().includes(query.toLowerCase())).slice(0, 8);
+            return deduped.filter((e) => e.name.toLowerCase().includes(query.toLowerCase())).slice(0, 8);
           },
           render: () => {
             let container: HTMLDivElement | null = null;
@@ -226,11 +226,11 @@ function buildExtensions(withMention: boolean): any[] {
                 const kindBadge = item.kind && item.kind !== 'employee'
                   ? ` · ${item.kind === 'admin' ? 'Admin' : 'Client'}`
                   : '';
-                btn.textContent = `${item.empName}${kindBadge}`;
+                btn.textContent = `${item.name}${kindBadge}`;
                 btn.addEventListener('mousedown', (e) => {
                   e.preventDefault();
-                  commandFn?.({ id: String(item.id), label: item.empName });
-                  mentionStore.onMentionAdded?.({ id: item.id, empName: item.empName, kind: item.kind });
+                  commandFn?.({ id: String(item.id), label: item.name });
+                  mentionStore.onMentionAdded?.({ id: item.id, name: item.name, kind: item.kind });
                 });
                 container!.appendChild(btn);
               });
@@ -280,7 +280,7 @@ function buildExtensions(withMention: boolean): any[] {
                 if (props.event.key === 'Enter') {
                   if (items[selectedIndex]) {
                     const it = items[selectedIndex];
-                    commandFn?.({ id: String(it.id), label: it.empName });
+                    commandFn?.({ id: String(it.id), label: it.name });
                     mentionStore.onMentionAdded?.(it);
                   }
                   return true;

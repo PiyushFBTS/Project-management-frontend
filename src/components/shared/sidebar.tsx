@@ -386,7 +386,7 @@ export function Sidebar() {
         ) : (
           <>
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white shadow-md shadow-indigo-500/30 overflow-hidden">
-              <Image src="/ITSM_LOGO.png" alt="ITSM logo" width={32} height={32} unoptimized className="h-full w-full object-contain p-0.5" />
+              <Image src="/fbts-logo.jpg" alt="FBTS logo" width={32} height={32} unoptimized className="h-full w-full object-contain p-0.5" />
             </div>
             <div className="leading-tight min-w-0 flex-1">
               <p className="text-sm font-bold text-gray-900 dark:text-white truncate tracking-wide">ITSM</p>
@@ -429,7 +429,7 @@ export function MobileSidebar() {
           <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
             <div className="flex items-center gap-2.5">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white shadow-md shadow-indigo-500/30 overflow-hidden">
-                <Image src="/ITSM_LOGO.png" alt="ITSM logo" width={32} height={32} unoptimized className="h-full w-full object-contain p-0.5" />
+                <Image src="/fbts-logo.jpg" alt="FBTS logo" width={32} height={32} unoptimized className="h-full w-full object-contain p-0.5" />
               </div>
               <div className="leading-tight">
                 <p className="text-sm font-bold text-gray-900 dark:text-white tracking-wide">ITSM</p>

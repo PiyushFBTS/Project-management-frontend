@@ -67,7 +67,7 @@ export default function ProjectBreakdownPage({
   const employees = (data?.employees ?? []) as Array<{
     employee_id: number;
     emp_code: string;
-    emp_name: string;
+    name: string;
     consultant_type: string;
     man_days: string | number;
     hours: string | number;
@@ -163,7 +163,7 @@ export default function ProjectBreakdownPage({
                     {rows.map((r) => (
                       <TableRow key={r.employee_id}>
                         <TableCell className="font-mono text-xs">{r.emp_code}</TableCell>
-                        <TableCell className="font-medium">{r.emp_name}</TableCell>
+                        <TableCell className="font-medium">{r.name}</TableCell>
                         <TableCell className="text-right text-xs text-muted-foreground">
                           {Number(r.hours).toFixed(1)}
                         </TableCell>

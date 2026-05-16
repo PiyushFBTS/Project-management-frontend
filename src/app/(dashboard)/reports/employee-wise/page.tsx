@@ -193,7 +193,7 @@ export default function EmployeeWiseReportPage() {
                           className="text-blue-600 dark:text-blue-400 hover:underline"
                           title="Open employee profile"
                         >
-                          {row.emp_name}
+                          {row.name}
                         </Link>
                       </TableCell>
                       <TableCell className="text-xs">{typeLabels[row.consultant_type] ?? row.consultant_type}</TableCell>
@@ -204,7 +204,7 @@ export default function EmployeeWiseReportPage() {
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <button
                           className="font-medium text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
-                          onClick={() => { setTicketEmpId(row.id); setTicketEmpName(row.emp_name); setTicketDialogOpen(true); }}
+                          onClick={() => { setTicketEmpId(row.id); setTicketEmpName(row.name); setTicketDialogOpen(true); }}
                         >
                           {Number(row.ticket_count ?? 0).toFixed(2)}
                         </button>

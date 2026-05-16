@@ -1,30 +1,35 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { AdminUser, Employee } from '@/types';
 import { tokenStorage, LoginType } from '@/lib/auth/token-storage';
-import { authApi } from '@/lib/api/auth';
+import { authApi, MergedUser, ClientLoginUser } from '@/lib/api/auth';
 
-type ClientUser = {
-  id: number;
-  fullName: string;
-  email: string;
-  mobileNumber?: string;
-  projectId: number;
-  projectName: string | null;
-  companyId: number;
-  companyName: string | null;
-  companyLogoUrl: string | null;
-  _type: 'client';
-};
+/**
+ * Post-merge auth provider.
+ *
+ * One `login(email, password)` for every kind of user. The backend
+ * cascades through `users` (admin + employee) → `clients`, and the
+ * response carries `user.userType` so the provider can branch:
+ *
+ *   - 'admin' | 'employee' → MergedUser, `_type` mirrored from userType
+ *                            for existing `user._type === 'admin'`
+ *                            checks across the app.
+ *   - 'client'             → ClientUser shape, `_type: 'client'`.
+ *
+ * Mirroring `userType → _type` avoids a 48-site sweep across the
+ * dashboard, sidebar, page guards, etc.
+ */
 
-type AppUser = (AdminUser & { _type: 'admin' }) | (Employee & { _type: 'employee' }) | ClientUser;
+export type SessionUser =
+  | (MergedUser & { _type: 'admin' | 'employee' })
+  | (ClientLoginUser & { _type: 'client' });
 
 interface AuthContextType {
-  user: AppUser | null;
+  user: SessionUser | null;
   isLoading: boolean;
   loginType: LoginType;
-  login: (email: string, password: string, type: LoginType) => Promise<void>;
+  /** Unified login — auto-detects user (admin/employee) vs client. */
+  login: (email: string, password: string) => Promise<SessionUser>;
   logout: () => void;
   refreshProfile: () => Promise<void>;
 }
@@ -32,7 +37,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AppUser | null>(null);
+  const [user, setUser] = useState<SessionUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loginType, setLoginType] = useState<LoginType>('admin');
 
@@ -45,15 +50,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoginType(type);
 
     try {
-      if (type === 'employee') {
-        const res = await authApi.getEmployeeProfile();
-        setUser({ ...res.data.data, _type: 'employee' });
-      } else if (type === 'client') {
+      if (type === 'client') {
         const res = await authApi.getClientProfile();
-        setUser({ ...res.data.data, _type: 'client' });
+        const c = res.data.data;
+        setUser({ ...c, _type: 'client' });
       } else {
-        const res = await authApi.getProfile();
-        setUser({ ...res.data.data, _type: 'admin' });
+        // Merged user (admin or employee). `/auth/me` returns one row
+        // with a userType discriminator that we mirror onto _type.
+        const res = await authApi.me();
+        const u = res.data.data;
+        setUser({ ...u, _type: u.userType });
       }
     } catch {
       tokenStorage.clear();
@@ -64,32 +70,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { fetchProfile(); }, [fetchProfile]);
 
-  const login = async (email: string, password: string, type: LoginType) => {
-    if (type === 'employee') {
-      const res = await authApi.loginEmployee(email, password);
-      const { accessToken, refreshToken, user: u } = res.data.data;
-      tokenStorage.setAccess(accessToken);
-      tokenStorage.setRefresh(refreshToken);
-      tokenStorage.setLoginType('employee');
-      setLoginType('employee');
-      setUser({ ...u, _type: 'employee' });
-    } else if (type === 'client') {
-      const res = await authApi.loginClient(email, password);
-      const { accessToken, refreshToken, user: u } = res.data.data;
-      tokenStorage.setAccess(accessToken);
-      tokenStorage.setRefresh(refreshToken);
+  const login = async (email: string, password: string): Promise<SessionUser> => {
+    const res = await authApi.login(email, password);
+    const body = res.data.data;
+    tokenStorage.setAccess(body.accessToken);
+    // Both user and client login flows now return a refresh token —
+    // store it so hard-refresh / cold reload can re-issue an access
+    // token via /auth/refresh.
+    if (body.refreshToken) {
+      tokenStorage.setRefresh(body.refreshToken);
+    }
+
+    if (body.user.userType === 'client') {
       tokenStorage.setLoginType('client');
       setLoginType('client');
-      setUser({ ...u, _type: 'client' });
-    } else {
-      const res = await authApi.login(email, password);
-      const { accessToken, refreshToken, user: u } = res.data.data;
-      tokenStorage.setAccess(accessToken);
-      tokenStorage.setRefresh(refreshToken);
-      tokenStorage.setLoginType('admin');
-      setLoginType('admin');
-      setUser({ ...u, _type: 'admin' });
+      const next: SessionUser = { ...body.user, _type: 'client' };
+      setUser(next);
+      return next;
     }
+
+    // Admin or employee.
+    tokenStorage.setLoginType(body.user.userType);
+    setLoginType(body.user.userType);
+    const next: SessionUser = { ...body.user, _type: body.user.userType };
+    setUser(next);
+    return next;
   };
 
   const logout = () => {

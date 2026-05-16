@@ -212,7 +212,7 @@ function NewProjectPage() {
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
         <div className="rounded-xl border bg-card p-4">
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-pink-600 dark:text-pink-400 mb-1.5">
-            <FolderKanban className="h-3 w-3" /> Project Code
+            <FolderKanban className="h-3 w-3" /> Project Code <span className="text-red-500">*</span>
           </div>
           <Input
             value={form.projectCode}
@@ -224,7 +224,7 @@ function NewProjectPage() {
 
         <div className="rounded-xl border bg-card p-4">
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-cyan-600 dark:text-cyan-400 mb-1.5">
-            <FileText className="h-3 w-3" /> Project Name
+            <FileText className="h-3 w-3" /> Project Name <span className="text-red-500">*</span>
           </div>
           <Input
             value={form.projectName}
@@ -248,7 +248,7 @@ function NewProjectPage() {
 
         <div className="rounded-xl border bg-card p-4">
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-violet-600 dark:text-violet-400 mb-1.5">
-            <FolderKanban className="h-3 w-3" /> Type
+            <FolderKanban className="h-3 w-3" /> Type <span className="text-red-500">*</span>
           </div>
           <Select value={form.projectType} onValueChange={(v) => setForm((p) => ({ ...p, projectType: v }))}>
             <SelectTrigger className="h-8 text-sm w-full"><SelectValue /></SelectTrigger>
@@ -280,7 +280,7 @@ function NewProjectPage() {
             placeholder="Search manager..."
             options={[
               { value: 'none', label: 'None' },
-              ...(managers ?? []).map((m: any) => ({ value: String(m.id), label: m.empName })),
+              ...(managers ?? []).map((m: any) => ({ value: String(m.id), label: m.name })),
             ]}
             className="h-8 text-sm"
           />
@@ -288,7 +288,7 @@ function NewProjectPage() {
 
         <div className="rounded-xl border bg-card p-4">
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-amber-600 dark:text-amber-400 mb-1.5">
-            <Calendar className="h-3 w-3" /> Start Date
+            <Calendar className="h-3 w-3" /> Start Date <span className="text-red-500">*</span>
           </div>
           <Input
             type="date"

@@ -274,10 +274,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
         : await employeesApi.employeeGetAll({ limit: 100 });
       const all = r.data?.data ?? r.data ?? [];
       const list = Array.isArray(all) ? all : (all as any)?.data ?? [];
-      return list.filter((e: any) =>
-        (String(e.reportsToId) === String(id) && !e.isReportToAdmin) ||
-        (String(e.reportsToAdminId) === String(id) && e.isReportToAdmin && targetType === 'admin')
-      );
+      return list.filter((e: any) => String(e.reportsToId) === String(id));
     },
     enabled: !!id && activeTab === 'profile',
   });
@@ -316,7 +313,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
   })();
   const startEdit = () => {
     if (!emp) return;
-    setEditName(emp.empName ?? '');
+    setEditName(emp.name ?? '');
     setEditEmail(emp.email ?? '');
     setEditPhone(emp.mobileNumber ?? '');
     setEditDob(emp.dateOfBirth ?? '');
@@ -328,11 +325,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
     setEditAnnualCTC(emp.annualCTC != null ? String(emp.annualCTC) : '');
     setEditBloodGroup(emp.bloodGroup ?? '');
     setEditMaritalStatus(emp.maritalStatus ?? '');
-    setEditReportsToId(
-      (emp as any).isReportToAdmin && (emp as any).reportsToAdminId
-        ? `adm-${(emp as any).reportsToAdminId}`
-        : emp.reportsToId ? `emp-${emp.reportsToId}` : 'none'
-    );
+    setEditReportsToId(emp.reportsToId ? String(emp.reportsToId) : 'none');
     setEditIsActive(emp.isActive !== false);
     setEditAdminPassword('');
     setEditMode(true);
@@ -369,7 +362,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
       if (isSelf && isEmployee) {
         // Employee self-update (limited fields)
         return employeesApi.updateSelf({
-          empName: editName,
+          name: editName,
           mobileNumber: editPhone,
           dateOfBirth: editDob || undefined,
           bloodGroup: editBloodGroup || undefined,
@@ -377,11 +370,8 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
         });
       }
       // Admin/HR update (all fields)
-      const [reportsType, reportsIdStr] = editReportsToId && editReportsToId !== 'none' ? editReportsToId.split('-') : [null, null];
-      const isReportToAdmin = reportsType === 'adm';
-      const reportsToId = reportsType === 'emp' ? Number(reportsIdStr) : null;
-      const reportsToAdminId = reportsType === 'adm' ? Number(reportsIdStr) : null;
-      const dto: any = { empName: editName, email: editEmail, mobileNumber: editPhone, dateOfBirth: editDob || undefined, consultantType: editType, joiningDate: editJoiningDate || undefined, isHr: editIsHr, isAccounts: editIsAccounts, isReportToAdmin, reportsToId, reportsToAdminId, fillDaysOverride: editFillDays ? Number(editFillDays) : null, annualCTC: editAnnualCTC ? Number(editAnnualCTC) : null, bloodGroup: editBloodGroup || undefined, maritalStatus: editMaritalStatus || undefined, isActive: editIsActive };
+      const reportsToId = editReportsToId && editReportsToId !== 'none' ? Number(editReportsToId) : null;
+      const dto: any = { name: editName, email: editEmail, mobileNumber: editPhone, dateOfBirth: editDob || undefined, consultantType: editType, joiningDate: editJoiningDate || undefined, isHr: editIsHr, isAccounts: editIsAccounts, reportsToId, fillDaysOverride: editFillDays ? Number(editFillDays) : null, annualCTC: editAnnualCTC ? Number(editAnnualCTC) : null, bloodGroup: editBloodGroup || undefined, maritalStatus: editMaritalStatus || undefined, isActive: editIsActive };
       return employeesApi.update(Number(id), dto);
     },
     onSuccess: async () => {
@@ -474,10 +464,10 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
             <div className={`bg-linear-to-br ${AVATAR_GRADIENTS[emp.id % AVATAR_GRADIENTS.length]} p-5`}>
               <div className="flex items-center gap-4">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white/25 backdrop-blur-sm text-white text-xl font-bold ring-4 ring-white/30 shadow-xl shrink-0">
-                  {getInitials(emp.empName)}
+                  {getInitials(emp.name)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h1 className="text-lg font-bold text-white">{emp.empName}</h1>
+                  <h1 className="text-lg font-bold text-white">{emp.name}</h1>
                   <div className="flex flex-wrap items-center gap-3 mt-1 text-white/70 text-xs">
                     {emp.email && <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{emp.email}</span>}
                     {emp.mobileNumber && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{emp.mobileNumber}</span>}
@@ -532,7 +522,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-5 gap-x-8">
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Full Name</p>
-                        {editMode ? <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="h-8 text-sm" /> : <p className="text-sm font-medium">{emp.empName}</p>}
+                        {editMode ? <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="h-8 text-sm" /> : <p className="text-sm font-medium">{emp.name}</p>}
                       </div>
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Email Address</p>
@@ -579,18 +569,14 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                               { value: 'none', label: 'None' },
                               ...allEmployees
                                 .filter((e: any) => e.id !== Number(id) && e.isActive !== false)
-                                .filter((e: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.id === e.id && x._type === e._type) === i)
+                                .filter((e: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.id === e.id) === i)
                                 .map((e: any) => ({
-                                  value: `${e._type === 'admin' ? 'adm' : 'emp'}-${e.id}`,
-                                  label: `${e.empName}${e._type === 'admin' ? ' (Admin)' : ''} — ${e.empCode}`,
+                                  value: String(e.id),
+                                  label: `${e.name}${e._type === 'admin' ? ' (Admin)' : ''} — ${e.empCode}`,
                                 })),
                             ]}
                           />
-                        ) : <p className="text-sm font-medium">
-                          {(emp as any).isReportToAdmin
-                            ? (emp as any).reportsToAdmin?.name ?? '—'
-                            : emp.reportsTo?.empName ?? '—'}
-                        </p>}
+                        ) : <p className="text-sm font-medium">{emp.reportsTo?.name ?? '—'}</p>}
                       </div>
                       {emp.assignedProject && (
                         <div>
@@ -757,9 +743,9 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                         <button key={member.id} onClick={() => router.push(`/employees/${member.id}?type=employee`)}
                           className="group flex flex-col items-center gap-1.5 cursor-pointer">
                           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-linear-to-br from-blue-500 to-indigo-500 text-white text-sm font-bold ring-2 ring-background shadow group-hover:scale-110 transition-all">
-                            {(member.empName ?? '').split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()}
+                            {(member.name ?? '').split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()}
                           </div>
-                          <p className="text-[11px] font-medium text-center max-w-[70px] truncate group-hover:text-primary transition-colors">{member.empName}</p>
+                          <p className="text-[11px] font-medium text-center max-w-[70px] truncate group-hover:text-primary transition-colors">{member.name}</p>
                           <p className="text-[9px] text-muted-foreground">{member.consultantType?.replace('_', ' ')}</p>
                         </button>
                       ))}
@@ -1515,7 +1501,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                 </div>
                 <div>
                   <h3 className="text-lg font-bold">{pt?.label ?? viewPraise.praiseType}</h3>
-                  <p className="text-sm text-muted-foreground mt-1">Awarded to <span className="font-semibold text-foreground">{emp?.empName}</span></p>
+                  <p className="text-sm text-muted-foreground mt-1">Awarded to <span className="font-semibold text-foreground">{emp?.name}</span></p>
                 </div>
                 {viewPraise.description && (
                   <div className="bg-muted/50 rounded-lg px-4 py-3 w-full">

@@ -154,7 +154,7 @@ export default function ProjectsPage() {
                     </TableCell>
                     <TableCell className="text-slate-600">{p.clientName}</TableCell>
                     <TableCell className="text-slate-600 text-sm">
-                      {p.projectManager ? p.projectManager.empName : <span className="text-muted-foreground">—</span>}
+                      {p.projectManager ? p.projectManager.name : <span className="text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell>
                       {(() => {

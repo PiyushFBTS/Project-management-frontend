@@ -15,7 +15,7 @@ import { smtpApi } from '@/lib/api/smtp';
 import { SmtpConfigForm } from '@/components/shared/smtp-config-form';
 import { useCompany } from '@/providers/company-provider';
 import { useAuth } from '@/providers/auth-provider';
-import { AdminUser, LookupCountry, LookupState, LookupCity, LookupCurrency, LookupPostalCode } from '@/types';
+import { LookupCountry, LookupState, LookupCity, LookupCurrency, LookupPostalCode } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';

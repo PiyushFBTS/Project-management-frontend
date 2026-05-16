@@ -181,7 +181,7 @@ export default function LeaveRequestDetailPage() {
               <User className="h-3 w-3" /> Employee
             </div>
             <div>
-              <p className="font-semibold">{detail.employee?.empName}</p>
+              <p className="font-semibold">{detail.employee?.name}</p>
               <p className="text-xs text-muted-foreground">{detail.employee?.empCode} · {detail.employee?.email}</p>
             </div>
             {(() => {
@@ -281,7 +281,7 @@ export default function LeaveRequestDetailPage() {
                       adminFinal ? 'bg-emerald-500' : 'bg-amber-400'
                     }`} />
                     <div>
-                      <p className="text-sm font-medium">Manager: {detail.manager?.empName ?? '—'}</p>
+                      <p className="text-sm font-medium">Manager: {detail.manager?.name ?? '—'}</p>
                       {detail.managerActionAt ? (
                         <>
                           <p className="text-xs text-muted-foreground">
@@ -306,7 +306,7 @@ export default function LeaveRequestDetailPage() {
                       }`} />
                       <div>
                         <p className="text-sm font-medium">
-                          HR: {adminFinal ? '—' : (detail.hr?.empName ?? hrApproverName ?? 'Pending')}
+                          HR: {adminFinal ? '—' : (detail.hr?.name ?? hrApproverName ?? 'Pending')}
                         </p>
                         {adminFinal ? (
                           <p className="text-xs text-muted-foreground">{autoWord}</p>
@@ -360,7 +360,7 @@ export default function LeaveRequestDetailPage() {
               <div className="flex flex-wrap gap-1.5">
                 {detail.watchers.map((w: any) => (
                   <Badge key={w.id} variant="outline" className="text-xs">
-                    {w.employee?.empName ?? `Employee #${w.employeeId}`}
+                    {w.employee?.name ?? `Employee #${w.employeeId}`}
                   </Badge>
                 ))}
               </div>

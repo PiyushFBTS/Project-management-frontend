@@ -28,19 +28,10 @@ export interface AuthTokens {
   refreshToken: string;
 }
 
-export interface AdminUser {
-  id: number;
-  name: string;
-  email: string;
-  role: AdminRole;
-  companyId: number | null;
-  companyLogoUrl?: string | null;
-  companyName?: string | null;
-  isActive: boolean;
-  createdAt: string;
-}
-
-export type AdminRole = 'super_admin' | 'admin';
+// Post-merge: `AdminUser` is gone — admins are rows in the unified
+// `users` table with `userType: 'admin'`. The Company-admins screens
+// import `MergedUser` from `@/lib/api/auth` directly; legacy callers can
+// alias `MergedUser` if they need a name like `AdminUser`.
 
 // ── Company ──────────────────────────────────────────────────────────────
 
@@ -158,7 +149,7 @@ export interface Project {
   endDate?: string;
   description?: string;
   projectManagerId?: number;
-  projectManager?: { id: number; empName: string; empCode: string };
+  projectManager?: { id: number; name: string; empCode: string };
   createdAt: string;
   updatedAt: string;
 }
@@ -184,14 +175,14 @@ export type ConsultantType = 'project_manager' | 'functional' | 'technical' | 'm
 export interface Employee {
   id: number;
   empCode: string;
-  empName: string;
+  name: string;
   email: string;
   mobileNumber?: string;
   consultantType: ConsultantType;
   assignedProjectId?: number;
   assignedProject?: Project;
   reportsToId?: number | null;
-  reportsTo?: { id: number; empName: string; empCode: string } | null;
+  reportsTo?: { id: number; name: string; empCode: string } | null;
   isHr: boolean;
   isAccounts: boolean;
   isActive: boolean;
@@ -228,15 +219,13 @@ export interface TodayEvent {
 
 export interface CreateEmployeeDto {
   empCode: string;
-  empName: string;
+  name: string;
   email: string;
   mobileNumber?: string;
   password: string;
   consultantType: ConsultantType;
   assignedProjectId?: number;
   reportsToId?: number | null;
-  reportsToAdminId?: number | null;
-  isReportToAdmin?: boolean;
   isHr?: boolean;
   isAccounts?: boolean;
   dateOfBirth?: string;
@@ -248,14 +237,12 @@ export interface CreateEmployeeDto {
 }
 
 export interface UpdateEmployeeDto {
-  empName?: string;
+  name?: string;
   email?: string;
   mobileNumber?: string;
   consultantType?: ConsultantType;
   assignedProjectId?: number | null;
   reportsToId?: number | null;
-  reportsToAdminId?: number | null;
-  isReportToAdmin?: boolean;
   isHr?: boolean;
   isAccounts?: boolean;
   isActive?: boolean;
@@ -339,7 +326,7 @@ export interface FillRateTrend {
 
 export interface TopEmployee {
   employee_id: number;
-  emp_name: string;
+  name: string;
   emp_code: string;
   total_hours: number;
   total_man_days: number;
@@ -486,7 +473,7 @@ export interface NotificationsResponse {
 export interface EmployeeWiseReport {
   id: number;
   emp_code: string;
-  emp_name: string;
+  name: string;
   consultant_type: string;
   assigned_project: string;
   days_filled: number;
@@ -520,7 +507,7 @@ export interface DailyFillReport {
 export interface DailyFillRow {
   id: number;
   emp_code: string;
-  emp_name: string;
+  name: string;
   consultant_type: string;
   is_filled: number;
   total_hours: number;
@@ -531,7 +518,7 @@ export interface DailyFillRow {
 export interface LastFilledRow {
   id: number;
   emp_code: string;
-  emp_name: string;
+  name: string;
   consultant_type: string;
   assigned_project: string | null;
   last_filled_date: string | null;

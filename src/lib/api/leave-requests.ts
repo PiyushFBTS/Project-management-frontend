@@ -65,7 +65,7 @@ export const leaveRequestsApi = {
     api.get<ApiResponse<LeaveType[]>>('/employee/leave-types'),
 
   getColleagues: () =>
-    api.get<ApiResponse<{ id: number; empName: string; empCode: string }[]>>('/employee/leave-requests/colleagues'),
+    api.get<ApiResponse<{ id: number; name: string; empCode: string }[]>>('/employee/leave-requests/colleagues'),
 
   submitLeave: (data: {
     leaveReasonId: number;
@@ -99,5 +99,5 @@ export const leaveRequestsApi = {
     api.get<ApiResponse<LeaveType[]>>('/leave-requests/leave-types'),
 
   getAdminColleagues: () =>
-    api.get<ApiResponse<{ id: number; empName: string; empCode: string }[]>>('/leave-requests/colleagues'),
+    api.get<ApiResponse<{ id: number; name: string; empCode: string }[]>>('/leave-requests/colleagues'),
 };

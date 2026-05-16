@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { capitalizeFirst } from '@/lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
 import Link from 'next/link';
@@ -67,12 +68,13 @@ export default function NewTaskPage({ params: paramsPromise }: { params: Promise
   });
 
   const { data: phases = [] } = useQuery({
-    queryKey: ['project-phases', projectId],
+    queryKey: ['project-phases', projectId, isAdmin, isClient],
     queryFn: () => planApi.getPhases(projectId).then((r) => r.data?.data ?? []),
+    enabled: !!user && !Number.isNaN(projectId),
   });
 
   const { data: empList = [] } = useQuery({
-    queryKey: ['project-employees', projectId],
+    queryKey: ['project-employees', projectId, isAdmin],
     queryFn: async () => {
       try {
         const fn = isAdmin ? employeesApi.getAll : employeesApi.employeeGetAll;
@@ -81,7 +83,7 @@ export default function NewTaskPage({ params: paramsPromise }: { params: Promise
         return Array.isArray(d?.data) ? d.data : Array.isArray(d) ? d : [];
       } catch { return []; }
     },
-    enabled: !isClient,
+    enabled: !!user && !isClient,
   });
 
   // Create mutation
@@ -107,12 +109,20 @@ export default function NewTaskPage({ params: paramsPromise }: { params: Promise
         router.push(`/projects/${projectId}/planning`);
       }
     },
-    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to create task'),
+    onError: (e: any) => {
+      const msg = e?.response?.data?.message;
+      const text = Array.isArray(msg) ? msg.join(', ') : (typeof msg === 'string' ? msg : 'Failed to create task');
+      toast.error(text);
+    },
   });
 
   const handleSubmit = () => {
     if (!title.trim()) {
       toast.error('Title is required');
+      return;
+    }
+    if (!description.trim()) {
+      toast.error('Description is required');
       return;
     }
     const dto: CreateTaskDto = {
@@ -159,18 +169,24 @@ export default function NewTaskPage({ params: paramsPromise }: { params: Promise
 
           {/* Title */}
           <div>
+            <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
+              Title <span className="text-red-500">*</span>
+            </label>
             <Input
               value={title}
               onChange={(e) => setTitle(capitalizeFirst(e.target.value))}
               placeholder="Task title…"
-              className="text-xl font-bold border-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-violet-500 h-auto py-2"
+              className={`text-xl font-bold border-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-violet-500 h-auto py-2 ${!title.trim() ? 'border-red-300' : ''}`}
             />
+            {!title.trim() && (
+              <p className="text-xs text-red-500 mt-1">Title is required</p>
+            )}
           </div>
 
           {/* Description */}
           <div className="rounded-xl border bg-card p-4">
             <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">
-              <FileText className="h-3 w-3" /> Description
+              <FileText className="h-3 w-3" /> Description <span className="text-red-500">*</span>
             </div>
             <RichTextEditor
               value={description}
@@ -178,6 +194,9 @@ export default function NewTaskPage({ params: paramsPromise }: { params: Promise
               placeholder="Describe the task…"
               minHeight="180px"
             />
+            {!description.trim() && (
+              <p className="text-xs text-red-500 mt-1">Description is required</p>
+            )}
           </div>
 
           {/* Attachments */}
@@ -276,7 +295,9 @@ export default function NewTaskPage({ params: paramsPromise }: { params: Promise
                     <SelectTrigger className="w-full h-9"><SelectValue placeholder="None" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">None</SelectItem>
-                      {(phases as any[]).map((p: any) => (
+                      {(phases as any[]).length === 0 ? (
+                        <div className="px-2 py-1.5 text-xs text-muted-foreground italic">No phases yet</div>
+                      ) : (phases as any[]).map((p: any) => (
                         <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
                       ))}
                     </SelectContent>
@@ -286,18 +307,19 @@ export default function NewTaskPage({ params: paramsPromise }: { params: Promise
                   <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
                     <User className="h-3 w-3" /> Assignee
                   </label>
-                  <Select value={assigneeId} onValueChange={setAssigneeId}>
-                    <SelectTrigger className="w-full h-9"><SelectValue placeholder="Unassigned" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Unassigned</SelectItem>
-                      {(empList as any[])
-                        .filter((e: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.id === e.id && (x._type || 'emp') === (e._type || 'emp')) === i)
+                  <SearchableSelect
+                    value={assigneeId}
+                    onValueChange={setAssigneeId}
+                    placeholder="Search assignee…"
+                    options={[
+                      { value: '__none__', label: 'Unassigned' },
+                      ...((empList as any[])
+                        .filter((e: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.id === e.id) === i)
                         .filter((e: any) => !e._type || e._type === 'employee')
-                        .map((e: any) => (
-                        <SelectItem key={`emp-${e.id}`} value={String(e.id)}>{e.empName}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                        .map((e: any) => ({ value: String(e.id), label: e.name }))),
+                    ]}
+                    className="h-9"
+                  />
                 </div>
               </>
             )}
@@ -320,7 +342,7 @@ export default function NewTaskPage({ params: paramsPromise }: { params: Promise
           {/* Create button */}
           <Button
             className="w-full bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white font-semibold py-5"
-            disabled={!title.trim() || createMut.isPending}
+            disabled={!title.trim() || !description.trim() || createMut.isPending}
             onClick={handleSubmit}
           >
             {createMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}

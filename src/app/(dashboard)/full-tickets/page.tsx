@@ -258,7 +258,7 @@ function FullTicketsPageInner() {
       'Ticket ID': t.ticketNumber ?? '—',
       'Title': t.title,
       'Project': t.project?.projectName ?? '—',
-      'Assignee': t.assignee?.empName ?? (t as any).assignedAdmin?.name ?? (t as any).assignedClient?.fullName ?? 'Unassigned',
+      'Assignee': t.assignee?.name ?? (t as any).assignedAdmin?.name ?? (t as any).assignedClient?.fullName ?? 'Unassigned',
       'Priority': priorityLabels[t.priority] ?? t.priority,
       'Status': statusLabels[t.status] ?? t.status,
       'Due Date': t.dueDate ? new Date(t.dueDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—',
@@ -443,7 +443,7 @@ function FullTicketsPageInner() {
 
     if (historyNames.size === 0) return allEmps;
 
-    return allEmps.filter((e) => historyNames.has(e.empName));
+    return allEmps.filter((e) => historyNames.has(e.name));
   })();
 
   // Fetch project clients for reassign dropdown (admin & employee — not client)
@@ -473,15 +473,15 @@ function FullTicketsPageInner() {
 
     const empOpts = deduped
       .filter((e: any) => !e._type || e._type === 'employee')
-      .map((emp) => ({ value: `emp-${emp.id}`, label: emp.empName }));
+      .map((emp) => ({ value: `emp-${emp.id}`, label: emp.name }));
 
     const adminOpts = deduped
       .filter((e: any) => e._type === 'admin')
-      .map((a) => ({ value: `admin-${a.id}`, label: `${a.empName} (Admin)` }));
+      .map((a) => ({ value: `admin-${a.id}`, label: `${a.name} (Admin)` }));
 
     const clientFromList = deduped
       .filter((e: any) => e._type === 'client')
-      .map((c) => ({ value: `client-${c.id}`, label: `${c.empName} (Client)` }));
+      .map((c) => ({ value: `client-${c.id}`, label: `${c.name} (Client)` }));
 
     if (isClient) return [...empOpts, ...adminOpts, ...clientFromList];
 
@@ -634,7 +634,7 @@ function FullTicketsPageInner() {
               ...(companyEmployees ?? [])
                 .filter((emp: any) => emp._type !== 'admin')
                 .filter((e, i, arr) => arr.findIndex((x) => x.id === e.id) === i)
-                .map((emp) => ({ value: String(emp.id), label: emp.empName })),
+                .map((emp) => ({ value: String(emp.id), label: emp.name })),
             ]}
             placeholder="All Employees"
             className="w-full sm:w-48"
@@ -734,7 +734,7 @@ function FullTicketsPageInner() {
                 )}
                 <p className="text-xs text-muted-foreground truncate mb-3">
                   <User className="inline h-3 w-3 mr-1 -mt-0.5" />
-                  {t.assignee?.empName ?? (t as any).assignedAdmin?.name ?? (t as any).assignedClient?.fullName ?? 'Unassigned'}
+                  {t.assignee?.name ?? (t as any).assignedAdmin?.name ?? (t as any).assignedClient?.fullName ?? 'Unassigned'}
                 </p>
                 <div className="flex items-center justify-between gap-2">
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${statusColors[t.status]}`}>
@@ -779,7 +779,7 @@ function FullTicketsPageInner() {
                       </TableCell>
                     )}
                     <TableCell className="text-sm text-muted-foreground">
-                      {t.assignee?.empName ?? (t as any).assignedAdmin?.name ?? (t as any).assignedClient?.fullName ?? 'Unassigned'}
+                      {t.assignee?.name ?? (t as any).assignedAdmin?.name ?? (t as any).assignedClient?.fullName ?? 'Unassigned'}
                     </TableCell>
                     <TableCell>
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${priorityColors[t.priority]}`}>
@@ -851,7 +851,7 @@ function FullTicketsPageInner() {
                     <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-blue-600 dark:text-blue-400 mb-1">
                       <User className="h-3 w-3" /> Assignee
                     </div>
-                    <p className="text-sm font-medium truncate">{taskDetail.assignee?.empName ?? (taskDetail as any).assignedAdmin?.name ?? (taskDetail as any).assignedClient?.fullName ?? 'Unassigned'}</p>
+                    <p className="text-sm font-medium truncate">{taskDetail.assignee?.name ?? (taskDetail as any).assignedAdmin?.name ?? (taskDetail as any).assignedClient?.fullName ?? 'Unassigned'}</p>
                   </div>
                   <div className="rounded-lg border bg-amber-500/5 p-2.5">
                     <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-amber-600 dark:text-amber-400 mb-1">
@@ -1070,7 +1070,7 @@ function FullTicketsPageInner() {
                     value={commentText}
                     onChange={setCommentText}
                     onMentionAdded={(emp) => setTaggedMentions((prev) => [...prev, emp])}
-                    employees={(companyEmployees ?? []).filter((e: any) => e._type !== 'admin').map((e) => ({ id: e.id, empName: e.empName }))}
+                    employees={(companyEmployees ?? []).filter((e: any) => e._type !== 'admin').map((e) => ({ id: e.id, name: e.name }))}
                     placeholder="Add a comment… type @ to mention someone"
                     rows={2}
                   />
@@ -1165,7 +1165,7 @@ function FullTicketsPageInner() {
                     onChange={() => toggleContributor(emp.id)}
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{emp.empName}</p>
+                    <p className="text-sm font-medium">{emp.name}</p>
                     <p className="text-xs text-muted-foreground">{emp.empCode}</p>
                   </div>
                 </label>
@@ -1210,10 +1210,10 @@ function FullTicketsPageInner() {
                 {(viewContributors ?? []).map((c: any) => (
                   <div key={`view-contrib-${c.employeeId ?? c.id}`} className="flex items-center gap-3 rounded-lg border p-3">
                     <div className="h-8 w-8 rounded-full bg-linear-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-sm font-bold text-white shrink-0">
-                      {(c.employee?.empName ?? '?').charAt(0).toUpperCase()}
+                      {(c.employee?.name ?? '?').charAt(0).toUpperCase()}
                     </div>
                     <div>
-                      <p className="text-sm font-medium">{c.employee?.empName ?? `#${c.employeeId}`}</p>
+                      <p className="text-sm font-medium">{c.employee?.name ?? `#${c.employeeId}`}</p>
                       {c.employee?.empCode && <p className="text-xs text-muted-foreground">{c.employee.empCode}</p>}
                     </div>
                   </div>

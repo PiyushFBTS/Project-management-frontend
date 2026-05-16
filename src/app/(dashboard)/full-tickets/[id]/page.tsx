@@ -188,7 +188,7 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
       }
     }
     if (historyNames.size === 0) return allEmps;
-    return allEmps.filter((e) => historyNames.has(e.empName));
+    return allEmps.filter((e) => historyNames.has(e.name));
   })();
 
   const { data: savedContributors = [] } = useQuery({
@@ -205,8 +205,8 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
   const reassignOptions = (() => {
     const all = companyEmployees ?? [];
     const deduped = all.filter((e, i, arr) => arr.findIndex((x) => x.id === e.id && (x as any)._type === (e as any)._type) === i);
-    const empOpts = deduped.filter((e: any) => !e._type || e._type === 'employee').map((emp) => ({ value: `emp-${emp.id}`, label: emp.empName }));
-    const adminOpts = deduped.filter((e: any) => e._type === 'admin').map((a) => ({ value: `admin-${a.id}`, label: `${a.empName} (Admin)` }));
+    const empOpts = deduped.filter((e: any) => !e._type || e._type === 'employee').map((emp) => ({ value: `emp-${emp.id}`, label: emp.name }));
+    const adminOpts = deduped.filter((e: any) => e._type === 'admin').map((a) => ({ value: `admin-${a.id}`, label: `${a.name} (Admin)` }));
     return [...empOpts, ...adminOpts];
   })();
 
@@ -278,7 +278,10 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
       setContributorsOpen(false);
       setClosingTaskId(null);
     },
-    onError: () => toast.error('Failed to save contributors'),
+    onError: (e: any) => {
+      const msg = e?.response?.data?.message;
+      toast.error(Array.isArray(msg) ? msg.join(', ') : (typeof msg === 'string' ? msg : 'Failed to save contributors'));
+    },
   });
 
   // Permanent ticket delete — admin-only. The button below is also
@@ -353,7 +356,7 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
   const assignees = Array.isArray(assigneesRaw) ? assigneesRaw : [];
   const assigneeName = assignees.length > 0
     ? assignees.map(a => a.userName).join(', ')
-    : t?.assignee?.empName ?? (t as any)?.assignedAdmin?.name ?? (t as any)?.assignedClient?.fullName ?? 'Unassigned';
+    : t?.assignee?.name ?? (t as any)?.assignedAdmin?.name ?? (t as any)?.assignedClient?.fullName ?? 'Unassigned';
 
   const [showAddAssignee, setShowAddAssignee] = useState(false);
   const [assigneeSearch, setAssigneeSearch] = useState('');
@@ -499,7 +502,7 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
                       <a href={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${att.filePath}`} target="_blank" rel="noreferrer">
                         <Button size="sm" variant="ghost" className="h-7 w-7 p-0"><Download className="h-3.5 w-3.5" /></Button>
                       </a>
-                      {(isAdmin || att.uploadedByName === (user as any)?.name || att.uploadedByName === (user as any)?.empName) && (
+                      {(isAdmin || att.uploadedByName === (user as any)?.name || att.uploadedByName === (user as any)?.name) && (
                         <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-500 hover:text-red-600"
                           onClick={() => deleteAttachmentMut.mutate(att.id)}>
                           <Trash2 className="h-3.5 w-3.5" />
@@ -550,19 +553,19 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
                       .filter((e: any) => !e._type || e._type === 'employee')
                       .map((e) => ({
                         id: `emp-${e.id}`,
-                        empName: e.empName,
+                        name: e.name,
                         kind: 'employee' as const,
                       }));
                     const adminOpts = all
                       .filter((e: any) => e._type === 'admin')
                       .map((a) => ({
                         id: `admin-${a.id}`,
-                        empName: a.empName,
+                        name: a.name,
                         kind: 'admin' as const,
                       }));
                     const clientOpts = (projectClients ?? []).map((c: any) => ({
                       id: `client-${c.id}`,
-                      empName: c.contactName ?? c.companyName ?? c.empName ?? `Client #${c.id}`,
+                      name: c.contactName ?? c.companyName ?? c.name ?? `Client #${c.id}`,
                       kind: 'client' as const,
                     }));
                     // Dedupe by `id` (string) so the same admin/employee
@@ -747,15 +750,15 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
                       // Tickets aren't assignable to clients — exclude them from the picker.
                       .filter((e: any) => e._type !== 'client')
                       .filter((e: any) => !assignees.some(a => a.userId === e.id && a.userType === (e._type || 'employee')))
-                      .filter((e: any) => !assigneeSearch || e.empName?.toLowerCase().includes(assigneeSearch.toLowerCase()))
+                      .filter((e: any) => !assigneeSearch || e.name?.toLowerCase().includes(assigneeSearch.toLowerCase()))
                       .map((emp: any) => {
                         const uType = emp._type === 'admin' ? 'admin' : 'employee';
                         return (
                           <button key={`${uType}-${emp.id}`}
                             className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-primary/10 flex items-center gap-2"
                             onClick={() => addAssigneeMut.mutate({ userId: emp.id, userType: uType as any })}>
-                            <div className="h-4 w-4 rounded-full bg-primary/10 flex items-center justify-center text-[9px] font-semibold text-primary">{emp.empName?.charAt(0)}</div>
-                            {emp.empName}
+                            <div className="h-4 w-4 rounded-full bg-primary/10 flex items-center justify-center text-[9px] font-semibold text-primary">{emp.name?.charAt(0)}</div>
+                            {emp.name}
                             {uType !== 'employee' && <Badge variant="outline" className="text-[8px] px-1 py-0 ml-auto">{uType}</Badge>}
                           </button>
                         );
@@ -763,7 +766,7 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
                     {(companyEmployees ?? [])
                       .filter((e: any) => e._type !== 'client')
                       .filter((e: any) => !assignees.some(a => a.userId === e.id && a.userType === (e._type || 'employee')))
-                      .filter((e: any) => !assigneeSearch || e.empName?.toLowerCase().includes(assigneeSearch.toLowerCase()))
+                      .filter((e: any) => !assigneeSearch || e.name?.toLowerCase().includes(assigneeSearch.toLowerCase()))
                       .length === 0 && <p className="text-xs text-muted-foreground text-center py-2">No matches found</p>}
                   </div>
                 </div>
@@ -832,9 +835,9 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
                   {(savedContributors as any[]).map((c: any) => (
                     <div key={c.id} className="flex items-center gap-2 text-sm">
                       <div className="h-6 w-6 rounded-full bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center text-[10px] font-bold text-violet-600 dark:text-violet-400">
-                        {c.employee?.empName?.[0] ?? '?'}
+                        {c.employee?.name?.[0] ?? '?'}
                       </div>
-                      <span>{c.employee?.empName ?? `Employee #${c.employeeId}`}</span>
+                      <span>{c.employee?.name ?? `Employee #${c.employeeId}`}</span>
                     </div>
                   ))}
                 </div>
@@ -872,7 +875,7 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
                     }}
                     className="rounded border-gray-300"
                   />
-                  <span className="text-sm">{emp.empName}</span>
+                  <span className="text-sm">{emp.name}</span>
                 </label>
               ))
             )}

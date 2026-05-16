@@ -131,8 +131,9 @@ export function SmtpConfigForm({
       testConfig(params.smtpId, { recipientEmail: params.email }),
     onSuccess: () => toast.success('Test email sent successfully'),
     onError: (e: unknown) => {
-      const err = e as { response?: { data?: { message?: string } } };
-      toast.error(err?.response?.data?.message ?? 'Failed to send test email');
+      const err = e as { response?: { data?: { message?: string | string[] } } };
+      const msg = err?.response?.data?.message;
+      toast.error(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to send test email'));
     },
   });
 
@@ -149,8 +150,9 @@ export function SmtpConfigForm({
     },
     onError: (e: unknown) => {
       setSendStatus('idle');
-      const err = e as { response?: { data?: { message?: string } } };
-      toast.error(err?.response?.data?.message ?? 'Failed to send email');
+      const err = e as { response?: { data?: { message?: string | string[] } } };
+      const msg = err?.response?.data?.message;
+      toast.error(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to send email'));
     },
   });
 
@@ -161,8 +163,9 @@ export function SmtpConfigForm({
       qc.invalidateQueries({ queryKey });
     },
     onError: (e: unknown) => {
-      const err = e as { response?: { data?: { message?: string } } };
-      toast.error(err?.response?.data?.message ?? 'Failed to delete SMTP config');
+      const err = e as { response?: { data?: { message?: string | string[] } } };
+      const msg = err?.response?.data?.message;
+      toast.error(Array.isArray(msg) ? msg.join(', ') : (msg ?? 'Failed to delete SMTP config'));
     },
   });
 
@@ -387,7 +390,7 @@ export function SmtpConfigForm({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>SMTP Host *</Label>
+                <Label>SMTP Host <span className="text-red-500">*</span></Label>
                 <Input
                   value={form.host || ''}
                   onChange={(e) => setForm((p) => ({ ...p, host: e.target.value }))}
@@ -395,7 +398,7 @@ export function SmtpConfigForm({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Port *</Label>
+                <Label>Port <span className="text-red-500">*</span></Label>
                 <Input
                   type="number"
                   value={form.port || ''}
@@ -404,7 +407,7 @@ export function SmtpConfigForm({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Username *</Label>
+                <Label>Username <span className="text-red-500">*</span></Label>
                 <Input
                   value={form.username || ''}
                   onChange={(e) => setForm((p) => ({ ...p, username: e.target.value }))}
@@ -412,7 +415,7 @@ export function SmtpConfigForm({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Password *</Label>
+                <Label>Password <span className="text-red-500">*</span></Label>
                 <Input
                   type="password"
                   value={form.password || ''}
@@ -421,7 +424,7 @@ export function SmtpConfigForm({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>From Email *</Label>
+                <Label>From Email <span className="text-red-500">*</span></Label>
                 <Input
                   value={form.fromEmail || ''}
                   onChange={(e) => setForm((p) => ({ ...p, fromEmail: e.target.value }))}
@@ -567,7 +570,7 @@ export function SmtpConfigForm({
           {/* SMTP selector — show when multiple configs */}
           {configs.length > 1 ? (
             <div className="space-y-1.5">
-              <Label>Send from *</Label>
+              <Label>Send from <span className="text-red-500">*</span></Label>
               <Select value={selectedSmtpId} onValueChange={setSelectedSmtpId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select SMTP to send from" />
@@ -596,7 +599,7 @@ export function SmtpConfigForm({
           )}
 
           <div className="space-y-1.5">
-            <Label>To *</Label>
+            <Label>To <span className="text-red-500">*</span></Label>
             <Input
               type="email"
               value={composeEmail || ''}
@@ -606,7 +609,7 @@ export function SmtpConfigForm({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Subject *</Label>
+            <Label>Subject <span className="text-red-500">*</span></Label>
             <Input
               value={composeSubject || ''}
               onChange={(e) => setComposeSubject(e.target.value)}
@@ -615,7 +618,7 @@ export function SmtpConfigForm({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Message *</Label>
+            <Label>Message <span className="text-red-500">*</span></Label>
             <Textarea
               value={composeBody || ''}
               onChange={(e) => setComposeBody(e.target.value)}

@@ -7,12 +7,12 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Loader2, TrendingUp, ShieldCheck, BarChart3, Users } from 'lucide-react';
+import { Loader2, ShieldCheck, BarChart3, Users } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
-import { LoginType } from '@/lib/auth/token-storage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+
 const schema = z.object({
   email: z.string().email('Invalid email'),
   password: z.string().min(1, 'Password is required'),
@@ -26,11 +26,15 @@ const features = [
   { icon: ShieldCheck, label: 'Role-based secure access' },
 ];
 
+/**
+ * Unified user login (admin + employee). The role tab has been retired
+ * post-merge — `/auth/login` now auto-detects the user type. Clients
+ * sign in on their own portal at `/client-login`.
+ */
 export default function LoginPage() {
   const { login } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [loginType, setLoginType] = useState<LoginType>('admin');
 
   const {
     register,
@@ -42,18 +46,13 @@ export default function LoginPage() {
     setLoading(true);
     const id = toast.loading('Signing in…');
     try {
-      await login(values.email, values.password, loginType);
+      await login(values.email, values.password);
       toast.success('Welcome back!', { id });
       router.push('/dashboard');
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { message?: string } } };
       const msg = axiosErr?.response?.data?.message ?? 'Login failed. Check credentials.';
-      console.log("msg===>", msg);
-
-      toast.error(msg, {
-        id,
-        duration: 5000
-      });
+      toast.error(msg, { id, duration: 5000 });
     } finally {
       setLoading(false);
     }
@@ -62,11 +61,11 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen w-full">
       {/* ── Left panel: brand / features ── */}
-      <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-800 p-12 text-white">
+      <div className="hidden lg:flex lg:w-1/2 flex-col justify-between bg-linear-to-br from-indigo-600 via-indigo-700 to-violet-800 p-12 text-white">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-md overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/ITSM_LOGO.png" alt="ITSM logo" className="h-full w-full object-contain p-1" />
+            <img src="/fbts-logo.jpg" alt="FBTS logo" className="h-full w-full object-contain p-1" />
           </div>
           <div>
             <p className="font-bold text-lg leading-none tracking-wide">ITSM</p>
@@ -105,7 +104,7 @@ export default function LoginPage() {
           <div className="flex items-center gap-3 lg:hidden">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-md overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/ITSM_LOGO.png" alt="ITSM logo" className="h-full w-full object-contain p-1" />
+              <img src="/fbts-logo.jpg" alt="FBTS logo" className="h-full w-full object-contain p-1" />
             </div>
             <div>
               <p className="font-bold leading-none tracking-wide">ITSM</p>
@@ -116,51 +115,26 @@ export default function LoginPage() {
           <div>
             <h2 className="text-2xl font-bold tracking-tight">Welcome back</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Sign in as {loginType === 'admin' ? 'an admin' : loginType === 'employee' ? 'an employee' : 'a client'}
+              Sign in to the workspace portal
             </p>
           </div>
 
-          {/* Login type toggle */}
-          <div className="flex rounded-lg border border-border bg-muted/50 p-1">
-            <button
-              type="button"
-              onClick={() => setLoginType('admin')}
-              className={`flex-1 rounded-md py-2 text-sm font-medium transition-all ${loginType === 'admin'
-                ? 'bg-white dark:bg-card shadow-sm text-foreground'
-                : 'text-muted-foreground hover:text-foreground'
-                }`}
-            >
-              Admin
-            </button>
-            <button
-              type="button"
-              onClick={() => setLoginType('employee')}
-              className={`flex-1 rounded-md py-2 text-sm font-medium transition-all ${loginType === 'employee'
-                ? 'bg-white dark:bg-card shadow-sm text-foreground'
-                : 'text-muted-foreground hover:text-foreground'
-                }`}
-            >
-              Employee
-            </button>
-            <button
-              type="button"
-              onClick={() => setLoginType('client')}
-              className={`flex-1 rounded-md py-2 text-sm font-medium transition-all ${loginType === 'client'
-                ? 'bg-white dark:bg-card shadow-sm text-foreground'
-                : 'text-muted-foreground hover:text-foreground'
-                }`}
-            >
-              Client
-            </button>
-          </div>
-
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+          <form
+            onSubmit={(e) => {
+              // Belt-and-suspenders: ensure the form never falls through
+              // to native submit (which would reload the page) even if
+              // react-hook-form throws somewhere in validation.
+              e.preventDefault();
+              handleSubmit(onSubmit)(e);
+            }}
+            className="space-y-5"
+          >
             <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-sm font-medium">Email address</Label>
+              <Label htmlFor="email" className="text-sm font-medium">Email address <span className="text-red-500">*</span></Label>
               <Input
                 id="email"
                 type="email"
-                placeholder={loginType === 'admin' ? 'admin@acme.com' : loginType === 'employee' ? 'priya.singh@acme.com' : 'client@company.com'}
+                placeholder="you@company.com"
                 className="h-10"
                 {...register('email')}
               />
@@ -168,9 +142,7 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-sm font-medium">Password</Label>
-              </div>
+              <Label htmlFor="password" className="text-sm font-medium">Password <span className="text-red-500">*</span></Label>
               <Input
                 id="password"
                 type="password"
@@ -183,13 +155,13 @@ export default function LoginPage() {
 
             <Button
               type="submit"
-              className="h-10 w-full bg-gradient-to-r from-indigo-600 to-violet-600 text-white hover:from-indigo-700 hover:to-violet-700 font-medium shadow-sm"
+              className="h-10 w-full bg-linear-to-r from-indigo-600 to-violet-600 text-white hover:from-indigo-700 hover:to-violet-700 font-medium shadow-sm"
               disabled={loading}
             >
               {loading ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing in…</>
               ) : (
-                `Sign In as ${loginType === 'admin' ? 'Admin' : loginType === 'employee' ? 'Employee' : 'Client'}`
+                'Sign In'
               )}
             </Button>
           </form>

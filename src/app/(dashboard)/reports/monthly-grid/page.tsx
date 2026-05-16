@@ -17,7 +17,7 @@ type DayEntry = { date: string; sheetId: number | null; hours: number | null; su
 type EmployeeRow = {
   employeeId: number;
   empCode: string;
-  empName: string;
+  name: string;
   consultantType: string;
   totalHours: number;
   filledDays: number;
@@ -93,7 +93,7 @@ export default function MonthlyGridPage() {
 
   // Filter employees
   const filteredRows = (data?.rows ?? []).filter(
-    (r) => !empSearch || r.empName.toLowerCase().includes(empSearch.toLowerCase()) || r.empCode.toLowerCase().includes(empSearch.toLowerCase()),
+    (r) => !empSearch || r.name.toLowerCase().includes(empSearch.toLowerCase()) || r.empCode.toLowerCase().includes(empSearch.toLowerCase()),
   );
 
   // When a specific employee is selected, find their current row
@@ -111,7 +111,7 @@ export default function MonthlyGridPage() {
           ) : null}
           <h1 className="text-xl font-bold flex items-center gap-2">
             <Calendar className="h-5 w-5 text-primary" />
-            {selectedEmp ? `${selectedEmp.empName} — Monthly Grid` : 'Monthly Attendance Grid'}
+            {selectedEmp ? `${selectedEmp.name} — Monthly Grid` : 'Monthly Attendance Grid'}
           </h1>
           <p className="text-sm text-muted-foreground">
             {selectedEmp ? `${selectedEmp.empCode} · ${selectedEmp.consultantType ?? 'Employee'}` : 'Select an employee to view their daily task sheet'}
@@ -148,10 +148,10 @@ export default function MonthlyGridPage() {
                   <CardContent className="p-4">
                     <div className="flex items-start gap-3">
                       <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary shrink-0">
-                        {row.empName.charAt(0)}
+                        {row.name.charAt(0)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm truncate">{row.empName}</p>
+                        <p className="font-semibold text-sm truncate">{row.name}</p>
                         <p className="text-xs text-muted-foreground">{row.empCode} · {row.consultantType ?? '—'}</p>
                       </div>
                     </div>

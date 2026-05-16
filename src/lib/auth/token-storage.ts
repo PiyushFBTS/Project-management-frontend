@@ -5,6 +5,16 @@ import Cookies from 'js-cookie';
 const REFRESH_KEY = 'app_refresh';
 const TYPE_KEY = 'app_login_type';
 
+/**
+ * Login-type cookie value.
+ *
+ * Post-merge the backend exposes a single `/auth/login` for the merged
+ * users table (admin + employee) and `/auth/client/login` for clients.
+ * The cookie still stores the granular role ('admin' | 'employee' |
+ * 'client') so existing role-aware UI conditionals (`user._type === 'admin'`,
+ * sidebar `adminOnly`, route guards) keep working unchanged. The value is
+ * derived from `MergedUser.userType` at login time by `AuthProvider`.
+ */
 export type LoginType = 'admin' | 'employee' | 'client';
 
 let memoryToken: string | null = null;
