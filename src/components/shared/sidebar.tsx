@@ -80,7 +80,7 @@ const navItems: NavItem[] = [
     activeBg: 'bg-orange-500/20', hoverBg: 'hover:bg-orange-500/10',
     borderColor: 'border-l-orange-400', dotColor: 'bg-orange-400',
     children: [
-      { label: 'Leave Types', href: '/leave-types', dotColor: 'bg-rose-400' },
+      { label: 'Leave Types', href: '/leave-types', dotColor: 'bg-rose-400', hrOrAdminOnly: true },
       { label: 'Leave Requests', href: '/leave-requests', dotColor: 'bg-orange-400' },
       { label: 'Leave Balance', href: '/leave-balance', dotColor: 'bg-blue-400' },
       { label: 'Holiday Calendar', href: '/holidays', dotColor: 'bg-amber-400' },
@@ -386,7 +386,7 @@ export function Sidebar() {
         ) : (
           <>
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white shadow-md shadow-indigo-500/30 overflow-hidden">
-              <Image src="/fbts-logo.jpg" alt="FBTS logo" width={32} height={32} unoptimized className="h-full w-full object-contain p-0.5" />
+              <Image src="/ITSM_LOGO.png" alt="ITSM logo" width={32} height={32} unoptimized className="h-full w-full object-contain p-0.5" />
             </div>
             <div className="leading-tight min-w-0 flex-1">
               <p className="text-sm font-bold text-gray-900 dark:text-white truncate tracking-wide">ITSM</p>
@@ -429,7 +429,7 @@ export function MobileSidebar() {
           <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
             <div className="flex items-center gap-2.5">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white shadow-md shadow-indigo-500/30 overflow-hidden">
-                <Image src="/fbts-logo.jpg" alt="FBTS logo" width={32} height={32} unoptimized className="h-full w-full object-contain p-0.5" />
+                <Image src="/ITSM_LOGO.png" alt="ITSM logo" width={32} height={32} unoptimized className="h-full w-full object-contain p-0.5" />
               </div>
               <div className="leading-tight">
                 <p className="text-sm font-bold text-gray-900 dark:text-white tracking-wide">ITSM</p>

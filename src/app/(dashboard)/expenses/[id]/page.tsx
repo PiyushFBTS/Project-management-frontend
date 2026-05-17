@@ -410,12 +410,12 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
 
         {/* 1. Amount + Actions */}
         <div className="space-y-4">
-          <Card className="overflow-hidden">
+          {/* <Card className="overflow-hidden">
             <div className="bg-linear-to-r from-violet-600 via-purple-600 to-indigo-600 p-8 text-center text-white">
               <p className="text-xs uppercase tracking-widest opacity-80 mb-1">Expense Amount</p>
               <p className="text-4xl font-bold">{'\u20B9'}{Number(e.amount).toLocaleString('en-IN')}</p>
             </div>
-          </Card>
+          </Card> */}
 
 
 

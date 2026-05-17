@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -35,11 +36,22 @@ type FormValues = z.infer<typeof schema>;
 
 export default function LeaveTypesPage() {
   const qc = useQueryClient();
+  const router = useRouter();
   const { user } = useAuth();
   const isEmployee = user?._type === 'employee';
   const isAdmin = !isEmployee;
   const isHr = isEmployee && (user as any)?.isHr;
   const canManage = isAdmin || isHr;
+
+  // Plain employees (no HR flag) shouldn't reach this screen — bounce
+  // them to the dashboard. Run only once `user` is resolved so we don't
+  // redirect during the auth-bootstrap window.
+  useEffect(() => {
+    if (user && !canManage) {
+      router.replace('/dashboard');
+    }
+  }, [user, canManage, router]);
+  if (user && !canManage) return null;
 
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);

@@ -82,6 +82,22 @@ function LeaveRequestsContent() {
   const isAdmin = user?._type === 'admin';
   // HR employees get the same 3-tab layout as admins (My / Team / Cal).
   const isHr = isEmployee && !!(user as { isHr?: boolean })?.isHr;
+
+  // Detect reporting-manager status by pinging the team-leaves endpoint
+  // with limit=1. Backend returns non-empty whenever the caller has at
+  // least one direct report's leave on file. We only need this for plain
+  // employees — admins and HR always see the Team tab.
+  const { data: rmPing } = useQuery({
+    queryKey: ['team-leaves-ping', (user as { id?: number })?.id],
+    queryFn: () =>
+      leaveRequestsApi
+        .getTeamLeaves({ limit: 1 })
+        .then((r) => (r.data.data ?? []) as LeaveRequest[]),
+    enabled: !!user && isEmployee && !isHr,
+  });
+  const isRm = isEmployee && !isHr && (rmPing?.length ?? 0) > 0;
+  // Single permission gate: who is allowed to see the Team Leaves tab.
+  const canSeeTeam = isAdmin || isHr || isRm;
   const queryClient = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -243,8 +259,9 @@ function LeaveRequestsContent() {
     enabled: isEmployee && tab === 'my-leaves',
   });
 
-  // HR (employee + isHr): team leaves — every employee's leaves.
-  // Plain employees no longer see this tab so the query is HR-only.
+  // Team leaves — visible to HR (all employee leaves) and to reporting
+  // managers (just their reports' leaves). Plain employees without any
+  // direct reports never reach this branch because `canSeeTeam` is false.
   const { data: teamData, isLoading: teamLoading } = useQuery({
     queryKey: ['team-leave-requests', teamEmployeeId, dateFrom, dateTo],
     queryFn: () =>
@@ -258,7 +275,7 @@ function LeaveRequestsContent() {
           order: 'desc',
         })
         .then((r) => r.data.data),
-    enabled: isHr && tab === 'team-leaves',
+    enabled: canSeeTeam && tab === 'team-leaves' && isEmployee,
   });
 
   // Detail
@@ -376,6 +393,29 @@ function LeaveRequestsContent() {
     (isEmployee && tab === 'my-leaves') || (isAdmin && adminTab === 'my-leaves');
   const showEmployeeCol = !onMyLeavesTab;
 
+  // Admin + HR get inline Approve / Reject icons in the list table so
+  // they can action a pending leave straight from the notification-landing
+  // page without drilling into the detail. Plain employees + the
+  // viewer's own leaves are excluded from this column.
+  const userId = (user as { id?: number })?.id;
+  const showActionsCol = isAdmin || isHr;
+  const canActOnRow = (lr: LeaveRequest): { canApprove: boolean; canReject: boolean } => {
+    if (!showActionsCol) return { canApprove: false, canReject: false };
+    const isOwnAdminLeave = isAdmin && lr.adminId != null && lr.adminId === userId;
+    const isOwnEmployeeLeave = !isAdmin && lr.employeeId != null && lr.employeeId === userId;
+    if (isOwnAdminLeave || isOwnEmployeeLeave) return { canApprove: false, canReject: false };
+    if (isAdmin) {
+      return {
+        canApprove: ['pending', 'manager_approved'].includes(lr.status),
+        // Admin can also revoke an already-approved leave.
+        canReject: ['pending', 'manager_approved', 'hr_approved'].includes(lr.status),
+      };
+    }
+    // HR employee — same status gate.
+    const actionable = ['pending', 'manager_approved'].includes(lr.status);
+    return { canApprove: actionable, canReject: actionable };
+  };
+
   return (
     <div className="space-y-4">
       {/* Gradient Header */}
@@ -416,11 +456,11 @@ function LeaveRequestsContent() {
       </div>
 
       {/* Employee tabs.
-          Plain employees → 2 tabs: Leave + Calendar.
-          HR employees    → 3 tabs: My Leaves + Team Leaves + Calendar. */}
+          Plain employees with no reports → 2 tabs: My Leave + Calendar.
+          HR + Reporting Managers         → 3 tabs: My / Team / Calendar. */}
       {isEmployee && (
         <div className="flex rounded-lg border border-border bg-muted/50 p-1 w-fit">
-          {((isHr
+          {((canSeeTeam
             ? ['my-leaves', 'team-leaves', 'calendar']
             : ['my-leaves', 'calendar']) as Tab[]).map((t) => (
             <button
@@ -433,7 +473,7 @@ function LeaveRequestsContent() {
               }`}
             >
               {t === 'my-leaves'
-                ? (isHr ? 'My Leaves' : 'Leave')
+                ? 'My Leave'
                 : t === 'team-leaves'
                   ? 'Team Leaves'
                   : 'Calendar'}
@@ -455,7 +495,7 @@ function LeaveRequestsContent() {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {t === 'my-leaves' ? 'My Leaves' : t === 'team-leaves' ? 'Team Leaves' : 'Calendar'}
+              {t === 'my-leaves' ? 'My Leave' : t === 'team-leaves' ? 'Team Leaves' : 'Calendar'}
             </button>
           ))}
         </div>
@@ -692,21 +732,25 @@ function LeaveRequestsContent() {
 
               <TableHead>Manager</TableHead>
               <TableHead>HR</TableHead>
+              {showActionsCol && <TableHead className="w-28">Actions</TableHead>}
               <TableHead className="w-16">View</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading
+            {(() => {
+              const baseCols = showEmployeeCol ? 9 : 8;
+              const cols = baseCols + (showActionsCol ? 2 : 1);
+              return isLoading
               ? [...Array(5)].map((_, i) => (
                   <TableRow key={i}>
-                    {[...Array(showEmployeeCol ? 10 : 9)].map((__, j) => (
+                    {[...Array(cols)].map((__, j) => (
                       <TableCell key={j}><Skeleton className="h-5 w-16" /></TableCell>
                     ))}
                   </TableRow>
                 ))
               : (data ?? []).length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={showEmployeeCol ? 10 : 9} className="h-32">
+                    <TableCell colSpan={cols} className="h-32">
                       <div className="flex flex-col items-center justify-center text-center">
                         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-orange-500/10 mb-3">
                           <CalendarDays className="h-6 w-6 text-orange-500" />
@@ -768,13 +812,50 @@ function LeaveRequestsContent() {
                         </span>
                       )}
                     </TableCell>
+                    {showActionsCol && (() => {
+                      const { canApprove, canReject } = canActOnRow(lr);
+                      if (!canApprove && !canReject) {
+                        return <TableCell className="text-xs text-muted-foreground/60">—</TableCell>;
+                      }
+                      return (
+                        <TableCell>
+                          <div className="flex gap-1">
+                            {canApprove && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700"
+                                title="Approve"
+                                disabled={acting}
+                                onClick={(e) => { e.stopPropagation(); handleApprove(lr.id); }}
+                              >
+                                <CheckCircle2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {canReject && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-red-600 hover:bg-red-500/10 hover:text-red-700"
+                                title="Reject"
+                                disabled={acting}
+                                onClick={(e) => { e.stopPropagation(); handleReject(lr.id); }}
+                              >
+                                <XCircle className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      );
+                    })()}
                     <TableCell>
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); router.push(`/leave-requests/${lr.id}`); }}>
                         <Eye className="h-3.5 w-3.5" />
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                ));
+            })()}
           </TableBody>
         </Table>
       </div>}

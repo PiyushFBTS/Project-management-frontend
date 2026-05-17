@@ -10,8 +10,8 @@ import { Toaster } from '@/components/ui/sonner';
 const geist = Geist({ subsets: ['latin'], variable: '--font-geist' });
 
 export const metadata: Metadata = {
-  title: 'FBTS — Project Management',
-  description: 'FBTS Project Management portal',
+  title: 'ITSM — Project Management',
+  description: 'ITSM Project Management portal',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

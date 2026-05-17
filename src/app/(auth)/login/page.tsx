@@ -65,7 +65,7 @@ export default function LoginPage() {
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-md overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/fbts-logo.jpg" alt="FBTS logo" className="h-full w-full object-contain p-1" />
+            <img src="/ITSM_LOGO.png" alt="ITSM logo" className="h-full w-full object-contain p-1" />
           </div>
           <div>
             <p className="font-bold text-lg leading-none tracking-wide">ITSM</p>
@@ -104,7 +104,7 @@ export default function LoginPage() {
           <div className="flex items-center gap-3 lg:hidden">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-md overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/fbts-logo.jpg" alt="FBTS logo" className="h-full w-full object-contain p-1" />
+              <img src="/ITSM_LOGO.png" alt="ITSM logo" className="h-full w-full object-contain p-1" />
             </div>
             <div>
               <p className="font-bold leading-none tracking-wide">ITSM</p>

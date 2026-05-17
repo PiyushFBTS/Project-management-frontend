@@ -53,6 +53,9 @@ export default function EditExpensePage({ params: paramsPromise }: { params: Pro
   // New file picked by the user (replaces the existing attachment).
   // `null` means "keep the existing attachment as-is".
   const [formFile, setFormFile] = useState<File | null>(null);
+  // User pressed "Delete attachment" — we'll send `removeAttachment=true`
+  // on save so the backend unlinks the file and nulls the columns.
+  const [removeExistingAttachment, setRemoveExistingAttachment] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
   // Fetch the existing expense to prefill the form.
@@ -154,7 +157,11 @@ export default function EditExpensePage({ params: paramsPromise }: { params: Pro
       // Always send description so an explicit clear takes effect.
       fd.append('description', formDesc);
       if (formProjectId) fd.append('projectId', formProjectId);
-      if (formFile) fd.append('file', formFile);
+      if (formFile) {
+        fd.append('file', formFile);
+      } else if (removeExistingAttachment) {
+        fd.append('removeAttachment', 'true');
+      }
       return isAdmin ? adminExpensesApi.update(expenseId, fd) : expensesApi.update(expenseId, fd);
     },
     onSuccess: () => {
@@ -170,13 +177,13 @@ export default function EditExpensePage({ params: paramsPromise }: { params: Pro
   });
 
   const e = expense as any;
-  const existingAttachment = e?.attachmentPath
+  // Hide the saved attachment once the user pressed "Delete attachment"
+  // so the UI flips to the empty-state uploader and we save with
+  // `removeAttachment=true`. The pending deletion is reversible until save.
+  const existingAttachment = !removeExistingAttachment && e?.attachmentPath
     ? (() => {
         const name = (e.attachmentName ?? 'Attachment') as string;
         const url = `${apiBase}${e.attachmentPath}` as string;
-        // Detect image by path/name extension so we can render an inline
-        // preview; everything else (pdf / doc / xls) falls back to a
-        // file-card with a download button.
         const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(e.attachmentPath as string);
         return { name, url, isImage };
       })()
@@ -379,27 +386,50 @@ export default function EditExpensePage({ params: paramsPromise }: { params: Pro
                       </a>
                     </div>
                   )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => fileRef.current?.click()}
-                  >
-                    <Upload className="h-4 w-4 mr-1.5" /> Replace attachment
-                  </Button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fileRef.current?.click()}
+                    >
+                      <Upload className="h-4 w-4 mr-1.5" /> Replace
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-red-500 hover:text-red-600"
+                      onClick={() => setRemoveExistingAttachment(true)}
+                    >
+                      <X className="h-4 w-4 mr-1.5" /> Delete
+                    </Button>
+                  </div>
                 </div>
               ) : (
-                <div
-                  className="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all hover:border-primary/40 hover:bg-muted/30"
-                  onClick={() => fileRef.current?.click()}
-                >
-                  <div className="h-14 w-14 mx-auto rounded-full bg-primary/10 flex items-center justify-center mb-3">
-                    <Upload className="h-6 w-6 text-primary" />
+                <>
+                  <div
+                    className="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all hover:border-primary/40 hover:bg-muted/30"
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    <div className="h-14 w-14 mx-auto rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                      <Upload className="h-6 w-6 text-primary" />
+                    </div>
+                    <p className="text-sm font-medium">Upload receipt</p>
+                    <p className="text-xs text-muted-foreground mt-1">PDF, DOC, XLS, JPG, PNG</p>
+                    <p className="text-xs text-muted-foreground">Max 10MB</p>
                   </div>
-                  <p className="text-sm font-medium">Upload receipt</p>
-                  <p className="text-xs text-muted-foreground mt-1">PDF, DOC, XLS, JPG, PNG</p>
-                  <p className="text-xs text-muted-foreground">Max 10MB</p>
-                </div>
+                  {removeExistingAttachment && (
+                    <div className="mt-3 flex items-center justify-between rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                      <span>Existing attachment will be removed on save.</span>
+                      <button
+                        type="button"
+                        className="font-semibold underline"
+                        onClick={() => setRemoveExistingAttachment(false)}
+                      >
+                        Undo
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
               <input ref={fileRef} type="file" className="hidden" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx" onChange={(ev) => setFormFile(ev.target.files?.[0] ?? null)} />
             </CardContent>
