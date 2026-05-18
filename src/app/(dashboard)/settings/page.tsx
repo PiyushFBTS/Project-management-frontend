@@ -3,6 +3,7 @@
 import { Settings, Mail } from 'lucide-react';
 import { useCompany } from '@/providers/company-provider';
 import { SmtpConfigForm } from '@/components/shared/smtp-config-form';
+import { AiSettingsCard } from '@/components/shared/ai-settings-card';
 import { smtpApi } from '@/lib/api/smtp';
 
 export default function SettingsPage() {
@@ -66,6 +67,9 @@ export default function SettingsPage() {
           />
         )}
       </div>
+
+      {/* AI Assistant Card — only for company admins, not super admin */}
+      {!isSuperAdmin && <AiSettingsCard />}
     </div>
   );
 }

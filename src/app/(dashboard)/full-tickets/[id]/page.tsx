@@ -22,6 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 import { RichTextEditor, RichTextDisplay } from '@/components/ui/rich-text-editor';
+import { AiImproveButton } from '@/components/ui/ai-improve-button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
@@ -579,16 +580,25 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
                   placeholder="Add a comment… type @ to mention"
                   minHeight="80px"
                 />
-                <Button
-                  size="sm"
-                  className="self-end bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white"
-                  disabled={!commentText.trim() || commentText === '<p></p>' || addCommentMut.isPending}
-                  onClick={() => {
-                    addCommentMut.mutate(commentText.trim());
-                  }}
-                >
-                  {addCommentMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Send className="h-3.5 w-3.5 mr-1" /> Comment</>}
-                </Button>
+                <div className="flex items-center justify-between gap-2">
+                  <AiImproveButton
+                    value={commentText}
+                    valueIsHtml
+                    onAccept={(out) => setCommentText(out)}
+                    size="sm"
+                    variant="outline"
+                  />
+                  <Button
+                    size="sm"
+                    className="bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white"
+                    disabled={!commentText.trim() || commentText === '<p></p>' || addCommentMut.isPending}
+                    onClick={() => {
+                      addCommentMut.mutate(commentText.trim());
+                    }}
+                  >
+                    {addCommentMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Send className="h-3.5 w-3.5 mr-1" /> Comment</>}
+                  </Button>
+                </div>
               </div>
             </div>
 
