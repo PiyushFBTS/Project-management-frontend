@@ -2,6 +2,20 @@ import { api } from './axios-instance';
 import { tokenStorage } from '@/lib/auth/token-storage';
 import { ApiResponse, LeaveRequest, LeaveType, PaginationParams, LeaveRequestStatus } from '@/types';
 
+export interface OnLeaveTodayUser {
+  id: number;
+  leaveRequestId: number;
+  name: string;
+  empCode: string | null;
+  _type: 'admin' | 'employee';
+  leaveType: string;
+  dateFrom: string;
+  dateTo: string;
+  totalDays: number;
+  /** Approval state — UI badges these as "Approved" / "Pending HR" / "Pending RM". */
+  status: 'pending' | 'manager_approved' | 'hr_approved';
+}
+
 // Admin approve/reject/cancel live under /leave-requests/:id/... (JwtAdminGuard).
 // Employees use the /employee/leave-requests/:id/... routes. Auto-route by login type.
 function actionPath(id: number, action: 'approve' | 'reject' | 'cancel') {
@@ -100,4 +114,14 @@ export const leaveRequestsApi = {
 
   getAdminColleagues: () =>
     api.get<ApiResponse<{ id: number; name: string; empCode: string }[]>>('/leave-requests/colleagues'),
+
+  // ── Who's on leave today ──────────────────────────────────────────────
+  // Available to admins + employees; routes diverge but the response
+  // shape matches.
+  getOnLeaveToday: () =>
+    api.get<ApiResponse<OnLeaveTodayUser[]>>(
+      tokenStorage.getLoginType() === 'admin'
+        ? '/leave-requests/on-leave-today'
+        : '/employee/leave-requests/on-leave-today',
+    ),
 };

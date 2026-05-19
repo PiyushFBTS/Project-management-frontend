@@ -11,7 +11,7 @@ import {
   Users, FolderKanban, CalendarCheck, TrendingUp,
   ClipboardList, Clock, FileCheck, BarChart3, ArrowRight,
   CheckCircle2, XCircle, ListTodo, PlayCircle, Eye, CircleCheckBig, Ticket,
-  Cake, CalendarHeart, Award,
+  Cake, CalendarHeart, Award, Plane,
 } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { useCompany } from '@/providers/company-provider';
@@ -29,6 +29,7 @@ import { dashboardApi } from '@/lib/api/dashboard';
 import { myTasksApi, clientTicketsApi, clientPlanningApi } from '@/lib/api/project-planning';
 import { companiesApi, PlatformDashboard as PlatformDashboardData } from '@/lib/api/companies';
 import { employeesApi } from '@/lib/api/employees';
+import { leaveRequestsApi, OnLeaveTodayUser } from '@/lib/api/leave-requests';
 import { TodayEvent, ProjectTask } from '@/types';
 
 const thisMonth = format(new Date(), 'yyyy-MM');
@@ -105,7 +106,7 @@ function EventsChart({
 }
 
 function TodayEventsWidget({ isEmployee }: { isEmployee?: boolean }) {
-  const [evtTab, setEvtTab] = useState<'birthdays' | 'anniversaries'>('birthdays');
+  const [evtTab, setEvtTab] = useState<'on-leave' | 'birthdays' | 'anniversaries'>('on-leave');
   const { data: todayData, isLoading: todayLoading } = useQuery({
     queryKey: ['today-events'],
     queryFn: () =>
@@ -118,6 +119,11 @@ function TodayEventsWidget({ isEmployee }: { isEmployee?: boolean }) {
     queryFn: () =>
       (isEmployee ? employeesApi.employeeGetUpcomingEvents() : employeesApi.getUpcomingEvents())
         .then((r) => r.data.data),
+  });
+
+  const { data: onLeaveData, isLoading: onLeaveLoading } = useQuery({
+    queryKey: ['on-leave-today'],
+    queryFn: () => leaveRequestsApi.getOnLeaveToday().then((r) => r.data.data),
   });
 
   const birthdays = (todayData ?? []).filter((e) => e.type === 'birthday');
@@ -152,6 +158,47 @@ function TodayEventsWidget({ isEmployee }: { isEmployee?: boolean }) {
     </div>
   );
 
+
+  const renderOnLeaveRow = (rows: OnLeaveTodayUser[]) => {
+    // Status → label + colour for the bottom badge. Approved is green
+    // (you're definitely out), the two pending states are amber so it's
+    // obvious the leave hasn't fully cleared yet.
+    const statusMeta: Record<OnLeaveTodayUser['status'], { label: string; cls: string; dot: string }> = {
+      hr_approved: { label: 'Approved', cls: 'text-emerald-700 bg-emerald-100', dot: 'bg-emerald-500' },
+      manager_approved: { label: 'Pending HR', cls: 'text-amber-700 bg-amber-100', dot: 'bg-amber-500' },
+      pending: { label: 'Pending RM', cls: 'text-slate-600 bg-slate-100', dot: 'bg-slate-400' },
+    };
+    return (
+      <div className="flex flex-wrap gap-5">
+        {rows.map((r) => {
+          const gradient = AVATAR_GRADIENTS[r.id % AVATAR_GRADIENTS.length];
+          const href = r._type === 'employee' ? `/employees/${r.id}?type=employee` : '#';
+          const meta = statusMeta[r.status];
+          return (
+            <Link key={`leave-${r.leaveRequestId}`} href={href}>
+              <div className="group flex flex-col items-center gap-1.5">
+                <div className={`relative flex h-14 w-14 items-center justify-center rounded-full bg-linear-to-br ${gradient} text-white font-bold ring-2 ring-background shadow-lg group-hover:scale-110 transition-all`}>
+                  {getInitials(r.name)}
+                  {/* <span
+                    className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full ring-2 ring-background ${meta.dot}`}
+                    title={meta.label}
+                  /> */}
+                </div>
+                <p className="text-xs font-medium text-center max-w-[80px] truncate">{r.name.split(' ')[0]}</p>
+                {/* <span
+                  className={`text-[10px] font-medium rounded-full px-1.5 py-0.5 ${meta.cls}`}
+                  title={`${r.leaveType} · ${r.dateFrom}${r.dateFrom !== r.dateTo ? ` → ${r.dateTo}` : ''}`}
+                >
+                  {meta.label}
+                </span> */}
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    );
+  };
+
   const renderUpcomingRow = (events: any[]) => (
     <div className="flex flex-wrap gap-5">
       {events.map((e: any) => {
@@ -176,6 +223,11 @@ function TodayEventsWidget({ isEmployee }: { isEmployee?: boolean }) {
     <Card className="shadow-sm">
       <CardHeader className="pb-2">
         <div className="flex gap-1 p-0.5 bg-muted rounded-lg w-fit">
+          <button onClick={() => setEvtTab('on-leave')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${evtTab === 'on-leave' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+            {/* <Plane className="h-3.5 w-3.5 text-sky-500" /> */}
+            {(onLeaveData ?? []).length} On Leave
+          </button>
           <button onClick={() => setEvtTab('birthdays')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${evtTab === 'birthdays' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
             <Cake className="h-3.5 w-3.5 text-pink-500" />
@@ -189,7 +241,7 @@ function TodayEventsWidget({ isEmployee }: { isEmployee?: boolean }) {
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
-        {todayLoading ? (
+        {(evtTab === 'on-leave' ? onLeaveLoading : todayLoading) ? (
           <div className="flex gap-4">
             {[...Array(4)].map((_, i) => (
               <div key={i} className="flex flex-col items-center gap-1.5">
@@ -198,6 +250,18 @@ function TodayEventsWidget({ isEmployee }: { isEmployee?: boolean }) {
               </div>
             ))}
           </div>
+        ) : evtTab === 'on-leave' ? (
+          (onLeaveData ?? []).length > 0 ? (
+            <div>
+              {/* <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Out of Office Today</p> */}
+              {renderOnLeaveRow(onLeaveData ?? [])}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center py-4 gap-2">
+              {/* <Plane className="h-8 w-8 text-sky-200" /> */}
+              <p className="text-xs text-muted-foreground">Everyone&apos;s in today</p>
+            </div>
+          )
         ) : evtTab === 'birthdays' ? (
           <>
             {birthdays.length > 0 ? (
