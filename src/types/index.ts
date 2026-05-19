@@ -64,6 +64,8 @@ export interface Company {
   isActive: boolean;
   subscriptionPlan: SubscriptionPlan;
   subscriptionStart?: string;
+  /** Platform-controlled AI master toggle. Only super admin can change. */
+  aiEnabled: boolean;
   createdBy?: number;
   updatedBy?: number;
   createdAt: string;

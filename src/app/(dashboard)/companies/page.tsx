@@ -7,9 +7,10 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   Plus, Pencil, Loader2, Shield, LogIn, Upload, X,
-  Building2, Key, ToggleLeft, Mail, Search as SearchIcon,
+  Building2, Key, ToggleLeft, Mail, Search as SearchIcon, Sparkles,
 } from 'lucide-react';
 import { companiesApi, CompanyWithCounts, CreateCompanyDto, UpdateLicenseDto, CreateCompanyAdminDto } from '@/lib/api/companies';
+import { aiApi } from '@/lib/api/ai';
 import { lookupApi } from '@/lib/api/lookup';
 import { smtpApi } from '@/lib/api/smtp';
 import { SmtpConfigForm } from '@/components/shared/smtp-config-form';
@@ -187,6 +188,18 @@ export default function CompaniesPage() {
     mutationFn: (id: number) => companiesApi.toggleActive(id),
     onSuccess: () => { toast.success('Status toggled'); qc.invalidateQueries({ queryKey: ['platform-companies'] }); },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to toggle status'),
+  });
+
+  // AI master toggle — super-admin-only, platform-level decision.
+  const aiToggleMutation = useMutation({
+    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) =>
+      aiApi.updatePlatformSettings(id, enabled),
+    onSuccess: (_, vars) => {
+      toast.success(`AI ${vars.enabled ? 'enabled' : 'disabled'} for company`);
+      qc.invalidateQueries({ queryKey: ['platform-companies'] });
+      qc.invalidateQueries({ queryKey: ['ai-settings'] });
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to update AI setting'),
   });
 
   const licenseMutation = useMutation({
@@ -449,6 +462,19 @@ export default function CompaniesPage() {
                           </Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" title="License" onClick={() => openLicense(c)}>
                             <Key className="h-4 w-4 text-amber-500" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 relative"
+                            title={c.aiEnabled ? 'AI enabled — click to disable' : 'AI disabled — click to enable'}
+                            disabled={aiToggleMutation.isPending}
+                            onClick={() => aiToggleMutation.mutate({ id: c.id, enabled: !c.aiEnabled })}
+                          >
+                            <Sparkles className={`h-4 w-4 ${c.aiEnabled ? 'text-violet-500' : 'text-muted-foreground'}`} />
+                            <span
+                              className={`absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full ring-2 ring-background ${c.aiEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                            />
                           </Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" title="Admins" onClick={() => openAdmins(c)}>
                             <Shield className="h-4 w-4 text-emerald-500" />

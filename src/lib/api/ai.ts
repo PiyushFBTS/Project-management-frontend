@@ -42,13 +42,17 @@ export const aiApi = {
   text: (req: AiTextRequest) =>
     api.post<ApiResponse<AiTextResponse>>('/ai/text', req),
 
-  // Admin endpoints
+  // Company-admin endpoints — READ-ONLY. The toggle moved to super admin.
   getSettings: () =>
     api.get<ApiResponse<AiSettings>>('/admin/ai/settings'),
 
-  updateSettings: (enabled: boolean) =>
-    api.patch<ApiResponse<AiSettings>>('/admin/ai/settings', { enabled }),
-
   getUsage: () =>
     api.get<ApiResponse<AiUsageStats>>('/admin/ai/usage'),
+
+  // Super-admin (platform-level) endpoints — pick which company to flip.
+  getPlatformSettings: (companyId: number) =>
+    api.get<ApiResponse<AiSettings>>(`/platform/companies/${companyId}/ai-settings`),
+
+  updatePlatformSettings: (companyId: number, enabled: boolean) =>
+    api.patch<ApiResponse<AiSettings>>(`/platform/companies/${companyId}/ai-settings`, { enabled }),
 };

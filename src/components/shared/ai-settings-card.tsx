@@ -1,23 +1,18 @@
 'use client';
 
-import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import { Loader2, Sparkles } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Loader2, Sparkles, Lock } from 'lucide-react';
 import { aiApi } from '@/lib/api/ai';
-import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 /**
- * Admin-only settings card for the master AI toggle.
+ * Read-only status card for company admins.
  *
- * Off by default. Toggling on warns the admin that prompts (without
- * names or attachments) leave the server and may be used by Google
- * Gemini's free-tier to improve their models.
+ * AI is enabled at the platform level by a super admin — company admins
+ * see whether their tenant is opted in, plus 24-h usage stats when on,
+ * but they cannot toggle it themselves.
  */
 export function AiSettingsCard() {
-  const qc = useQueryClient();
-  const [busy, setBusy] = useState(false);
-
   const settingsQ = useQuery({
     queryKey: ['ai-settings'],
     queryFn: () => aiApi.getSettings().then((r) => r.data.data),
@@ -28,31 +23,9 @@ export function AiSettingsCard() {
     enabled: !!settingsQ.data?.aiEnabled,
   });
 
-  const updateMut = useMutation({
-    mutationFn: (enabled: boolean) => aiApi.updateSettings(enabled),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['ai-settings'] });
-      qc.invalidateQueries({ queryKey: ['ai-usage'] });
-      toast.success('AI settings updated');
-    },
-    onError: () => {
-      toast.error('Could not update AI settings');
-    },
-    onSettled: () => setBusy(false),
-  });
-
   const s = settingsQ.data;
   const u = usageQ.data;
   const loading = settingsQ.isLoading;
-
-  function handleToggle(next: boolean) {
-    if (next && s && !s.available) {
-      toast.error('Gemini API key is not configured on the server.');
-      return;
-    }
-    setBusy(true);
-    updateMut.mutate(next);
-  }
 
   return (
     <div className="rounded-lg border bg-card p-6">
@@ -60,12 +33,15 @@ export function AiSettingsCard() {
       <div className="flex items-center gap-2 mb-2">
         <Sparkles className="h-5 w-5 text-violet-500" />
         <h2 className="text-lg font-semibold">AI Assistant</h2>
+        <Badge variant="outline" className="ml-1 text-[10px] uppercase tracking-wide">
+          <Lock className="h-3 w-3 mr-1" />
+          Platform-controlled
+        </Badge>
       </div>
       <p className="text-sm text-muted-foreground mb-4">
-        Enable Google Gemini-powered writing helpers (Improve writing, tone rewrites,
-        title-from-description) across your workspace. Off by default. When enabled,
-        the text you submit leaves the server and is sent to Google&apos;s free-tier
-        Gemini API, which may use prompts to improve their models.
+        Google Gemini-powered writing helpers (Improve writing, tone rewrites,
+        title-from-description) are enabled at the platform level. Contact your
+        platform administrator to change this setting for your organisation.
       </p>
 
       {loading ? (
@@ -78,30 +54,29 @@ export function AiSettingsCard() {
           <div className="flex items-start justify-between gap-4 rounded-md border bg-muted/20 px-4 py-3">
             <div className="space-y-1">
               <p className="text-sm font-medium">
-                AI features {s?.aiEnabled ? 'enabled' : 'disabled'}
+                AI features{' '}
+                <span className={s?.aiEnabled ? 'text-emerald-600' : 'text-slate-500'}>
+                  {s?.aiEnabled ? 'enabled' : 'disabled'}
+                </span>
               </p>
               <p className="text-xs text-muted-foreground">
                 Model: <span className="font-mono">{s?.model ?? '—'}</span>
                 {s && !s.available && (
                   <span className="ml-2 text-amber-600">
-                    Server is missing GEMINI_API_KEY — toggle is locked.
+                    Gemini API key is not configured on the server.
                   </span>
                 )}
               </p>
             </div>
-            <Button
-              size="sm"
-              disabled={busy || !s?.available}
-              variant={s?.aiEnabled ? 'outline' : 'default'}
+            <Badge
               className={
                 s?.aiEnabled
-                  ? ''
-                  : 'bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white'
+                  ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-100'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-100'
               }
-              onClick={() => handleToggle(!s?.aiEnabled)}
             >
-              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : s?.aiEnabled ? 'Disable' : 'Enable'}
-            </Button>
+              {s?.aiEnabled ? 'ON' : 'OFF'}
+            </Badge>
           </div>
 
           {s?.aiEnabled && u && (
