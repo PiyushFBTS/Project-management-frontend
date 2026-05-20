@@ -69,6 +69,11 @@ function getNotificationRoute(notif: Notification, isEmployee: boolean): string 
     case 'task_status_changed':
     case 'task_commented':
     case 'task_mention':
+      // Deep-link straight to the ticket detail page so a mention or
+      // comment lands the user on the comment thread, not the list.
+      // `/full-tickets/[id]` works for both admins and employees — it
+      // branches its API client by user type internally.
+      if (meta?.taskId) return `/full-tickets/${meta.taskId}`;
       return isEmployee ? '/my-tasks' : (meta?.projectId ? `/projects/${meta.projectId}/planning` : '/full-tickets');
     default:
       return null;
