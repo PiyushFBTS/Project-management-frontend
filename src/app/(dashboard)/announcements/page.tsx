@@ -8,7 +8,10 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { format, addDays } from 'date-fns';
-import { Megaphone, Plus, Pencil, Trash2, Loader2, CalendarClock, List, Lock, Send, Search, X, Filter } from 'lucide-react';
+import {
+  Megaphone, Plus, Pencil, Trash2, Loader2, CalendarClock, List, Lock, Send,
+  Search, X, Filter, Paperclip, FileText, Image as ImageIcon, Download,
+} from 'lucide-react';
 import { announcementsApi } from '@/lib/api/announcements';
 import { Announcement } from '@/types';
 import { useAuth } from '@/providers/auth-provider';
@@ -52,6 +55,19 @@ export default function AnnouncementsPage() {
   const [senderFilter, setSenderFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'expired'>('all');
 
+  // Files queued in the form — uploaded sequentially after the
+  // create/update mutation resolves (since uploads need the announcement
+  // id). The list refreshes after the last upload finishes.
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+
+  /** Resolve the static-files origin (strips the `/api` suffix off the
+   * configured API URL). Used to build `<a href>` for downloads. */
+  const filesOrigin = (() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
+    return apiUrl.replace(/\/api$/, '');
+  })();
+
   const { data, isLoading } = useQuery({
     queryKey: ['announcements'],
     queryFn: () => announcementsApi.getAll().then((r) => r.data.data ?? []),
@@ -67,12 +83,35 @@ export default function AnnouncementsPage() {
     },
   });
 
+  /// Upload every queued file against the freshly created/updated
+  /// announcement. Failures surface as toasts but don't block the rest
+  /// of the queue — partial uploads beat losing every file.
+  async function uploadPendingFiles(announcementId: number) {
+    if (pendingFiles.length === 0) return;
+    setUploadingFiles(true);
+    let ok = 0;
+    for (const file of pendingFiles) {
+      try {
+        await announcementsApi.uploadAttachment(announcementId, file);
+        ok++;
+      } catch (e: any) {
+        toast.error(`${file.name}: ${e?.response?.data?.message ?? 'upload failed'}`);
+      }
+    }
+    setUploadingFiles(false);
+    setPendingFiles([]);
+    if (ok > 0) toast.success(`${ok} file${ok === 1 ? '' : 's'} attached`);
+    qc.invalidateQueries({ queryKey: ['announcements'] });
+    qc.invalidateQueries({ queryKey: ['announcements-active'] });
+  }
+
   const createMutation = useMutation({
     mutationFn: (dto: FormValues) => announcementsApi.create(dto),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
       qc.invalidateQueries({ queryKey: ['announcements'] });
       qc.invalidateQueries({ queryKey: ['announcements-active'] });
       toast.success(`"${res.data.data.title}" announced`);
+      await uploadPendingFiles(res.data.data.id);
       form.reset({
         title: '',
         description: '',
@@ -86,10 +125,11 @@ export default function AnnouncementsPage() {
   const updateMutation = useMutation({
     mutationFn: ({ id, dto }: { id: number; dto: Partial<FormValues> & { isActive?: boolean } }) =>
       announcementsApi.update(id, dto),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
       qc.invalidateQueries({ queryKey: ['announcements'] });
       qc.invalidateQueries({ queryKey: ['announcements-active'] });
       toast.success(`"${res.data.data.title}" updated`);
+      await uploadPendingFiles(res.data.data.id);
       setEditing(null);
       form.reset({
         title: '',
@@ -99,6 +139,18 @@ export default function AnnouncementsPage() {
       setActiveTab('list');
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to update announcement'),
+  });
+
+  // Per-attachment delete from the list view (admin/HR only).
+  const removeAttachmentMutation = useMutation({
+    mutationFn: ({ announcementId, attachmentId }: { announcementId: number; attachmentId: number }) =>
+      announcementsApi.removeAttachment(announcementId, attachmentId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['announcements'] });
+      qc.invalidateQueries({ queryKey: ['announcements-active'] });
+      toast.success('Attachment removed');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to remove attachment'),
   });
 
   const removeMutation = useMutation({
@@ -113,6 +165,7 @@ export default function AnnouncementsPage() {
 
   function startEdit(a: Announcement) {
     setEditing(a);
+    setPendingFiles([]);
     form.reset({
       title: a.title,
       description: a.description,
@@ -123,11 +176,48 @@ export default function AnnouncementsPage() {
 
   function cancelEdit() {
     setEditing(null);
+    setPendingFiles([]);
     form.reset({
       title: '',
       description: '',
       expiresOn: format(addDays(new Date(), 7), 'yyyy-MM-dd'),
     });
+  }
+
+  function addFiles(files: FileList | null) {
+    if (!files) return;
+    const incoming = Array.from(files);
+    // Soft client-side validation — backend also enforces these.
+    const allowed = /\.(pdf|docx?|xlsx?|pptx?|jpe?g|png|gif|webp|txt|csv)$/i;
+    const tooBig: string[] = [];
+    const wrongType: string[] = [];
+    const valid: File[] = [];
+    for (const f of incoming) {
+      if (!allowed.test(f.name)) { wrongType.push(f.name); continue; }
+      if (f.size > 10 * 1024 * 1024) { tooBig.push(f.name); continue; }
+      valid.push(f);
+    }
+    if (wrongType.length) toast.error(`Unsupported file type: ${wrongType.join(', ')}`);
+    if (tooBig.length) toast.error(`Larger than 10 MB: ${tooBig.join(', ')}`);
+    if (valid.length) setPendingFiles((prev) => [...prev, ...valid]);
+  }
+
+  function removePendingFile(idx: number) {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function fileIcon(mime: string | undefined, name: string) {
+    const m = (mime ?? '').toLowerCase();
+    if (m.startsWith('image/') || /\.(jpe?g|png|gif|webp)$/i.test(name)) {
+      return <ImageIcon className="h-3.5 w-3.5" />;
+    }
+    return <FileText className="h-3.5 w-3.5" />;
+  }
+
+  function fmtBytes(n: number) {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(1)} MB`;
   }
 
   function onSubmit(values: FormValues) {
@@ -273,15 +363,108 @@ export default function AnnouncementsPage() {
                   )}
                 </div>
 
+                {/* Attachments — already-uploaded (edit mode), queued
+                    (new files), and a file picker. */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Attachments
+                  </label>
+                  <p className="text-[10px] text-muted-foreground">
+                    PDF, Office docs, images, txt, csv — up to 10 MB each.
+                  </p>
+
+                  {/* Already uploaded — only visible while editing. */}
+                  {editing && (editing.attachments?.length ?? 0) > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {editing.attachments!.map((att) => (
+                        <div
+                          key={att.id}
+                          className="group inline-flex items-center gap-2 rounded-md border bg-muted/30 px-2.5 py-1 text-xs"
+                        >
+                          {fileIcon(att.mimeType, att.originalName)}
+                          <a
+                            href={`${filesOrigin}${att.filePath}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-medium hover:underline max-w-[200px] truncate"
+                            title={att.originalName}
+                          >
+                            {att.originalName}
+                          </a>
+                          <span className="text-muted-foreground">{fmtBytes(att.fileSize)}</span>
+                          <button
+                            type="button"
+                            className="ml-1 text-muted-foreground hover:text-red-600"
+                            onClick={() => {
+                              if (confirm(`Remove "${att.originalName}"?`)) {
+                                removeAttachmentMutation.mutate({
+                                  announcementId: editing.id,
+                                  attachmentId: att.id,
+                                });
+                              }
+                            }}
+                            title="Remove attachment"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Queued — not yet uploaded; cleared after the
+                      announcement save resolves. */}
+                  {pendingFiles.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {pendingFiles.map((f, i) => (
+                        <div
+                          key={`${f.name}-${i}`}
+                          className="group inline-flex items-center gap-2 rounded-md border border-dashed border-rose-300 bg-rose-50 dark:bg-rose-500/10 px-2.5 py-1 text-xs"
+                        >
+                          {fileIcon(f.type, f.name)}
+                          <span className="font-medium max-w-[200px] truncate" title={f.name}>{f.name}</span>
+                          <span className="text-muted-foreground">{fmtBytes(f.size)}</span>
+                          <button
+                            type="button"
+                            className="ml-1 text-muted-foreground hover:text-red-600"
+                            onClick={() => removePendingFile(i)}
+                            title="Remove from queue"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="inline-flex items-center gap-2 cursor-pointer rounded-md border border-dashed border-muted-foreground/30 px-3 py-2 text-sm hover:bg-muted/30 transition-colors">
+                      <Paperclip className="h-4 w-4 text-muted-foreground" />
+                      Add files
+                      <input
+                        type="file"
+                        multiple
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.txt,.csv"
+                        className="hidden"
+                        onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
+                      />
+                    </label>
+                  </div>
+                </div>
+
                 <div className="flex justify-end gap-2 pt-2 border-t">
                   <Button
                     type="submit"
-                    disabled={saving}
+                    disabled={saving || uploadingFiles}
                     className="bg-linear-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 text-white shadow-md"
                   >
-                    {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    {!saving && <Send className="mr-2 h-4 w-4" />}
-                    {editing ? 'Save changes' : 'Publish announcement'}
+                    {(saving || uploadingFiles) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    {!(saving || uploadingFiles) && <Send className="mr-2 h-4 w-4" />}
+                    {uploadingFiles
+                      ? 'Uploading files…'
+                      : editing
+                        ? 'Save changes'
+                        : 'Publish announcement'}
                   </Button>
                 </div>
               </form>
@@ -404,6 +587,24 @@ export default function AnnouncementsPage() {
                           )}
                         </div>
                         <p className="mt-1 text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{a.description}</p>
+                        {(a.attachments?.length ?? 0) > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {a.attachments!.map((att) => (
+                              <a
+                                key={att.id}
+                                href={`${filesOrigin}${att.filePath}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1.5 rounded-md border bg-muted/30 hover:bg-muted/60 px-2 py-1 text-[11px] transition-colors"
+                                title={`${att.originalName} · ${fmtBytes(att.fileSize)}`}
+                              >
+                                {fileIcon(att.mimeType, att.originalName)}
+                                <span className="max-w-[180px] truncate">{att.originalName}</span>
+                                <Download className="h-3 w-3 text-muted-foreground" />
+                              </a>
+                            ))}
+                          </div>
+                        )}
                         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <CalendarClock className="h-3 w-3" />

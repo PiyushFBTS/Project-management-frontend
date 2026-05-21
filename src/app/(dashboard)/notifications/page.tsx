@@ -87,6 +87,19 @@ export default function NotificationsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'unread' | 'read'>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  // Multi-select: clicking a checkbox toggles its id here. When this set
+  // is non-empty the row click behaviour switches from "navigate" to
+  // "toggle selection" so the user can quickly add more without missing.
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+
+  const toggleSelect = (id: number) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const clearSelection = () => setSelected(new Set());
 
   const { data: response, isLoading } = useQuery({
     queryKey: ['notifications-page', isEmp],
@@ -111,6 +124,14 @@ export default function NotificationsPage() {
   const clearAll = useMutation({
     mutationFn: () => notificationsApi.clearAll(isEmp),
     onSuccess: () => { invalidate(); qc.invalidateQueries({ queryKey: ['notifications-page'] }); },
+  });
+  const bulkDelete = useMutation({
+    mutationFn: (ids: number[]) => notificationsApi.bulkDelete(ids, isEmp),
+    onSuccess: () => {
+      clearSelection();
+      invalidate();
+      qc.invalidateQueries({ queryKey: ['notifications-page'] });
+    },
   });
 
   const all: Notification[] = response?.data ?? [];
@@ -162,9 +183,33 @@ export default function NotificationsPage() {
   }, [filtered]);
 
   const handleClick = (n: Notification) => {
+    // While in selection mode, clicking anywhere on the row toggles its
+    // checkbox instead of navigating. This matches the long-press flow
+    // on Flutter — once you've started selecting, you don't have to
+    // hit a 16-pixel checkbox to add more rows.
+    if (selected.size > 0) {
+      toggleSelect(n.id);
+      return;
+    }
     if (!n.isRead) markRead.mutate(n.id);
     const route = getNotificationRoute(n, isEmp);
     if (route) router.push(route);
+  };
+
+  // "Select all" toggle — operates on the currently filtered list so
+  // applying a filter first lets you bulk-delete e.g. only read items.
+  const allFilteredSelected =
+    filtered.length > 0 && filtered.every((n) => selected.has(n.id));
+  const toggleSelectAllFiltered = () => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allFilteredSelected) {
+        for (const n of filtered) next.delete(n.id);
+      } else {
+        for (const n of filtered) next.add(n.id);
+      }
+      return next;
+    });
   };
 
   return (
@@ -239,6 +284,55 @@ export default function NotificationsPage() {
         </Select>
       </div>
 
+      {/* Selection toolbar — only visible while any row is selected. */}
+      {selected.size > 0 && (
+        <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-4 py-2.5 flex items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-3 text-sm">
+            <input
+              type="checkbox"
+              checked={allFilteredSelected}
+              onChange={toggleSelectAllFiltered}
+              className="h-4 w-4 accent-indigo-600 cursor-pointer"
+              aria-label="Select all in this view"
+            />
+            <span className="font-medium">{selected.size} selected</span>
+            {!allFilteredSelected && filtered.length > selected.size && (
+              <button
+                type="button"
+                className="text-xs text-indigo-600 hover:underline"
+                onClick={toggleSelectAllFiltered}
+              >
+                Select all {filtered.length} in view
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8"
+              onClick={clearSelection}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-8"
+              disabled={bulkDelete.isPending}
+              onClick={() => {
+                if (confirm(`Delete ${selected.size} notification${selected.size === 1 ? '' : 's'}?`)) {
+                  bulkDelete.mutate(Array.from(selected));
+                }
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+              Delete {selected.size}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* List */}
       {isLoading ? (
         <div className="space-y-2">
@@ -271,6 +365,7 @@ export default function NotificationsPage() {
                     const cfg = typeConfig[n.type] ?? typeConfig.project_updated;
                     const Icon = cfg.icon;
                     const hasRoute = !!getNotificationRoute(n, isEmp);
+                    const isSelected = selected.has(n.id);
                     return (
                       <div
                         key={n.id}
@@ -281,8 +376,19 @@ export default function NotificationsPage() {
                           hasRoute ? 'cursor-pointer hover:bg-muted/40' : 'cursor-default',
                           !n.isRead && 'bg-indigo-500/5',
                           n.isRead && 'opacity-70',
+                          isSelected && 'bg-indigo-500/15 opacity-100',
                         )}
                       >
+                        {/* Checkbox — stop-propagation so toggling doesn't
+                            also trigger the row click handler. */}
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSelect(n.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="mt-1.5 h-4 w-4 accent-indigo-600 cursor-pointer"
+                          aria-label={`Select notification: ${n.title}`}
+                        />
                         {!n.isRead ? (
                           <span className="mt-2 h-2 w-2 rounded-full bg-indigo-500 shrink-0" />
                         ) : (

@@ -381,6 +381,31 @@ export function RichTextEditor({
   const hasMentions = !!employees;
   const [extensions] = useState(() => buildExtensions(hasMentions));
 
+  // Color / highlight popovers — click to open, click outside or
+  // re-click the button to close. Previously these were CSS-only
+  // hover popovers (`hidden group-hover:grid`) which intermittently
+  // rendered open on first paint (Tailwind class-order / specificity
+  // issue inside flex toolbars). Owning the state in React removes
+  // that ambiguity.
+  const [colorOpen, setColorOpen] = useState(false);
+  const [highlightOpen, setHighlightOpen] = useState(false);
+  const colorRef = useRef<HTMLDivElement>(null);
+  const highlightRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!colorOpen && !highlightOpen) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (colorOpen && colorRef.current && !colorRef.current.contains(t)) {
+        setColorOpen(false);
+      }
+      if (highlightOpen && highlightRef.current && !highlightRef.current.contains(t)) {
+        setHighlightOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [colorOpen, highlightOpen]);
+
   const editor = useEditor({
     extensions,
     immediatelyRender: false,
@@ -482,47 +507,63 @@ export function RichTextEditor({
         <div className="w-px h-5 bg-border mx-1" />
 
         {/* Text Color */}
-        <div className="relative group">
-          <ToolbarButton onClick={() => {}} title="Text Color">
+        <div className="relative" ref={colorRef}>
+          <ToolbarButton
+            onClick={() => { setColorOpen((v) => !v); setHighlightOpen(false); }}
+            active={colorOpen}
+            title="Text Color"
+          >
             <Palette className="h-4 w-4" />
           </ToolbarButton>
-          <div className="absolute top-full left-0 mt-1 hidden group-hover:grid grid-cols-5 gap-1 p-2 bg-popover border rounded-lg shadow-lg z-50">
-            {COLORS.map((color) => (
-              <button
-                key={color}
-                type="button"
-                onClick={() => editor.chain().focus().setColor(color).run()}
-                className="w-5 h-5 rounded border border-border hover:scale-110 transition-transform"
-                style={{ backgroundColor: color }}
-                title={color}
-              />
-            ))}
-          </div>
+          {colorOpen && (
+            <div className="absolute top-full left-0 mt-1 grid grid-cols-5 gap-1 p-2 bg-popover border rounded-lg shadow-lg z-50">
+              {COLORS.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  onClick={() => {
+                    editor.chain().focus().setColor(color).run();
+                    setColorOpen(false);
+                  }}
+                  className="w-5 h-5 rounded border border-border hover:scale-110 transition-transform"
+                  style={{ backgroundColor: color }}
+                  title={color}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Highlight Color */}
-        <div className="relative group">
-          <ToolbarButton onClick={() => {}} title="Highlight">
+        <div className="relative" ref={highlightRef}>
+          <ToolbarButton
+            onClick={() => { setHighlightOpen((v) => !v); setColorOpen(false); }}
+            active={highlightOpen}
+            title="Highlight"
+          >
             <Highlighter className="h-4 w-4" />
           </ToolbarButton>
-          <div className="absolute top-full left-0 mt-1 hidden group-hover:grid grid-cols-5 gap-1 p-2 bg-popover border rounded-lg shadow-lg z-50">
-            {BG_COLORS.map((color) => (
-              <button
-                key={color}
-                type="button"
-                onClick={() => {
-                  if (color === 'transparent') {
-                    editor.chain().focus().unsetHighlight().run();
-                  } else {
-                    editor.chain().focus().toggleHighlight({ color }).run();
-                  }
-                }}
-                className="w-5 h-5 rounded border border-border hover:scale-110 transition-transform"
-                style={{ backgroundColor: color === 'transparent' ? '#fff' : color }}
-                title={color === 'transparent' ? 'None' : color}
-              />
-            ))}
-          </div>
+          {highlightOpen && (
+            <div className="absolute top-full left-0 mt-1 grid grid-cols-5 gap-1 p-2 bg-popover border rounded-lg shadow-lg z-50">
+              {BG_COLORS.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  onClick={() => {
+                    if (color === 'transparent') {
+                      editor.chain().focus().unsetHighlight().run();
+                    } else {
+                      editor.chain().focus().toggleHighlight({ color }).run();
+                    }
+                    setHighlightOpen(false);
+                  }}
+                  className="w-5 h-5 rounded border border-border hover:scale-110 transition-transform"
+                  style={{ backgroundColor: color === 'transparent' ? '#fff' : color }}
+                  title={color === 'transparent' ? 'None' : color}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="w-px h-5 bg-border mx-1" />

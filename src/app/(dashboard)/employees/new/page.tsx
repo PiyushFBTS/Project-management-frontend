@@ -25,7 +25,7 @@ const consultantTypes = [
 ];
 
 const bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
-const maritalStatuses = ['single', 'married', 'divorced', 'widowed'];
+const maritalStatuses = ['unmarried', 'married', 'divorced', 'widowed'];
 
 const defaultForm = {
   empCode: '',

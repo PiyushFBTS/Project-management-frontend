@@ -336,6 +336,18 @@ export interface TopEmployee {
 
 // ── Announcements ─────────────────────────────────────────────────────────
 
+export interface AnnouncementAttachment {
+  id: number;
+  announcementId: number;
+  fileName: string;
+  originalName: string;
+  filePath: string;
+  fileSize: number;
+  mimeType: string;
+  uploadedByName: string;
+  createdAt: string;
+}
+
 export interface Announcement {
   id: number;
   title: string;
@@ -348,6 +360,7 @@ export interface Announcement {
   companyId: number;
   createdAt: string;
   updatedAt: string;
+  attachments?: AnnouncementAttachment[];
 }
 
 export interface CreateAnnouncementDto {
@@ -582,6 +595,8 @@ export interface ProjectTaskComment {
   content: string;
   companyId: number;
   createdAt: string;
+  /** Set when the comment body has been edited at least once. */
+  editedAt?: string | null;
 }
 
 export type TaskHistoryAction = 'created' | 'status_changed' | 'assigned' | 'reassigned' | 'closed' | 'priority_changed' | 'updated';

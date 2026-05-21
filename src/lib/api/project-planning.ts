@@ -71,6 +71,9 @@ export const projectPlanningApi = {
   // Comments
   addComment: (projectId: number, taskId: number, dto: CreateCommentDto) =>
     api.post<ApiResponse<ProjectTaskComment>>(`/projects/${projectId}/planning/tasks/${taskId}/comments`, dto),
+
+  editComment: (projectId: number, commentId: number, content: string) =>
+    api.patch<ApiResponse<ProjectTaskComment>>(`/projects/${projectId}/planning/tasks/comments/${commentId}`, { content }),
 };
 
 // ── Employee: Project Planning ───────────────────────────────────────────────
@@ -124,6 +127,9 @@ export const employeePlanningApi = {
 
   addComment: (projectId: number, taskId: number, dto: CreateCommentDto) =>
     api.post<ApiResponse<ProjectTaskComment>>(`/employee/projects/${projectId}/planning/tasks/${taskId}/comments`, dto),
+
+  editComment: (projectId: number, commentId: number, content: string) =>
+    api.patch<ApiResponse<ProjectTaskComment>>(`/employee/projects/${projectId}/planning/tasks/comments/${commentId}`, { content }),
 };
 
 // ── Client: Project Planning (same interface, ignores projectId) ────────────
@@ -286,6 +292,9 @@ export const myTasksApi = {
   addComment: (taskId: number, dto: CreateCommentDto) =>
     api.post<ApiResponse<ProjectTaskComment>>(`/employee/my-tasks/${taskId}/comments`, dto),
 
+  editComment: (commentId: number, content: string) =>
+    api.patch<ApiResponse<ProjectTaskComment>>(`/employee/my-tasks/comments/${commentId}`, { content }),
+
   searchByTicket: (ticket: string) =>
     api.get<ApiResponse<ProjectTask>>('/employee/my-tasks/search', { params: { ticket } }),
 
@@ -339,6 +348,9 @@ export const adminTicketsApi = {
 
   addComment: (taskId: number, dto: CreateCommentDto) =>
     api.post<ApiResponse<ProjectTaskComment>>(`/admin/all-tickets/${taskId}/comments`, dto),
+
+  editComment: (commentId: number, content: string) =>
+    api.patch<ApiResponse<ProjectTaskComment>>(`/admin/all-tickets/comments/${commentId}`, { content }),
 
   getSuggestedContributors: (taskId: number) =>
     api.get(`/admin/all-tickets/${taskId}/contributors/suggested`),
@@ -406,6 +418,9 @@ export const projectTicketsApi = {
 
   addComment: (taskId: number, dto: CreateCommentDto) =>
     api.post<ApiResponse<ProjectTaskComment>>(`/employee/project-tickets/${taskId}/comments`, dto),
+
+  editComment: (commentId: number, content: string) =>
+    api.patch<ApiResponse<ProjectTaskComment>>(`/employee/project-tickets/comments/${commentId}`, { content }),
 
   getSuggestedContributors: (taskId: number) =>
     api.get(`/employee/project-tickets/${taskId}/contributors/suggested`),

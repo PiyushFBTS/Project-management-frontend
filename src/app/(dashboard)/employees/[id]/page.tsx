@@ -675,7 +675,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                             <SelectTrigger className="h-8 text-sm w-full"><SelectValue placeholder="Select" /></SelectTrigger>
                             <SelectContent>
                               <SelectItem value="none">Not set</SelectItem>
-                              {['Single', 'Married', 'Divorced', 'Widowed'].map((ms) => (
+                              {['Unmarried', 'Married', 'Divorced', 'Widowed'].map((ms) => (
                                 <SelectItem key={ms} value={ms}>{ms}</SelectItem>
                               ))}
                             </SelectContent>

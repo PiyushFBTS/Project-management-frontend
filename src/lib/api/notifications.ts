@@ -27,4 +27,7 @@ export const notificationsApi = {
 
   clearAll: (isEmployee = false) =>
     api.delete<{ success: boolean }>(`${prefix(isEmployee)}/clear-all`),
+
+  bulkDelete: (ids: number[], isEmployee = false) =>
+    api.post<{ success: boolean; count: number }>(`${prefix(isEmployee)}/bulk-delete`, { ids }),
 };

@@ -9,7 +9,7 @@ import {
   Loader2, Calendar, Clock, User,
   FolderKanban, UserRoundPlus, Ticket, History, Download, AlertTriangle,
   Paperclip, FileText, Image as ImageIcon, Trash2, ChevronRight, Users,
-  Flag, Layers, Send,
+  Flag, Layers, Send, Pencil, X, Check,
 } from 'lucide-react';
 import { projectTicketsApi, adminTicketsApi, clientTicketsApi, projectPlanningApi, employeePlanningApi } from '@/lib/api/project-planning';
 import { employeesApi } from '@/lib/api/employees';
@@ -109,6 +109,11 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
   const [closingTaskId, setClosingTaskId] = useState<number | null>(null);
   const [selectedContributors, setSelectedContributors] = useState<number[]>([]);
   const [activeTab, setActiveTab] = useState<'comments' | 'history' | 'all'>('comments');
+  // Inline comment editing — only one at a time. `editingCommentId`
+  // tracks which row is in edit mode; `editingCommentText` is its
+  // working HTML.
+  const [editingCommentId, setEditingCommentId] = useState<number | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState('');
 
   // ── Queries ────────────────────────────────────────────────────────────
 
@@ -253,6 +258,39 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
   });
+
+  // Edit comment — auto-routes to whichever API matches the current
+  // user. Backend enforces author-only on the patch.
+  const editCommentMut = useMutation({
+    mutationFn: ({ commentId, content }: { commentId: number; content: string }) =>
+      (ticketsApi as any).editComment(commentId, content),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project-ticket-detail', taskId] });
+      setEditingCommentId(null);
+      setEditingCommentText('');
+      toast.success('Comment updated');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to update comment'),
+  });
+
+  /// Match the current user against the comment's author so we only
+  /// show the Edit button on rows they actually own. Backend would
+  /// still reject a forged request, but this prevents the UI from
+  /// dangling an action the user can't actually perform.
+  const canEditComment = (c: ProjectTaskComment): boolean => {
+    if (!user) return false;
+    const userType = user._type === 'admin' ? 'admin' : 'employee';
+    return c.authorType === userType && c.authorId === (user as { id: number }).id;
+  };
+
+  const startEditingComment = (c: ProjectTaskComment) => {
+    setEditingCommentId(c.id);
+    setEditingCommentText(c.content);
+  };
+  const cancelEditingComment = () => {
+    setEditingCommentId(null);
+    setEditingCommentText('');
+  };
 
   const uploadAttachmentMut = useMutation({
     mutationFn: (file: File) => (ticketsApi as any).uploadAttachment(taskId, file),
@@ -605,8 +643,11 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
             {/* Activity feed */}
             <div className="p-4 space-y-4 max-h-[500px] overflow-y-auto">
               {/* Comments */}
-              {(activeTab === 'comments' || activeTab === 'all') && sortedComments.map((c) => (
-                <div key={`c-${c.id}`} className="flex gap-3">
+              {(activeTab === 'comments' || activeTab === 'all') && sortedComments.map((c) => {
+                const isEditing = editingCommentId === c.id;
+                const isOwn = canEditComment(c);
+                return (
+                <div key={`c-${c.id}`} className="flex gap-3 group">
                   <div className="h-8 w-8 rounded-full bg-gradient-to-br from-violet-500 to-indigo-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
                     {((c as any).authorName ?? c.authorType)?.[0]?.toUpperCase() ?? '?'}
                   </div>
@@ -616,15 +657,75 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
                       <Badge variant="outline" className="text-[9px] capitalize py-0">{c.authorType}</Badge>
                       <span className="text-[10px] text-muted-foreground ml-auto">
                         {formatCommentTime(c.createdAt)} · {timeAgo(c.createdAt)}
+                        {c.editedAt && (
+                          <span
+                            className="ml-1 italic text-muted-foreground/70"
+                            title={`Edited ${formatCommentTime(c.editedAt)}`}
+                          >
+                            (edited)
+                          </span>
+                        )}
                       </span>
+                      {/* Edit/cancel actions — only on the author's own
+                          rows. Hidden until row hover to keep the feed
+                          uncluttered. */}
+                      {isOwn && !isEditing && (
+                        <button
+                          type="button"
+                          onClick={() => startEditingComment(c)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-indigo-600 inline-flex items-center gap-1 text-[11px]"
+                          title="Edit comment"
+                        >
+                          <Pencil className="h-3 w-3" /> Edit
+                        </button>
+                      )}
                     </div>
-                    <div
-                      className="mt-1 text-sm text-foreground leading-relaxed [&_h1]:text-xl [&_h1]:font-bold [&_h1]:my-1 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:my-1 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:my-0.5 [&_p]:my-0.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_blockquote]:border-l-3 [&_blockquote]:border-violet-500 [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_mark]:rounded [&_mark]:px-0.5 [&_.mention]:bg-violet-500/15 [&_.mention]:rounded-full [&_.mention]:px-1.5 [&_.mention]:py-0.5 [&_.mention]:text-xs [&_.mention]:font-medium [&_.mention]:text-violet-600"
-                      dangerouslySetInnerHTML={{ __html: renderCommentHtml(c.content) }}
-                    />
+                    {isEditing ? (
+                      <div className="mt-1 space-y-2">
+                        <RichTextEditor
+                          value={editingCommentText}
+                          onChange={setEditingCommentText}
+                          employees={[]}
+                          placeholder="Edit comment…"
+                          minHeight="80px"
+                        />
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2 text-xs"
+                            onClick={cancelEditingComment}
+                            disabled={editCommentMut.isPending}
+                          >
+                            <X className="h-3.5 w-3.5 mr-1" /> Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="h-7 px-3 text-xs bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white"
+                            disabled={
+                              editCommentMut.isPending ||
+                              !editingCommentText.trim() ||
+                              editingCommentText === '<p></p>' ||
+                              editingCommentText === c.content
+                            }
+                            onClick={() => editCommentMut.mutate({ commentId: c.id, content: editingCommentText })}
+                          >
+                            {editCommentMut.isPending
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : <><Check className="h-3.5 w-3.5 mr-1" /> Save</>}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        className="mt-1 text-sm text-foreground leading-relaxed [&_h1]:text-xl [&_h1]:font-bold [&_h1]:my-1 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:my-1 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:my-0.5 [&_p]:my-0.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1 [&_li]:my-0.5 [&_blockquote]:border-l-3 [&_blockquote]:border-violet-500 [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_mark]:rounded [&_mark]:px-0.5 [&_.mention]:bg-violet-500/15 [&_.mention]:rounded-full [&_.mention]:px-1.5 [&_.mention]:py-0.5 [&_.mention]:text-xs [&_.mention]:font-medium [&_.mention]:text-violet-600"
+                        dangerouslySetInnerHTML={{ __html: renderCommentHtml(c.content) }}
+                      />
+                    )}
                   </div>
                 </div>
-              ))}
+              );
+              })}
 
               {/* History */}
               {(activeTab === 'history' || activeTab === 'all') && sortedHistory.map((h: any) => (
