@@ -554,8 +554,12 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
             </div>
           </div>
 
-          {/* ── Activity section (Comments + History tabs) ──────────── */}
-          <div className="rounded-xl border bg-card">
+          {/* ── Activity section (Comments + History tabs) ────────────
+              Fixed height (~ matches Details + Reassign cards on the
+              right) so the page doesn't keep extending as comments
+              pile up. The internal feed scrolls; the input stays
+              pinned at the bottom of the card. */}
+          <div className="rounded-xl border bg-card flex flex-col h-[460px]">
             <div className="flex items-center gap-4 px-4 py-3 border-b">
               <span className="text-sm font-semibold">Activity</span>
               <div className="flex gap-1 ml-auto">
@@ -575,73 +579,13 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
               </div>
             </div>
 
-            {/* Comment input at top */}
-            <div className="px-4 py-3 border-b bg-muted/20">
-              <div className="flex flex-col gap-2">
-                <RichTextEditor
-                  value={commentText}
-                  onChange={setCommentText}
-                  // JIRA-style @-picker — mention list combines every
-                  // user kind so the author can tag employees, admins
-                  // and clients. IDs are type-prefixed (`emp-N` /
-                  // `admin-N` / `client-N`) so the backend can route
-                  // notifications to the right table.
-                  employees={(() => {
-                    const all = companyEmployees ?? [];
-                    const empOpts = all
-                      .filter((e: any) => !e._type || e._type === 'employee')
-                      .map((e) => ({
-                        id: `emp-${e.id}`,
-                        name: e.name,
-                        kind: 'employee' as const,
-                      }));
-                    const adminOpts = all
-                      .filter((e: any) => e._type === 'admin')
-                      .map((a) => ({
-                        id: `admin-${a.id}`,
-                        name: a.name,
-                        kind: 'admin' as const,
-                      }));
-                    const clientOpts = (projectClients ?? []).map((c: any) => ({
-                      id: `client-${c.id}`,
-                      name: c.contactName ?? c.companyName ?? c.name ?? `Client #${c.id}`,
-                      kind: 'client' as const,
-                    }));
-                    // Dedupe by `id` (string) so the same admin/employee
-                    // can't appear twice if the API returned both.
-                    const merged = [...empOpts, ...adminOpts, ...clientOpts];
-                    return merged.filter(
-                      (m, i, arr) => arr.findIndex((x) => x.id === m.id) === i,
-                    );
-                  })()}
-                  onMentionAdded={() => {}}
-                  placeholder="Add a comment… type @ to mention"
-                  minHeight="80px"
-                />
-                <div className="flex items-center justify-between gap-2">
-                  <AiImproveButton
-                    value={commentText}
-                    valueIsHtml
-                    onAccept={(out) => setCommentText(out)}
-                    size="sm"
-                    variant="outline"
-                  />
-                  <Button
-                    size="sm"
-                    className="bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white"
-                    disabled={!commentText.trim() || commentText === '<p></p>' || addCommentMut.isPending}
-                    onClick={() => {
-                      addCommentMut.mutate(commentText.trim());
-                    }}
-                  >
-                    {addCommentMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Send className="h-3.5 w-3.5 mr-1" /> Comment</>}
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* Activity feed */}
-            <div className="p-4 space-y-4 max-h-[500px] overflow-y-auto">
+            {/* Activity feed — sits above the input so the latest
+                conversation is what the user sees first. flex-1 lets
+                the list fill the leftover card height; min-h-0 hands
+                the scrollbar to overflow-y-auto. The card itself is
+                bounded by the right sidebar's height (via flex-1 on
+                the card), so the input stays anchored at the bottom. */}
+            <div className="p-4 space-y-4 flex-1 min-h-0 overflow-y-auto">
               {/* Comments */}
               {(activeTab === 'comments' || activeTab === 'all') && sortedComments.map((c) => {
                 const isEditing = editingCommentId === c.id;
@@ -751,70 +695,78 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
                 <p className="text-sm text-muted-foreground text-center py-6">{historyLoading ? 'Loading...' : 'No history'}</p>
               )}
             </div>
+
+            {/* Comment input — moved below the feed so it stays
+                accessible even when the list grows long. The list
+                above scrolls internally. */}
+            <div className="px-4 py-3 border-t bg-muted/20">
+              <div className="flex flex-col gap-2">
+                <RichTextEditor
+                  value={commentText}
+                  onChange={setCommentText}
+                  // JIRA-style @-picker — mention list combines every
+                  // user kind so the author can tag employees, admins
+                  // and clients. IDs are type-prefixed (`emp-N` /
+                  // `admin-N` / `client-N`) so the backend can route
+                  // notifications to the right table.
+                  employees={(() => {
+                    const all = companyEmployees ?? [];
+                    const empOpts = all
+                      .filter((e: any) => !e._type || e._type === 'employee')
+                      .map((e) => ({
+                        id: `emp-${e.id}`,
+                        name: e.name,
+                        kind: 'employee' as const,
+                      }));
+                    const adminOpts = all
+                      .filter((e: any) => e._type === 'admin')
+                      .map((a) => ({
+                        id: `admin-${a.id}`,
+                        name: a.name,
+                        kind: 'admin' as const,
+                      }));
+                    const clientOpts = (projectClients ?? []).map((c: any) => ({
+                      id: `client-${c.id}`,
+                      name: c.contactName ?? c.companyName ?? c.name ?? `Client #${c.id}`,
+                      kind: 'client' as const,
+                    }));
+                    // Dedupe by `id` (string) so the same admin/employee
+                    // can't appear twice if the API returned both.
+                    const merged = [...empOpts, ...adminOpts, ...clientOpts];
+                    return merged.filter(
+                      (m, i, arr) => arr.findIndex((x) => x.id === m.id) === i,
+                    );
+                  })()}
+                  onMentionAdded={() => {}}
+                  placeholder="Add a comment… type @ to mention"
+                  minHeight="80px"
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <AiImproveButton
+                    value={commentText}
+                    valueIsHtml
+                    onAccept={(out) => setCommentText(out)}
+                    size="sm"
+                    variant="outline"
+                  />
+                  <Button
+                    size="sm"
+                    className="bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white"
+                    disabled={!commentText.trim() || commentText === '<p></p>' || addCommentMut.isPending}
+                    onClick={() => {
+                      addCommentMut.mutate(commentText.trim());
+                    }}
+                  >
+                    {addCommentMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Send className="h-3.5 w-3.5 mr-1" /> Comment</>}
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* ═══ RIGHT SIDEBAR (1/3) ════════════════════════════════════ */}
         <div className="space-y-4">
-
-          {/* Status + Priority card */}
-          <div className="rounded-xl border bg-card p-4 space-y-4">
-            {/* Status */}
-            <div>
-              <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5 block">Status</label>
-              {!isClient ? (
-                <Select value={t.status} onValueChange={(v) => handleStatusChange(v as ProjectTaskStatus)}>
-                  <SelectTrigger className="w-full h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(statusLabels).map(([v, l]) => (
-                      <SelectItem key={v} value={v}>{l}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Badge className={`${statusColors[t.status]} text-xs`}>{statusLabels[t.status]}</Badge>
-              )}
-            </div>
-
-            {/* Priority */}
-            <div>
-              <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5 block">Priority</label>
-              <Badge className={`${priorityColors[t.priority]} text-xs`}>
-                <Flag className="h-3 w-3 mr-1" />
-                {priorityLabels[t.priority]}
-              </Badge>
-            </div>
-
-            {/* Phase — moved here from the Details card. Clients see it
-                read-only; admins/employees on the project can change it
-                inline (the value `__none__` clears the phase). */}
-            <div>
-              <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5 block">Phase</label>
-              {isClient ? (
-                <p className="text-sm font-medium">{(t as any).phase?.name ?? '—'}</p>
-              ) : (
-                <Select
-                  value={(t as any).phaseId ? String((t as any).phaseId) : '__none__'}
-                  onValueChange={(v) =>
-                    updatePhaseMut.mutate({ phaseId: v === '__none__' ? null : Number(v) })
-                  }
-                  disabled={updatePhaseMut.isPending}
-                >
-                  <SelectTrigger className="w-full h-9">
-                    <SelectValue placeholder="No phase" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">— No phase —</SelectItem>
-                    {phases.map((ph: any) => (
-                      <SelectItem key={ph.id} value={String(ph.id)}>{ph.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-          </div>
 
           {/* Details card */}
           <div className="rounded-xl border bg-card p-4 space-y-3">
@@ -901,12 +853,71 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
               <span className="text-sm font-medium">{(t as any).estimatedHours ?? '—'}</span>
             </div>
 
-            {/* Phase moved into the Status + Priority card above —
+            {/* Phase lives in the Status + Priority card below —
                 editable inline there for admins/employees. */}
 
             <div className="flex items-center justify-between py-1.5">
               <span className="text-xs text-muted-foreground flex items-center gap-1.5"><Ticket className="h-3.5 w-3.5" /> Ticket ID</span>
               <span className="text-sm font-mono font-medium">{t.ticketNumber}</span>
+            </div>
+          </div>
+
+          {/* Status + Priority card */}
+          <div className="rounded-xl border bg-card p-4 space-y-4">
+            {/* Status */}
+            <div>
+              <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5 block">Status</label>
+              {!isClient ? (
+                <Select value={t.status} onValueChange={(v) => handleStatusChange(v as ProjectTaskStatus)}>
+                  <SelectTrigger className="w-full h-9">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(statusLabels).map(([v, l]) => (
+                      <SelectItem key={v} value={v}>{l}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Badge className={`${statusColors[t.status]} text-xs`}>{statusLabels[t.status]}</Badge>
+              )}
+            </div>
+
+            {/* Priority */}
+            <div>
+              <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5 block">Priority</label>
+              <Badge className={`${priorityColors[t.priority]} text-xs`}>
+                <Flag className="h-3 w-3 mr-1" />
+                {priorityLabels[t.priority]}
+              </Badge>
+            </div>
+
+            {/* Phase — moved here from the Details card. Clients see it
+                read-only; admins/employees on the project can change it
+                inline (the value `__none__` clears the phase). */}
+            <div>
+              <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5 block">Phase</label>
+              {isClient ? (
+                <p className="text-sm font-medium">{(t as any).phase?.name ?? '—'}</p>
+              ) : (
+                <Select
+                  value={(t as any).phaseId ? String((t as any).phaseId) : '__none__'}
+                  onValueChange={(v) =>
+                    updatePhaseMut.mutate({ phaseId: v === '__none__' ? null : Number(v) })
+                  }
+                  disabled={updatePhaseMut.isPending}
+                >
+                  <SelectTrigger className="w-full h-9">
+                    <SelectValue placeholder="No phase" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— No phase —</SelectItem>
+                    {phases.map((ph: any) => (
+                      <SelectItem key={ph.id} value={String(ph.id)}>{ph.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           </div>
 

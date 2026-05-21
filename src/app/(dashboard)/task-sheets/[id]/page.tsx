@@ -121,6 +121,7 @@ export default function TaskSheetDetailPage() {
                           <TableHead className="w-10">#</TableHead>
                           <TableHead>Ticket / Activity</TableHead>
                           <TableHead>Description</TableHead>
+                          <TableHead>Blockers</TableHead>
                           <TableHead className="text-right w-20">Hours</TableHead>
                           <TableHead className="w-32">Status</TableHead>
                         </TableRow>
@@ -161,8 +162,20 @@ export default function TaskSheetDetailPage() {
                                   </span>
                                 )}
                               </TableCell>
-                              <TableCell className="text-sm text-muted-foreground max-w-md truncate" title={e.taskDescription ?? ''}>
-                                {desc || '—'}
+                              <TableCell className="text-sm text-muted-foreground max-w-md">
+                                <div className="truncate" title={e.taskDescription ?? ''}>{desc || '—'}</div>
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground max-w-xs">
+                                {e.blockers ? (
+                                  <div
+                                    className="truncate text-amber-700 dark:text-amber-400"
+                                    title={e.blockers}
+                                  >
+                                    🚧 {e.blockers}
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground/50">—</span>
+                                )}
                               </TableCell>
                               <TableCell className="text-right font-semibold">
                                 {Number(e.durationHours).toFixed(2)}h

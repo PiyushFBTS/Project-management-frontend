@@ -52,6 +52,7 @@ const emptyForm = {
   fromTime: '',
   toTime: '',
   taskDescription: '',
+  blockers: '',
   status: 'in_progress' as string,
 };
 
@@ -295,6 +296,8 @@ function FillTaskSheetPage() {
         fromTime: normalizeTime(data.fromTime),
         toTime: normalizeTime(data.toTime),
         taskDescription: data.taskDescription,
+        // Empty string → omit so the backend stays at null.
+        ...(data.blockers.trim() ? { blockers: data.blockers.trim() } : {}),
         status: data.status as TaskStatus,
         ...ticketRef,
       });
@@ -321,6 +324,9 @@ function FillTaskSheetPage() {
         fromTime: normalizeTime(data.fromTime),
         toTime: normalizeTime(data.toTime),
         taskDescription: data.taskDescription,
+        // Send empty string → backend coerces to null; blanking clears
+        // the value from a previously saved entry.
+        blockers: data.blockers.trim() || null,
         status: data.status as TaskStatus,
         ...ticketRef,
       });
@@ -396,6 +402,7 @@ function FillTaskSheetPage() {
       fromTime: normalizeTime(entry.fromTime),
       toTime: normalizeTime(entry.toTime),
       taskDescription: entry.taskDescription,
+      blockers: entry.blockers ?? '',
       status: entry.status,
     });
     setFormOpen(true);
@@ -581,6 +588,7 @@ function FillTaskSheetPage() {
               <TableHead>Project</TableHead>
               <TableHead>Project Type</TableHead>
               <TableHead>Description</TableHead>
+              <TableHead>Blockers</TableHead>
               <TableHead className="w-24">Time Taken</TableHead>
               <TableHead className="w-28">Status</TableHead>
               <TableHead className="w-20">Actions</TableHead>
@@ -589,7 +597,7 @@ function FillTaskSheetPage() {
           <TableBody>
             {entries.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
                   <div className="flex flex-col items-center gap-2">
                     <Clock className="h-8 w-8 text-muted-foreground/40" />
                     <p>No task entries yet</p>
@@ -608,7 +616,21 @@ function FillTaskSheetPage() {
                   <TableCell className="text-sm text-muted-foreground">
                     {projectTypeLabels[(entry.project as any)?.projectType] ?? (entry.project as any)?.projectType ?? '—'}
                   </TableCell>
-                  <TableCell className="max-w-xs truncate text-sm">{entry.taskDescription}</TableCell>
+                  <TableCell className="max-w-xs text-sm">
+                    <div className="truncate" title={entry.taskDescription}>{entry.taskDescription}</div>
+                  </TableCell>
+                  <TableCell className="max-w-xs text-sm">
+                    {entry.blockers ? (
+                      <div
+                        className="truncate text-amber-700 dark:text-amber-400"
+                        title={entry.blockers}
+                      >
+                        🚧 {entry.blockers}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground/50">—</span>
+                    )}
+                  </TableCell>
                   <TableCell className="font-semibold">{Number(entry.durationHours).toFixed(2)}h</TableCell>
                   <TableCell>
                     <Badge variant="outline" className="capitalize text-xs">
@@ -732,6 +754,19 @@ function FillTaskSheetPage() {
                 rows={3}
               />
               <p className="text-xs text-muted-foreground">{form.taskDescription.length}/10 min characters</p>
+            </div>
+
+            {/* 4b. Blockers (optional) */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">
+                Blockers <span className="text-xs text-muted-foreground font-normal">(optional)</span>
+              </Label>
+              <Textarea
+                placeholder="What slowed or blocked progress? (optional)"
+                value={form.blockers}
+                onChange={(e) => setForm((p) => ({ ...p, blockers: e.target.value }))}
+                rows={2}
+              />
             </div>
 
             {/* 5. Start / End Time */}

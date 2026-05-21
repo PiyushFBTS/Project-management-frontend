@@ -272,6 +272,8 @@ export interface TaskEntry {
   ticket?: { id: number; ticketNumber?: string | null; title?: string | null; status?: string | null } | null;
   activityType?: string | null;
   taskDescription: string;
+  /** Optional free-text notes about anything that blocked progress. */
+  blockers?: string | null;
   fromTime: string;
   toTime: string;
   durationHours: number;
