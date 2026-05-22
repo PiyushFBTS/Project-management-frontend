@@ -533,7 +533,7 @@ function FullTicketsPageInner() {
             <Ticket className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">All Tickets</h1>
+            <h1 className="text-xl font-bold text-white">Ticket Log</h1>
             <p className="text-sm text-white/60">All tickets from your projects</p>
           </div>
         </div>

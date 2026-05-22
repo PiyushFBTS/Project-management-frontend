@@ -499,7 +499,7 @@ export default function SheetHistoryReportPage() {
               <ClipboardList className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white">Task Sheet History</h1>
+              <h1 className="text-xl font-bold text-white">Log History</h1>
               <p className="text-sm text-white/75">Daily task-sheet submissions and drafts</p>
             </div>
           </div>

@@ -703,7 +703,7 @@ export default function ProjectDetailPage() {
                 </Link>
                 <Link href={`/full-tickets?projectId=${id}`}>
                   <Button size="sm" variant="outline">
-                    <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Open All Tickets
+                    <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Open Ticket Log
                   </Button>
                 </Link>
               </div>

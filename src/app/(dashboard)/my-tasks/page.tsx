@@ -229,8 +229,8 @@ export default function MyTasksPage() {
             <ListTodo className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">My Tasks</h1>
-            <p className="text-sm text-white/60">Track your assigned tasks</p>
+            <h1 className="text-xl font-bold text-white">My Ticket</h1>
+            <p className="text-sm text-white/60">Track your assigned tickets</p>
           </div>
         </div>
       </div>

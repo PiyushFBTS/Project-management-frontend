@@ -57,13 +57,13 @@ const navItems: NavItem[] = [
     borderColor: 'border-l-blue-400', dotColor: 'bg-blue-400',
   },
   {
-    label: 'My Tasks', href: '/my-tasks', icon: ListTodo,
+    label: 'My Ticket', href: '/my-tasks', icon: ListTodo,
     iconColor: 'text-teal-400', iconBg: 'bg-teal-500/20',
     activeBg: 'bg-teal-500/20', hoverBg: 'hover:bg-teal-500/10',
     borderColor: 'border-l-teal-400', dotColor: 'bg-teal-400',
   },
   {
-    label: 'All Tickets', href: '/full-tickets', icon: Ticket,
+    label: 'Ticket Log', href: '/full-tickets', icon: Ticket,
     iconColor: 'text-purple-400', iconBg: 'bg-purple-500/20',
     activeBg: 'bg-purple-500/20', hoverBg: 'hover:bg-purple-500/10',
     borderColor: 'border-l-purple-400', dotColor: 'bg-purple-400',
@@ -107,10 +107,9 @@ const navItems: NavItem[] = [
     // — backend auto-scopes plain employees to self-only data. The
     // remaining four stay HR/admin only.
     children: [
-      { label: 'Task Sheet History', href: '/reports/sheet-history', dotColor: 'bg-blue-400' },
-      { label: 'Employee-Wise', href: '/reports/employee-wise', dotColor: 'bg-indigo-400' },
+      { label: 'Log History', href: '/reports/sheet-history', dotColor: 'bg-blue-400' },
+      { label: 'Activity Tracker', href: '/reports/employee-wise', dotColor: 'bg-indigo-400' },
       { label: 'Project-Wise', href: '/reports/project-wise', dotColor: 'bg-violet-400', hrOrAdminOnly: true },
-      { label: 'Daily Fill', href: '/reports/daily-fill', dotColor: 'bg-emerald-400' },
       { label: 'Last Filled', href: '/reports/last-filled', dotColor: 'bg-rose-400', hrOrAdminOnly: true },
       { label: 'Monthly Grid', href: '/reports/monthly-grid', dotColor: 'bg-cyan-400' },
       { label: 'Employee Costing', href: '/reports/employee-cost', dotColor: 'bg-orange-400', hrOrAdminOnly: true },
@@ -183,7 +182,7 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isClient }: { onN
   // Super admin without company selected → show platform nav
   const baseItems = isSuperAdmin && !selectedCompany ? platformNavItems : navItems;
 
-  const clientAllowedLabels = ['Dashboard', 'Projects', 'All Tickets', 'My Tasks'];
+  const clientAllowedLabels = ['Dashboard', 'Projects', 'Ticket Log', 'My Ticket'];
 
   const visibleItems = (() => {
     if (isClient) return baseItems.filter((item) => clientAllowedLabels.includes(item.label));

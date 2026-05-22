@@ -108,7 +108,7 @@ export default function EmployeeWiseReportPage() {
               <BarChart3 className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white">{canSeeAll ? 'Employee-Wise Report' : 'My Report'}</h1>
+              <h1 className="text-xl font-bold text-white">{canSeeAll ? 'Activity Tracker' : 'My Report'}</h1>
               <p className="text-sm text-white/60">Employee hours & man-days summary</p>
             </div>
           </div>

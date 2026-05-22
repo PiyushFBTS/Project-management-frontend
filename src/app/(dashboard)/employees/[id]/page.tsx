@@ -53,7 +53,8 @@ const PRAISE_TYPES = [
 
 const TYPE_LABELS: Record<string, string> = {
   project_manager: 'Project Manager', functional: 'Functional Consultant',
-  technical: 'Technical Consultant', management: 'Management', core_team: 'Core Team',
+  technical: 'Technical Consultant', full_stack_developer: 'Full Stack Developer',
+  management: 'Management', core_team: 'Core Team',
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -133,6 +134,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
   const [editJoiningDate, setEditJoiningDate] = useState('');
   const [editIsHr, setEditIsHr] = useState(false);
   const [editIsAccounts, setEditIsAccounts] = useState(false);
+  const [editIsAdmin, setEditIsAdmin] = useState(false);
   const [editFillDays, setEditFillDays] = useState('');
   const [editAnnualCTC, setEditAnnualCTC] = useState('');
   const [editBloodGroup, setEditBloodGroup] = useState('');
@@ -321,6 +323,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
     setEditJoiningDate(emp.joiningDate ?? '');
     setEditIsHr(!!emp.isHr);
     setEditIsAccounts(!!(emp as any).isAccounts);
+    setEditIsAdmin(!!(emp as any).isAdmin);
     setEditFillDays(emp.fillDaysOverride != null ? String(emp.fillDaysOverride) : '');
     setEditAnnualCTC(emp.annualCTC != null ? String(emp.annualCTC) : '');
     setEditBloodGroup(emp.bloodGroup ?? '');
@@ -371,7 +374,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
       }
       // Admin/HR update (all fields)
       const reportsToId = editReportsToId && editReportsToId !== 'none' ? Number(editReportsToId) : null;
-      const dto: any = { name: editName, email: editEmail, mobileNumber: editPhone, dateOfBirth: editDob || undefined, consultantType: editType, joiningDate: editJoiningDate || undefined, isHr: editIsHr, isAccounts: editIsAccounts, reportsToId, fillDaysOverride: editFillDays ? Number(editFillDays) : null, annualCTC: editAnnualCTC ? Number(editAnnualCTC) : null, bloodGroup: editBloodGroup || undefined, maritalStatus: editMaritalStatus || undefined, isActive: editIsActive };
+      const dto: any = { name: editName, email: editEmail, mobileNumber: editPhone, dateOfBirth: editDob || undefined, consultantType: editType, joiningDate: editJoiningDate || undefined, isHr: editIsHr, isAccounts: editIsAccounts, isAdmin: editIsAdmin, reportsToId, fillDaysOverride: editFillDays ? Number(editFillDays) : null, annualCTC: editAnnualCTC ? Number(editAnnualCTC) : null, bloodGroup: editBloodGroup || undefined, maritalStatus: editMaritalStatus || undefined, isActive: editIsActive };
       return employeesApi.update(Number(id), dto);
     },
     onSuccess: async () => {
@@ -639,6 +642,17 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                           </label>
                         ) : (
                           <p className="text-sm font-medium">{(emp as any).isAccounts ? 'Yes' : 'No'}</p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Admin Access</p>
+                        {editMode && canManageAllDocs ? (
+                          <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                            <input type="checkbox" checked={editIsAdmin} onChange={(e) => setEditIsAdmin(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+                            {editIsAdmin ? 'Yes' : 'No'}
+                          </label>
+                        ) : (
+                          <p className="text-sm font-medium">{(emp as any).isAdmin ? 'Yes' : 'No'}</p>
                         )}
                       </div>
                       <div>

@@ -914,7 +914,7 @@ function ClientDashboard() {
             gradient: 'from-blue-600 to-blue-800',
           },
           {
-            label: 'All Tickets',
+            label: 'Ticket Log',
             description: 'Browse every project ticket',
             href: '/full-tickets',
             icon: Ticket,

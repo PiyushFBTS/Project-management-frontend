@@ -20,6 +20,7 @@ const consultantTypes = [
   { value: 'project_manager', label: 'Project Manager' },
   { value: 'functional', label: 'Functional Consultant' },
   { value: 'technical', label: 'Technical Consultant' },
+  { value: 'full_stack_developer', label: 'Full Stack Developer' },
   { value: 'management', label: 'Management' },
   { value: 'core_team', label: 'Core Team' },
 ];
@@ -37,6 +38,7 @@ const defaultForm = {
   reportsTo: 'none', // user id as string, or 'none'
   isHr: false,
   isAccounts: false,
+  isAdmin: false,
   dateOfBirth: '',
   joiningDate: '',
   fillDaysOverride: '',
@@ -115,6 +117,7 @@ function NewEmployeeContent() {
       reportsToId,
       isHr: form.isHr,
       isAccounts: form.isAccounts,
+      isAdmin: form.isAdmin,
       dateOfBirth: form.dateOfBirth || undefined,
       joiningDate: form.joiningDate || undefined,
       fillDaysOverride: form.fillDaysOverride ? Number(form.fillDaysOverride) : null,
@@ -205,6 +208,12 @@ function NewEmployeeContent() {
                 <label className="flex items-center gap-2 h-9 text-sm cursor-pointer">
                   <input type="checkbox" checked={form.isAccounts} onChange={(e) => setForm((p) => ({ ...p, isAccounts: e.target.checked }))} className="h-4 w-4 rounded border-gray-300" />
                   <span>Can mark expenses as paid</span>
+                </label>
+              </Field>
+              <Field label="Admin Access">
+                <label className="flex items-center gap-2 h-9 text-sm cursor-pointer">
+                  <input type="checkbox" checked={form.isAdmin} onChange={(e) => setForm((p) => ({ ...p, isAdmin: e.target.checked }))} className="h-4 w-4 rounded border-gray-300" />
+                  <span>Grant full admin permissions</span>
                 </label>
               </Field>
             </div>
