@@ -21,6 +21,8 @@ const consultantTypes = [
   { value: 'functional', label: 'Functional Consultant' },
   { value: 'technical', label: 'Technical Consultant' },
   { value: 'full_stack_developer', label: 'Full Stack Developer' },
+  { value: 'account_consultant', label: 'Account Consultant' },
+  { value: 'human_resource_manager', label: 'Human Resource Manager' },
   { value: 'management', label: 'Management' },
   { value: 'core_team', label: 'Core Team' },
 ];

@@ -54,6 +54,8 @@ const PRAISE_TYPES = [
 const TYPE_LABELS: Record<string, string> = {
   project_manager: 'Project Manager', functional: 'Functional Consultant',
   technical: 'Technical Consultant', full_stack_developer: 'Full Stack Developer',
+  account_consultant: 'Account Consultant',
+  human_resource_manager: 'Human Resource Manager',
   management: 'Management', core_team: 'Core Team',
 };
 

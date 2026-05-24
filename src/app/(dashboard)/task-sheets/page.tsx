@@ -107,7 +107,7 @@ export default function TaskSheetsPage() {
             <Link href="/task-sheets/fill">
               <Button size="sm" className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg">
                 <Plus className="mr-1.5 h-4 w-4" />
-                Fill Today&apos;s Sheet
+                Daily Log Sheet
               </Button>
             </Link>
           )}
