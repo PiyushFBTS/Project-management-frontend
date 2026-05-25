@@ -57,9 +57,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         // Merged user (admin or employee). `/auth/me` returns one row
         // with a userType discriminator that we mirror onto _type.
+        // Soft-admins: a row with userType='employee' AND isAdmin=true
+        // (the "Admin Access" toggle on the employee form) passes the
+        // backend's @AdminOnly() guard. Promote them to _type='admin' on
+        // the client too so every UI gate (sidebar, project-types,
+        // settings, email-outbox, etc.) treats them as admin without
+        // touching every call site.
         const res = await authApi.me();
         const u = res.data.data;
-        setUser({ ...u, _type: u.userType });
+        const effectiveType =
+          u.userType === 'employee' && (u as any).isAdmin ? 'admin' : u.userType;
+        setUser({ ...u, _type: effectiveType });
       }
     } catch {
       tokenStorage.clear();
@@ -89,10 +97,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return next;
     }
 
-    // Admin or employee.
+    // Admin or employee. Same soft-admin promotion as fetchProfile so
+    // a fresh login is consistent with reload.
     tokenStorage.setLoginType(body.user.userType);
     setLoginType(body.user.userType);
-    const next: SessionUser = { ...body.user, _type: body.user.userType };
+    const effectiveType =
+      body.user.userType === 'employee' && (body.user as any).isAdmin
+        ? 'admin'
+        : body.user.userType;
+    const next: SessionUser = { ...body.user, _type: effectiveType };
     setUser(next);
     return next;
   };

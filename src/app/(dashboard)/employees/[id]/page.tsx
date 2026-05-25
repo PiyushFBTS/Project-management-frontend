@@ -630,39 +630,36 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                       )}
                       <div style={{ display: 'contents' }}>{/* passthrough wrapper — original trailing </div> balances the tree */}
                       </div>
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">HR Access</p>
-                        {editMode && canManageAllDocs ? (
-                          <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-                            <input type="checkbox" checked={editIsHr} onChange={(e) => setEditIsHr(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
-                            {editIsHr ? 'Yes' : 'No'}
-                          </label>
-                        ) : (
-                          <p className="text-sm font-medium">{emp.isHr ? 'Yes' : 'No'}</p>
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Accounts Access</p>
-                        {editMode && canManageAllDocs ? (
-                          <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-                            <input type="checkbox" checked={editIsAccounts} onChange={(e) => setEditIsAccounts(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
-                            {editIsAccounts ? 'Yes' : 'No'}
-                          </label>
-                        ) : (
-                          <p className="text-sm font-medium">{(emp as any).isAccounts ? 'Yes' : 'No'}</p>
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Admin Access</p>
-                        {editMode && canManageAllDocs ? (
-                          <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-                            <input type="checkbox" checked={editIsAdmin} onChange={(e) => setEditIsAdmin(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
-                            {editIsAdmin ? 'Yes' : 'No'}
-                          </label>
-                        ) : (
-                          <p className="text-sm font-medium">{(emp as any).isAdmin ? 'Yes' : 'No'}</p>
-                        )}
-                      </div>
+                      {/* HR / Accounts / Admin access flags — internal
+                          permission toggles. We only render them while
+                          the form is in edit mode (and only to users who
+                          can actually change them) so the read-only
+                          profile view stays uncluttered. */}
+                      {editMode && canManageAllDocs && (
+                        <>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">HR Access</p>
+                            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                              <input type="checkbox" checked={editIsHr} onChange={(e) => setEditIsHr(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+                              {editIsHr ? 'Yes' : 'No'}
+                            </label>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Accounts Access</p>
+                            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                              <input type="checkbox" checked={editIsAccounts} onChange={(e) => setEditIsAccounts(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+                              {editIsAccounts ? 'Yes' : 'No'}
+                            </label>
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Admin Access</p>
+                            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                              <input type="checkbox" checked={editIsAdmin} onChange={(e) => setEditIsAdmin(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+                              {editIsAdmin ? 'Yes' : 'No'}
+                            </label>
+                          </div>
+                        </>
+                      )}
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Fill Days</p>
                         {editMode && canManageAllDocs ? (

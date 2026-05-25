@@ -358,6 +358,8 @@ function Footer({ collapsed, isEmployee }: { collapsed?: boolean; isEmployee?: b
 export function Sidebar() {
   const { isCollapsed, toggleCollapse } = useSidebar();
   const { user } = useAuth();
+  // `_type` is already promoted to 'admin' for soft-admin employees
+  // (see auth-provider). `isHr` still keys off the underlying record.
   const isEmployee = user?._type === 'employee';
   const isHr = isEmployee && !!(user as any)?.isHr;
   const isClient = user?._type === 'client';
@@ -413,6 +415,8 @@ export function Sidebar() {
 export function MobileSidebar() {
   const { isOpen, close } = useSidebar();
   const { user } = useAuth();
+  // `_type` is already promoted to 'admin' for soft-admin employees
+  // (see auth-provider). `isHr` still keys off the underlying record.
   const isEmployee = user?._type === 'employee';
   const isHr = isEmployee && !!(user as any)?.isHr;
   const isClient = user?._type === 'client';
