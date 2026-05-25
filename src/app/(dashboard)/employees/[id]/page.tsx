@@ -24,7 +24,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 
 const AVATAR_GRADIENTS = [
@@ -60,7 +60,8 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
-  aadhaar: 'Aadhaar Card', pan: 'PAN Card', joining: 'Joining Doc', exit: 'Exit Doc', other: 'Other',
+  aadhaar: 'Aadhaar Card', pan: 'PAN Card', resume: 'Resume',
+  joining: 'Joining Doc', exit: 'Exit Doc', other: 'Other',
 };
 
 function getInitials(name: string) {
@@ -123,6 +124,11 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
   const initialTab = (searchParams.get('tab') as Tab | null) ?? 'profile';
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [docCategory, setDocCategory] = useState('other');
+  // Tracks the document the user is about to delete. `null` means the
+  // confirmation modal is closed. Used by the trash-icon click handler
+  // to seed the modal, and by the dialog itself to know which row to
+  // mutate when the user confirms.
+  const [docToDelete, setDocToDelete] = useState<{ id: number; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
 
@@ -394,7 +400,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
 
   const uploadMut = useMutation({
     mutationFn: (file: File) => {
-      // Employee self-upload (aadhaar/pan only)
+      // Employee self-upload (aadhaar/pan/resume only — see backend allowlist)
       if (isSelf && isEmployee) return employeesApi.uploadMyDocument(file, docCategory);
       return docApi.upload(targetType, Number(id), file, docCategory);
     },
@@ -786,21 +792,32 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                         <SelectContent>
                           <SelectItem value="aadhaar">Aadhaar Card</SelectItem>
                           <SelectItem value="pan">PAN Card</SelectItem>
+                          <SelectItem value="resume">Resume</SelectItem>
                           {canManageAllDocs && (
                             <>
                               <SelectItem value="joining">Joining Doc</SelectItem>
                               <SelectItem value="exit">Exit Doc</SelectItem>
-                              <SelectItem value="other">Other</SelectItem>
                             </>
                           )}
+                          <SelectItem value="other">Other</SelectItem>
                         </SelectContent>
                       </Select>
                       <input
                         ref={fileInputRef} type="file" className="hidden"
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp,.txt"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.txt,.csv,.bmp,.tiff,.tif,.svg"
                         onChange={(e) => {
                           const f = e.target.files?.[0];
-                          if (f) uploadMut.mutate(f);
+                          if (f) {
+                            // Backend caps at 10 MB. Catch it here so the user
+                            // doesn't burn an upload round-trip for a too-large
+                            // file (and the error is clearer than the server
+                            // 413 fallback).
+                            if (f.size > 10 * 1024 * 1024) {
+                              toast.error('File is larger than 10 MB');
+                            } else {
+                              uploadMut.mutate(f);
+                            }
+                          }
                           if (fileInputRef.current) fileInputRef.current.value = '';
                         }}
                       />
@@ -837,10 +854,16 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                           <a href={`${apiBase}${doc.filePath}`} target="_blank" rel="noopener noreferrer">
                             <Button variant="ghost" size="icon" className="h-8 w-8"><Download className="h-4 w-4" /></Button>
                           </a>
-                          {canManageAllDocs && (
+                          {/* Delete is allowed for:
+                              - admin / HR (`canManageAllDocs`) on anyone's doc
+                              - the user themselves on their own doc (the
+                                backend's employee endpoint enforces the
+                                ownership check, so we just gate visibility
+                                here on `isSelf`). */}
+                          {(canManageAllDocs || isSelf) && (
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600"
                               disabled={deleteMut.isPending}
-                              onClick={() => { if (confirm(`Delete "${doc.originalName}"?`)) deleteMut.mutate(doc.id); }}>
+                              onClick={() => setDocToDelete({ id: doc.id, name: doc.originalName ?? 'this document' })}>
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           )}
@@ -1573,6 +1596,48 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Delete document confirmation ───────────────────────────────
+          Replaces the old `window.confirm` so the destructive action
+          gets a proper themed modal. Closing the dialog (cancel or X)
+          clears `docToDelete`. Confirm fires the existing `deleteMut`
+          and closes onSuccess via the mutation's onSettled. */}
+      <Dialog open={docToDelete !== null} onOpenChange={(open) => { if (!open) setDocToDelete(null); }}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-500" />
+              Delete document?
+            </DialogTitle>
+            <DialogDescription>
+              {docToDelete
+                ? <>This will permanently remove <span className="font-medium text-foreground">&ldquo;{docToDelete.name}&rdquo;</span>. This action can&apos;t be undone.</>
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDocToDelete(null)} disabled={deleteMut.isPending}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteMut.isPending || !docToDelete}
+              onClick={() => {
+                if (!docToDelete) return;
+                deleteMut.mutate(docToDelete.id, {
+                  onSettled: () => setDocToDelete(null),
+                });
+              }}
+            >
+              {deleteMut.isPending ? (
+                <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Deleting…</>
+              ) : (
+                <><Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete</>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
