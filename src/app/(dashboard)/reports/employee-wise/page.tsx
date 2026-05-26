@@ -35,8 +35,18 @@ const statusLabels: Record<string, string> = {
   todo: 'To Do', in_progress: 'In Progress', in_review: 'In Review', done: 'Done', closed: 'Closed',
 };
 
-const monthStart = format(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'yyyy-MM-dd');
-const today = format(new Date(), 'yyyy-MM-dd');
+// Date defaults are computed inside the component so the values stay
+// fresh — module-level constants get evaluated once when the JS module
+// first loads in the browser, which means a tab kept open across
+// midnight keeps yesterday as "today" and silently misses the newest
+// task-sheet submissions.
+function todayIso() {
+  return format(new Date(), 'yyyy-MM-dd');
+}
+function monthStartIso() {
+  const n = new Date();
+  return format(new Date(n.getFullYear(), n.getMonth(), 1), 'yyyy-MM-dd');
+}
 
 const typeLabels: Record<string, string> = {
   project_manager: 'Project Manager',
@@ -54,10 +64,14 @@ export default function EmployeeWiseReportPage() {
   const isHr = isEmployee && !!(user as any)?.isHr;
   const canSeeAll = isAdmin || isHr;
 
-  const [fromDate, setFromDate] = useState(monthStart);
-  const [toDate, setToDate] = useState(today);
+  const [fromDate, setFromDate] = useState(monthStartIso);
+  const [toDate, setToDate] = useState(todayIso);
   const [consultantType, setConsultantType] = useState('');
-  const [autoFetch, setAutoFetch] = useState(false);
+  // Auto-fire the report on first paint so the user doesn't have to
+  // click "Run Report" before seeing data. They can still narrow the
+  // range and re-run. Skip for non-admins to avoid spamming a wider
+  // query than the page needs.
+  const [autoFetch, setAutoFetch] = useState(true);
   const [downloading, setDownloading] = useState(false);
 
   // Ticket list dialog
