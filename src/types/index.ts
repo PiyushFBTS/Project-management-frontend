@@ -194,6 +194,14 @@ export interface Employee {
   annualCTC?: number | null;
   bloodGroup?: string | null;
   maritalStatus?: string | null;
+  // Payroll identity — captured once on the profile, auto-fills slips
+  panNumber?: string | null;
+  uanNumber?: string | null;
+  pfNumber?: string | null;
+  bankName?: string | null;
+  bankAccountNo?: string | null;
+  bankIfsc?: string | null;
+  paymentMode?: string | null;
   createdAt: string;
 }
 
@@ -236,6 +244,13 @@ export interface CreateEmployeeDto {
   annualCTC?: number | null;
   bloodGroup?: string;
   maritalStatus?: string;
+  panNumber?: string;
+  uanNumber?: string;
+  pfNumber?: string;
+  bankName?: string;
+  bankAccountNo?: string;
+  bankIfsc?: string;
+  paymentMode?: string;
 }
 
 export interface UpdateEmployeeDto {
@@ -254,6 +269,13 @@ export interface UpdateEmployeeDto {
   annualCTC?: number | null;
   bloodGroup?: string | null;
   maritalStatus?: string | null;
+  panNumber?: string | null;
+  uanNumber?: string | null;
+  pfNumber?: string | null;
+  bankName?: string | null;
+  bankAccountNo?: string | null;
+  bankIfsc?: string | null;
+  paymentMode?: string | null;
 }
 
 // ── Daily Task Sheets ─────────────────────────────────────────────────────

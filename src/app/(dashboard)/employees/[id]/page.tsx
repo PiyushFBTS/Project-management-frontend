@@ -9,10 +9,13 @@ import { toast } from 'sonner';
 import {
   ArrowLeft, Mail, Phone, FileText, Download, Paperclip, Upload, Trash2, Loader2,
   User, Shield, KeyRound, Eye, EyeOff, CheckCircle2, Target, Lock, Ban, AlertTriangle, Plus, ChevronDown,
+  Receipt, Send, Undo2, Pencil,
 } from 'lucide-react';
+import Link from 'next/link';
 import { employeesApi } from '@/lib/api/employees';
 import { companiesApi } from '@/lib/api/companies';
 import { authApi } from '@/lib/api/auth';
+import { salarySlipsApi, downloadSalarySlipPdf, type SalarySlip } from '@/lib/api/salary-slips';
 import { apiErrorMessage } from '@/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 import { Card, CardContent } from '@/components/ui/card';
@@ -64,11 +67,40 @@ const CATEGORY_LABELS: Record<string, string> = {
   joining: 'Joining Doc', exit: 'Exit Doc', other: 'Other',
 };
 
+/**
+ * Read/edit pair for a plain-string profile field. Saves duplicating the
+ * label + Input wiring six times in the Payroll Identity block below.
+ */
+function ProfileField(props: {
+  label: string;
+  value: string | null | undefined;
+  editing: boolean;
+  editValue: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">{props.label}</p>
+      {props.editing ? (
+        <Input
+          value={props.editValue}
+          onChange={(e) => props.onChange(e.target.value)}
+          placeholder={props.placeholder}
+          className="h-8 text-sm"
+        />
+      ) : (
+        <p className="text-sm font-medium">{props.value || '—'}</p>
+      )}
+    </div>
+  );
+}
+
 function getInitials(name: string) {
   return name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 }
 
-type Tab = 'profile' | 'documents' | 'goals' | 'pip' | 'security';
+type Tab = 'profile' | 'documents' | 'goals' | 'pip' | 'security' | 'salary-slips';
 type GoalStatus = 'not_started' | 'started' | 'in_progress' | 'finished';
 
 const GOAL_STATUS_META: Record<GoalStatus, { label: string; pill: string; badge: string; dot: string }> = {
@@ -114,11 +146,23 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
   const isAdmin = user?._type === 'admin';
   const isSuperAdmin = isAdmin && (user as any)?.role === 'super_admin';
   const isHr = isEmployee && !!(user as any)?.isHr;
+  // Accounts-permissioned users have a narrower scope than HR — they
+  // own payroll-adjacent fields (CTC, Salary Slip generation) but not
+  // the rest of the HR surface. The flag lives on both admin and
+  // employee rows so we read it without gating on userType.
+  const isAccounts = !!(user as any)?.isAccounts;
   const canManageAllDocs = isAdmin || isHr;
   const isSelf = isSelfProfile || (targetType === 'employee' && isEmployee && Number(id) === user?.id) ||
     (targetType === 'admin' && isAdmin && Number(id) === user?.id);
   const canUploadDocs = canManageAllDocs || isSelf;
   const canEdit = canManageAllDocs || isSelf;
+  // Salary-Slip manager gate — admin / HR / accounts. Mirrors the
+  // backend's @SalarySlipManagerOnly() decorator one-for-one so the UI
+  // can't show actions that would 403 on the server.
+  const canManageSalarySlips = isAdmin || isHr || isAccounts;
+  // Visibility: managers always; the employee themselves to view their
+  // own published slips. Colleagues can't see each other's slips.
+  const canSeeSalarySlips = canManageSalarySlips || isSelf;
 
   const searchParams = useSearchParams();
   const initialTab = (searchParams.get('tab') as Tab | null) ?? 'profile';
@@ -132,8 +176,13 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
 
-  // Edit profile state (admin/HR or self)
+  // Two independent edit-mode toggles — Personal Information and
+  // Payroll Identity are now separate forms with their own Save / Cancel
+  // buttons. Splitting them lets HR update bank info without having to
+  // re-confirm everything else, and lets a plain employee edit their own
+  // personal details without touching payroll fields they can't change.
   const [editMode, setEditMode] = useState(false);
+  const [editPayrollMode, setEditPayrollMode] = useState(false);
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editPhone, setEditPhone] = useState('');
@@ -147,6 +196,14 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
   const [editAnnualCTC, setEditAnnualCTC] = useState('');
   const [editBloodGroup, setEditBloodGroup] = useState('');
   const [editMaritalStatus, setEditMaritalStatus] = useState('');
+  // Payroll identity — captured once on the profile so the Salary
+  // Slip form auto-fills them on every new slip.
+  const [editPanNumber, setEditPanNumber] = useState('');
+  const [editUanNumber, setEditUanNumber] = useState('');
+  const [editPfNumber, setEditPfNumber] = useState('');
+  const [editBankName, setEditBankName] = useState('');
+  const [editBankAccountNo, setEditBankAccountNo] = useState('');
+  const [editBankIfsc, setEditBankIfsc] = useState('');
   const [editReportsToId, setEditReportsToId] = useState<string>('');
   const [editIsActive, setEditIsActive] = useState(true);
   // Admin-target only: optional new password. Kept empty means "don't change".
@@ -306,6 +363,54 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
     enabled: !!id && activeTab === 'documents',
   });
 
+  // ── Salary Slips tab ──────────────────────────────────────────────────────
+  // The recipient employee uses the self endpoint (published-only); HR /
+  // admin / accounts use the admin list endpoint so they see drafts too.
+  const { data: slipsRaw, isLoading: slipsLoading } = useQuery<SalarySlip[]>({
+    queryKey: ['salary-slips', targetType, id, isSelf && !canManageSalarySlips ? 'self' : 'manage'],
+    queryFn: async () => {
+      if (isSelf && !canManageSalarySlips) {
+        const r = await salarySlipsApi.listMine();
+        return (r.data?.data ?? r.data ?? []) as SalarySlip[];
+      }
+      const r = await salarySlipsApi.listForEmployee(Number(id));
+      return (r.data?.data ?? r.data ?? []) as SalarySlip[];
+    },
+    enabled: !!id && activeTab === 'salary-slips' && canSeeSalarySlips,
+  });
+  const slips: SalarySlip[] = Array.isArray(slipsRaw) ? slipsRaw : [];
+
+  // Lifecycle mutations — publish / unpublish toggle the visibility for
+  // the recipient, delete is admin-only on the backend (we hide the
+  // button for everyone else, but the server is the source of truth).
+  const publishMut = useMutation({
+    mutationFn: (slipId: number) => salarySlipsApi.publish(slipId),
+    onSuccess: () => {
+      toast.success('Salary slip published');
+      qc.invalidateQueries({ queryKey: ['salary-slips', targetType, id] });
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Publish failed'),
+  });
+  const unpublishMut = useMutation({
+    mutationFn: (slipId: number) => salarySlipsApi.unpublish(slipId),
+    onSuccess: () => {
+      toast.success('Salary slip unpublished');
+      qc.invalidateQueries({ queryKey: ['salary-slips', targetType, id] });
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Unpublish failed'),
+  });
+  const deleteSlipMut = useMutation({
+    mutationFn: (slipId: number) => salarySlipsApi.remove(slipId),
+    onSuccess: () => {
+      toast.success('Salary slip deleted');
+      qc.invalidateQueries({ queryKey: ['salary-slips', targetType, id] });
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Delete failed'),
+  });
+  // Confirmation modal state — `null` means closed; the object carries
+  // the slip we're about to delete so the dialog body can show its month.
+  const [slipToDelete, setSlipToDelete] = useState<SalarySlip | null>(null);
+
   // Employee list for "Reports To" dropdown — load for admin/HR always
   const { data: allEmployeesRaw } = useQuery({
     queryKey: ['all-employees-for-reports-to'],
@@ -336,6 +441,12 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
     setEditAnnualCTC(emp.annualCTC != null ? String(emp.annualCTC) : '');
     setEditBloodGroup(emp.bloodGroup ?? '');
     setEditMaritalStatus(emp.maritalStatus ?? '');
+    setEditPanNumber((emp as any).panNumber ?? '');
+    setEditUanNumber((emp as any).uanNumber ?? '');
+    setEditPfNumber((emp as any).pfNumber ?? '');
+    setEditBankName((emp as any).bankName ?? '');
+    setEditBankAccountNo((emp as any).bankAccountNo ?? '');
+    setEditBankIfsc((emp as any).bankIfsc ?? '');
     setEditReportsToId(emp.reportsToId ? String(emp.reportsToId) : 'none');
     setEditIsActive(emp.isActive !== false);
     setEditAdminPassword('');
@@ -380,9 +491,22 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
           maritalStatus: editMaritalStatus || undefined,
         });
       }
-      // Admin/HR update (all fields)
+      // Admin/HR update — Personal Information fields only. Payroll
+      // identity has its own form / mutation (savePayrollMut below) so
+      // bank-info changes don't get bundled with name/role edits.
       const reportsToId = editReportsToId && editReportsToId !== 'none' ? Number(editReportsToId) : null;
-      const dto: any = { name: editName, email: editEmail, mobileNumber: editPhone, dateOfBirth: editDob || undefined, consultantType: editType, joiningDate: editJoiningDate || undefined, isHr: editIsHr, isAccounts: editIsAccounts, isAdmin: editIsAdmin, reportsToId, fillDaysOverride: editFillDays ? Number(editFillDays) : null, annualCTC: editAnnualCTC ? Number(editAnnualCTC) : null, bloodGroup: editBloodGroup || undefined, maritalStatus: editMaritalStatus || undefined, isActive: editIsActive };
+      const dto: any = {
+        name: editName, email: editEmail, mobileNumber: editPhone,
+        dateOfBirth: editDob || undefined,
+        consultantType: editType, joiningDate: editJoiningDate || undefined,
+        isHr: editIsHr, isAccounts: editIsAccounts, isAdmin: editIsAdmin,
+        reportsToId,
+        fillDaysOverride: editFillDays ? Number(editFillDays) : null,
+        annualCTC: editAnnualCTC ? Number(editAnnualCTC) : null,
+        bloodGroup: editBloodGroup || undefined,
+        maritalStatus: editMaritalStatus || undefined,
+        isActive: editIsActive,
+      };
       return employeesApi.update(Number(id), dto);
     },
     onSuccess: async () => {
@@ -394,6 +518,49 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
       await qc.invalidateQueries({ queryKey: ['employee-detail', id, targetType] });
       await qc.refetchQueries({ queryKey: ['employee-detail', id, targetType] });
       setEditMode(false);
+    },
+    onError: (e: unknown) => toast.error(apiErrorMessage(e, 'Update failed')),
+  });
+
+  /**
+   * Pre-hydrate the payroll identity inputs and flip the second card
+   * into edit mode. We re-hydrate even though the inputs share state
+   * with startEdit's calls so editing payroll alone (without having
+   * first entered the personal-info edit mode) still works.
+   */
+  const startEditPayroll = () => {
+    if (!emp) return;
+    setEditPanNumber((emp as any).panNumber ?? '');
+    setEditUanNumber((emp as any).uanNumber ?? '');
+    setEditPfNumber((emp as any).pfNumber ?? '');
+    setEditBankName((emp as any).bankName ?? '');
+    setEditBankAccountNo((emp as any).bankAccountNo ?? '');
+    setEditBankIfsc((emp as any).bankIfsc ?? '');
+    setEditPayrollMode(true);
+  };
+
+  /**
+   * Update only the payroll identity fields. Hits the same admin
+   * employees endpoint as the personal-info save — the backend's
+   * `Object.assign(employee, dto)` only touches the keys we send.
+   */
+  const savePayrollMut = useMutation({
+    mutationFn: async () => {
+      const dto: any = {
+        panNumber: editPanNumber || undefined,
+        uanNumber: editUanNumber || undefined,
+        pfNumber: editPfNumber || undefined,
+        bankName: editBankName || undefined,
+        bankAccountNo: editBankAccountNo || undefined,
+        bankIfsc: editBankIfsc || undefined,
+      };
+      return employeesApi.update(Number(id), dto);
+    },
+    onSuccess: async () => {
+      toast.success('Payroll identity updated');
+      await qc.invalidateQueries({ queryKey: ['employee-detail', id, targetType] });
+      await qc.refetchQueries({ queryKey: ['employee-detail', id, targetType] });
+      setEditPayrollMode(false);
     },
     onError: (e: unknown) => toast.error(apiErrorMessage(e, 'Update failed')),
   });
@@ -451,6 +618,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
     ...(canViewDocs ? [{ key: 'documents' as Tab, label: 'Docs', icon: Paperclip }] : []),
     ...((canManageAllDocs || isSelf) ? [{ key: 'goals' as Tab, label: 'Goals', icon: Target }] : []),
     ...((canManageAllDocs || isSelf) ? [{ key: 'pip' as Tab, label: 'PIP', icon: AlertTriangle }] : []),
+    ...(canSeeSalarySlips ? [{ key: 'salary-slips' as Tab, label: 'Salary Slips', icon: Receipt }] : []),
     ...((isSelf || canManageAllDocs) ? [{ key: 'security' as Tab, label: 'Security', icon: Shield }] : []),
   ];
 
@@ -747,6 +915,88 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                     )}
                   </CardContent>
                 </Card>
+                {/* Payroll Identity — separate form. Visible to admin /
+                    HR / accounts on every profile; plain employees only
+                    see this section on their own page (other people's
+                    bank / PAN data stays private). Independent Edit /
+                    Save / Cancel so bank-info changes don't have to be
+                    bundled with personal-info edits. */}
+                {(canManageAllDocs || isSelf) && (
+                  <Card className="shadow-sm">
+                    <CardContent className="px-5 py-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <h2 className="text-base font-semibold">Payroll Identity</h2>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">Auto-fills future salary slips. Editing a slip writes back here too.</p>
+                        </div>
+                        {/* Only admin / HR / accounts can mutate these.
+                            Plain employees (looking at their own page)
+                            see read-only values. */}
+                        {canManageAllDocs && !editPayrollMode && (
+                          <Button size="sm" variant="outline" onClick={startEditPayroll}>Edit</Button>
+                        )}
+                        {editPayrollMode && (
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="ghost" onClick={() => setEditPayrollMode(false)}>Cancel</Button>
+                            <Button size="sm" onClick={() => savePayrollMut.mutate()} disabled={savePayrollMut.isPending}>
+                              {savePayrollMut.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null} Save
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-5 gap-x-8">
+                        <ProfileField
+                          label="PAN Number"
+                          value={(emp as any).panNumber}
+                          editing={editPayrollMode}
+                          editValue={editPanNumber}
+                          onChange={setEditPanNumber}
+                          placeholder="e.g. ABCDE1234F"
+                        />
+                        <ProfileField
+                          label="UAN Number"
+                          value={(emp as any).uanNumber}
+                          editing={editPayrollMode}
+                          editValue={editUanNumber}
+                          onChange={setEditUanNumber}
+                          placeholder="Universal Account Number"
+                        />
+                        <ProfileField
+                          label="PF Number"
+                          value={(emp as any).pfNumber}
+                          editing={editPayrollMode}
+                          editValue={editPfNumber}
+                          onChange={setEditPfNumber}
+                          placeholder="Member PF account"
+                        />
+                        <ProfileField
+                          label="Bank Name"
+                          value={(emp as any).bankName}
+                          editing={editPayrollMode}
+                          editValue={editBankName}
+                          onChange={setEditBankName}
+                          placeholder="e.g. HDFC Bank"
+                        />
+                        <ProfileField
+                          label="Bank Account No"
+                          value={(emp as any).bankAccountNo}
+                          editing={editPayrollMode}
+                          editValue={editBankAccountNo}
+                          onChange={setEditBankAccountNo}
+                          placeholder="e.g. 50100776510935"
+                        />
+                        <ProfileField
+                          label="IFSC Code"
+                          value={(emp as any).bankIfsc}
+                          editing={editPayrollMode}
+                          editValue={editBankIfsc}
+                          onChange={setEditBankIfsc}
+                          placeholder="e.g. HDFC0004017"
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
 
               {/* Reporting Team */}
@@ -1417,6 +1667,210 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                   </Button>
                 </div>
               </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* ── Salary Slips tab ───── */}
+          {activeTab === 'salary-slips' && canSeeSalarySlips && (
+            <Card className="shadow-sm">
+              <CardContent className="px-5 py-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-base font-semibold">Salary Slips</h2>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Monthly payslips. Drafts are visible only to HR / Admin / Accounts; published slips appear to the employee too.
+                    </p>
+                  </div>
+                  {canManageSalarySlips && (
+                    <Link href={`/employees/${id}/salary-slips/new?targetType=${targetType}`}>
+                      <Button size="sm">
+                        <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Slip
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+
+                {slipsLoading ? (
+                  <div className="space-y-2">
+                    {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}
+                  </div>
+                ) : slips.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    {isSelf && !canManageSalarySlips
+                      ? 'Salary slip not generated for this month yet.'
+                      : 'No slips yet. Tap Add Slip to create one.'}
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="border-b text-left text-xs text-muted-foreground">
+                        <tr>
+                          <th className="py-2 font-medium">Month</th>
+                          {/* Net Pay is hidden on the employee's own
+                              profile view — they download the slip PDF
+                              for the figure; the list just tracks months
+                              + status. Managers still see it on the
+                              /employees/[id] view. */}
+                          {!isSelfProfile && <th className="py-2 font-medium text-right">Net Pay</th>}
+                          <th className="py-2 font-medium">Status</th>
+                          <th className="py-2 font-medium">Created by</th>
+                          <th className="py-2 font-medium text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {slips.map((slip) => {
+                          const monthLabel = (() => {
+                            const [y, m] = slip.slipMonth.split('-');
+                            const d = new Date(Number(y), Number(m) - 1, 1);
+                            return Number.isNaN(d.getTime()) ? slip.slipMonth : format(d, 'MMM yyyy');
+                          })();
+                          return (
+                            <tr key={slip.id} className="border-b last:border-0 hover:bg-accent/30 transition-colors">
+                              <td className="py-2.5 font-medium">{monthLabel}</td>
+                              {!isSelfProfile && (
+                                <td className="py-2.5 text-right font-mono text-xs">
+                                  ₹{Number(slip.netPay).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                              )}
+                              <td className="py-2.5">
+                                {slip.isPublished ? (
+                                  <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/15">
+                                    <CheckCircle2 className="mr-1 h-3 w-3" /> Published
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-400/50">
+                                    Draft
+                                  </Badge>
+                                )}
+                              </td>
+                              <td className="py-2.5 text-xs text-muted-foreground">{slip.createdByName}</td>
+                              <td className="py-2.5">
+                                <div className="flex items-center justify-end gap-1">
+                                  {/* Download is available the moment a slip is published.
+                                      Managers (admin / HR / accounts) hit the admin route
+                                      which also accepts drafts, but we only surface the
+                                      button for published rows to match the spec. */}
+                                  {slip.isPublished && (
+                                    <Button
+                                      variant="ghost" size="icon" className="h-8 w-8"
+                                      title="Download PDF"
+                                      onClick={async () => {
+                                        try {
+                                          await downloadSalarySlipPdf({
+                                            slipId: slip.id,
+                                            asManager: canManageSalarySlips,
+                                          });
+                                        } catch (e: any) {
+                                          toast.error(e?.response?.data?.message ?? 'Download failed');
+                                        }
+                                      }}
+                                    >
+                                      <Download className="h-4 w-4" />
+                                    </Button>
+                                  )}
+                                  {canManageSalarySlips && (
+                                    <>
+                                      {/* Edit only available on drafts — published slips must be unpublished first. */}
+                                      {!slip.isPublished && (
+                                        <Link href={`/employees/${id}/salary-slips/${slip.id}/edit?targetType=${targetType}`}>
+                                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit">
+                                            <Pencil className="h-4 w-4" />
+                                          </Button>
+                                        </Link>
+                                      )}
+                                      {slip.isPublished ? (
+                                        <Button
+                                          variant="ghost" size="icon" className="h-8 w-8 text-amber-600"
+                                          title="Unpublish"
+                                          disabled={unpublishMut.isPending}
+                                          onClick={() => unpublishMut.mutate(slip.id)}
+                                        >
+                                          <Undo2 className="h-4 w-4" />
+                                        </Button>
+                                      ) : (
+                                        <Button
+                                          variant="ghost" size="icon" className="h-8 w-8 text-emerald-600"
+                                          title="Publish"
+                                          disabled={publishMut.isPending}
+                                          onClick={() => publishMut.mutate(slip.id)}
+                                        >
+                                          <Send className="h-4 w-4" />
+                                        </Button>
+                                      )}
+                                      {/* Delete is admin-only on the backend, but we hide the
+                                          icon for HR/Accounts too so the UI matches. */}
+                                      {isAdmin && (
+                                        <Button
+                                          variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600"
+                                          title="Delete"
+                                          disabled={deleteSlipMut.isPending}
+                                          onClick={() => setSlipToDelete(slip)}
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ── Delete salary-slip confirmation ─────────────────────────
+              Same pattern as the documents delete dialog — `slipToDelete`
+              drives `open` and carries the row so the body can show the
+              month. onSettled clears the state so the modal closes whether
+              the mutation succeeded or failed. */}
+          <Dialog open={slipToDelete !== null} onOpenChange={(open) => { if (!open) setSlipToDelete(null); }}>
+            <DialogContent className="sm:max-w-[420px]">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Trash2 className="h-5 w-5 text-red-500" />
+                  Delete salary slip?
+                </DialogTitle>
+                <DialogDescription>
+                  {slipToDelete ? (
+                    <>
+                      This will permanently remove the slip for{' '}
+                      <span className="font-medium text-foreground">
+                        {(() => {
+                          const [y, m] = slipToDelete.slipMonth.split('-');
+                          const d = new Date(Number(y), Number(m) - 1, 1);
+                          return Number.isNaN(d.getTime()) ? slipToDelete.slipMonth : format(d, 'MMMM yyyy');
+                        })()}
+                      </span>
+                      . This action can&apos;t be undone.
+                    </>
+                  ) : null}
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setSlipToDelete(null)} disabled={deleteSlipMut.isPending}>Cancel</Button>
+                <Button
+                  variant="destructive"
+                  disabled={deleteSlipMut.isPending || !slipToDelete}
+                  onClick={() => {
+                    if (!slipToDelete) return;
+                    deleteSlipMut.mutate(slipToDelete.id, {
+                      onSettled: () => setSlipToDelete(null),
+                    });
+                  }}
+                >
+                  {deleteSlipMut.isPending ? (
+                    <><Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Deleting…</>
+                  ) : (
+                    <><Trash2 className="mr-1.5 h-3.5 w-3.5" /> Delete</>
+                  )}
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
 

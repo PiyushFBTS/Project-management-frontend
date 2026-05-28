@@ -8,7 +8,7 @@ import {
   LayoutDashboard, FolderKanban, Tags, Users, Receipt,
   ClipboardList, BarChart3, ChevronDown, X,
   ChevronLeft, ChevronRight, CalendarDays, Building2, LogOut, Settings, ListTodo, Ticket, Mail,
-  Megaphone,
+  Megaphone, Wallet,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -32,6 +32,13 @@ type NavItem = {
   borderColor: string;
   dotColor: string;
   adminOnly?: boolean;
+  /**
+   * Visible only to users with managerial access (admin / HR / accounts).
+   * Strictly broader than `adminOnly` — HR and Accounts can also see
+   * these. Used for hubs like Salary Slips that backend gates with
+   * @SalarySlipManagerOnly().
+   */
+  managerOnly?: boolean;
   children?: NavChild[];
 };
 
@@ -97,6 +104,16 @@ const navItems: NavItem[] = [
     iconColor: 'text-lime-400', iconBg: 'bg-lime-500/20',
     activeBg: 'bg-lime-500/20', hoverBg: 'hover:bg-lime-500/10',
     borderColor: 'border-l-lime-400', dotColor: 'bg-lime-400',
+  },
+  {
+    label: 'Salary Slips', href: '/salary-slips', icon: Wallet,
+    iconColor: 'text-pink-400', iconBg: 'bg-pink-500/20',
+    activeBg: 'bg-pink-500/20', hoverBg: 'hover:bg-pink-500/10',
+    borderColor: 'border-l-pink-400', dotColor: 'bg-pink-400',
+    // Admin / HR / Accounts only — matches the backend's
+    // @SalarySlipManagerOnly() guard. Plain employees view their own
+    // slips from the profile tab; they don't need the admin hub.
+    managerOnly: true,
   },
   {
     label: 'Reports', icon: BarChart3,
@@ -165,7 +182,7 @@ const platformNavItems: NavItem[] = [
   },
 ];
 
-function NavContent({ onNavigate, collapsed, isEmployee, isHr, isClient }: { onNavigate?: () => void; collapsed?: boolean; isEmployee?: boolean; isHr?: boolean; isClient?: boolean }) {
+function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isClient }: { onNavigate?: () => void; collapsed?: boolean; isEmployee?: boolean; isHr?: boolean; isAccounts?: boolean; isClient?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
   const { selectedCompany, clearCompany, isSuperAdmin } = useCompany();
@@ -178,6 +195,9 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isClient }: { onN
     setOpenSections((prev) => ({ ...prev, [label]: !prev[label] }));
 
   const canSeeHrItems = !isEmployee || isHr;
+  // Manager-only items (admin / HR / accounts) — broader than HR-only.
+  // Used by hubs the backend gates with @SalarySlipManagerOnly().
+  const canSeeManagerItems = !isEmployee || isHr || isAccounts;
 
   // Super admin without company selected → show platform nav
   const baseItems = isSuperAdmin && !selectedCompany ? platformNavItems : navItems;
@@ -186,7 +206,16 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isClient }: { onN
 
   const visibleItems = (() => {
     if (isClient) return baseItems.filter((item) => clientAllowedLabels.includes(item.label));
-    if (isEmployee) return baseItems.filter((item) => !item.adminOnly);
+    if (isEmployee) {
+      // Plain employees (no flags) get the standard slimmed nav.
+      // HR/Accounts still pass through this branch but their flags
+      // unlock the `managerOnly` items below.
+      return baseItems.filter((item) => {
+        if (item.adminOnly) return false;
+        if (item.managerOnly && !canSeeManagerItems) return false;
+        return true;
+      });
+    }
     return baseItems;
   })()
     .map((item) => {
@@ -362,6 +391,7 @@ export function Sidebar() {
   // (see auth-provider). `isHr` still keys off the underlying record.
   const isEmployee = user?._type === 'employee';
   const isHr = isEmployee && !!(user as any)?.isHr;
+  const isAccounts = isEmployee && !!(user as any)?.isAccounts;
   const isClient = user?._type === 'client';
 
   return (
@@ -404,7 +434,7 @@ export function Sidebar() {
         )}
       </div>
 
-      <NavContent collapsed={isCollapsed} isEmployee={isEmployee} isHr={isHr} isClient={isClient} />
+      <NavContent collapsed={isCollapsed} isEmployee={isEmployee} isHr={isHr} isAccounts={isAccounts} isClient={isClient} />
 
       <Footer collapsed={isCollapsed} isEmployee={isEmployee} />
     </aside>
@@ -419,6 +449,7 @@ export function MobileSidebar() {
   // (see auth-provider). `isHr` still keys off the underlying record.
   const isEmployee = user?._type === 'employee';
   const isHr = isEmployee && !!(user as any)?.isHr;
+  const isAccounts = isEmployee && !!(user as any)?.isAccounts;
   const isClient = user?._type === 'client';
 
   return (
@@ -443,7 +474,7 @@ export function MobileSidebar() {
               <X className="h-4 w-4" />
             </button>
           </div>
-          <NavContent onNavigate={close} isEmployee={isEmployee} isHr={isHr} isClient={isClient} />
+          <NavContent onNavigate={close} isEmployee={isEmployee} isHr={isHr} isAccounts={isAccounts} isClient={isClient} />
           <Footer isEmployee={isEmployee} />
         </div>
       </SheetContent>
