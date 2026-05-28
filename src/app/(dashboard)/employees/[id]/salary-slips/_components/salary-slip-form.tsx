@@ -81,13 +81,12 @@ export function SalarySlipForm(props: {
   // carry-over template (latest slip for this employee). slipMonth is
   // intentionally NOT carried over — HR picks the new period.
   const seed = slip ?? carryOver;
-  const [slipMonth, setSlipMonth] = useState<string>(
-    slip?.slipMonth ?? defaultMonth(),
-  );
+  const initialMonth = slip?.slipMonth ?? defaultMonth();
+  const [slipMonth, setSlipMonth] = useState<string>(initialMonth);
   // Header
   const [designation, setDesignation] = useState(seed?.designation ?? '');
   const [department, setDepartment] = useState(seed?.department ?? '');
-  const [dateOfJoining, setDateOfJoining] = useState(seed?.dateOfJoining ?? '');
+  const [dateOfJoining, setDateOfJoining] = useState(toDateInputValue(seed?.dateOfJoining));
   const [bankName, setBankName] = useState(seed?.bankName ?? '');
   const [bankAccountNo, setBankAccountNo] = useState(seed?.bankAccountNo ?? '');
   const [paymentMode, setPaymentMode] = useState(seed?.paymentMode ?? '');
@@ -97,11 +96,17 @@ export function SalarySlipForm(props: {
   const [pfNumber, setPfNumber] = useState(seed?.pfNumber ?? '');
   const [monthlyCtc, setMonthlyCtc] = useState<string>(numStr(seed?.monthlyCtc));
   // Attendance
-  // On carry-over: copy the working-days baseline (likely the same
-  // calendar shape) but reset LOP to 0 — most months don't have any,
-  // and reusing last month's LOP silently is a silent foot-gun. HR can
-  // re-enter it explicitly when needed.
-  const [totalWorkingDays, setTotalWorkingDays] = useState<string>(numStr(seed?.totalWorkingDays));
+  // Total Working Days defaults to the calendar length of the slip
+  // month (Feb→28/29, Apr→30, May→31, …) and re-derives whenever HR
+  // changes the month — unless they've manually overridden it. Edit
+  // mode shows the slip's stored value. LOP resets to 0 on a new slip
+  // (most months have none; silently reusing last month's is a
+  // foot-gun). `twdManual` flips true once HR types a custom value so
+  // the month-driven auto-update stops clobbering their figure.
+  const [totalWorkingDays, setTotalWorkingDays] = useState<string>(
+    isEditMode ? numStr(seed?.totalWorkingDays) : String(daysInMonth(initialMonth) || ''),
+  );
+  const [twdManual, setTwdManual] = useState(false);
   const [lopDays, setLopDays] = useState<string>(slip ? numStr(slip.lopDays) : '0');
   const [paidDaysManual, setPaidDaysManual] = useState<string>(
     slip ? numStr(slip.paidDays) : '',
@@ -136,8 +141,27 @@ export function SalarySlipForm(props: {
     if (!designation && emp.consultantType) {
       setDesignation(humaniseConsultantType(emp.consultantType));
     }
-    if (!department) setDepartment('—'); // company-side, not stored on user; leave blank if HR wants
-    if (!dateOfJoining && emp.joiningDate) setDateOfJoining(emp.joiningDate);
+    // Department is now an employee-profile field — source it from the
+    // profile on a new slip (override stale carry-over), backfill-only
+    // in edit mode so a saved snapshot isn't clobbered.
+    if (emp.department && (!isEditMode || !department)) {
+      setDepartment(emp.department);
+    }
+    // Date of Joining is employee identity (not slip-specific), so on a
+    // NEW slip we always source it from the profile — overriding any
+    // stale / empty value carried over from the previous slip. In edit
+    // mode we only backfill when the saved slip left it blank, so an
+    // intentional historical snapshot isn't clobbered.
+    //
+    // Falls back to the account-created date when the profile has no
+    // explicit joining date — this matches what the profile tab's
+    // "Joined" field displays, so the slip shows the same date the user
+    // sees on the profile. Normalised to YYYY-MM-DD for the date input.
+    const profileDoj =
+      toDateInputValue(emp.joiningDate) || toDateInputValue(emp.createdAt);
+    if (profileDoj && (!isEditMode || !dateOfJoining)) {
+      setDateOfJoining(profileDoj);
+    }
 
     // ── Payroll identity ──
     // Pulled from the employee profile now that we store these on the
@@ -162,13 +186,9 @@ export function SalarySlipForm(props: {
       setMonthlyCtc(String(derivedCtc));
     }
 
-    // Total Working Days defaults to the calendar length of the slip's
-    // month (e.g. 31 for May, 28/29 for Feb). HR can override for
-    // companies that use a fixed 26-day model.
-    if (numIsEmpty(totalWorkingDays) && slipMonth && !isEditMode) {
-      const days = daysInMonth(slipMonth);
-      if (days) setTotalWorkingDays(String(days));
-    }
+    // (Total Working Days is initialised from the slip month directly
+    // and kept in sync by `handleMonthChange` below, so it no longer
+    // needs seeding here.)
 
     // Salary-structure breakdown — fill when the basic-salary field is
     // empty or zero AND we know monthly CTC. Treating `'0'` as empty is
@@ -225,6 +245,18 @@ export function SalarySlipForm(props: {
     epfEmployer, pfEmployee, medicalInsurance, tds, advance,
     totalWorkingDays, lopDays, paidDaysManual,
   ]);
+
+  // Changing the slip month re-derives Total Working Days to the
+  // calendar length of the new month (28/29/30/31), unless HR has
+  // manually overridden the figure. Paid Days then auto-recomputes via
+  // the totals memo (working − LOP).
+  const handleMonthChange = (newMonth: string) => {
+    setSlipMonth(newMonth);
+    if (!twdManual) {
+      const days = daysInMonth(newMonth);
+      if (days) setTotalWorkingDays(String(days));
+    }
+  };
 
   // ── Save mutations ────────────────────────────────────────────────────────
   const buildDto = (): CreateSalarySlipDto | UpdateSalarySlipDto => {
@@ -398,7 +430,7 @@ export function SalarySlipForm(props: {
             <Input
               type="month"
               value={slipMonth}
-              onChange={(e) => setSlipMonth(e.target.value)}
+              onChange={(e) => handleMonthChange(e.target.value)}
               disabled={isEditMode || isPublished}
             />
             {isEditMode && (
@@ -436,7 +468,7 @@ export function SalarySlipForm(props: {
 
       {/* Attendance */}
       <Section title="Attendance" subtitle="Paid Days auto-computes as Total Working Days − LOP unless you override.">
-        <Field label="Total Working Days"><Input type="number" inputMode="decimal" value={totalWorkingDays} onChange={(e) => setTotalWorkingDays(e.target.value)} disabled={isPublished} /></Field>
+        <Field label="Total Working Days" hint="Auto-set from the slip month; edit to override."><Input type="number" inputMode="decimal" value={totalWorkingDays} onChange={(e) => { setTwdManual(true); setTotalWorkingDays(e.target.value); }} disabled={isPublished} /></Field>
         <Field label="LOP Days"><Input type="number" inputMode="decimal" value={lopDays} onChange={(e) => setLopDays(e.target.value)} disabled={isPublished} /></Field>
         <Field label="Paid Days" hint="Leave blank to auto-compute.">
           <Input
@@ -572,6 +604,28 @@ function defaultMonth(): string {
   const d = new Date();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   return `${d.getFullYear()}-${m}`;
+}
+
+/**
+ * Normalise any date-ish value to the `YYYY-MM-DD` an <input type="date">
+ * needs. Accepts a clean date string, a full ISO datetime
+ * (`2025-04-01T00:00:00.000Z`), or a Date — returns '' for anything
+ * unparseable so the input stays empty rather than showing garbage.
+ */
+function toDateInputValue(v: string | Date | null | undefined): string {
+  if (!v) return '';
+  const s = String(v);
+  // Already a clean date string — use as-is.
+  const m = /^(\d{4}-\d{2}-\d{2})$/.exec(s);
+  if (m) return m[1];
+  // Full ISO datetime / Date → take local date parts so it matches the
+  // profile tab's `format(new Date(...))` display (avoids off-by-one
+  // from a UTC slice).
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return '';
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
 /** `'2026-05'` → 31. Returns 0 for malformed input so callers can skip. */

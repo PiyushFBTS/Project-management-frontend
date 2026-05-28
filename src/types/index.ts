@@ -181,6 +181,7 @@ export interface Employee {
   email: string;
   mobileNumber?: string;
   consultantType: ConsultantType;
+  department?: string | null;
   assignedProjectId?: number;
   assignedProject?: Project;
   reportsToId?: number | null;
@@ -234,6 +235,7 @@ export interface CreateEmployeeDto {
   mobileNumber?: string;
   password: string;
   consultantType: ConsultantType;
+  department?: string;
   assignedProjectId?: number;
   reportsToId?: number | null;
   isHr?: boolean;
@@ -258,6 +260,7 @@ export interface UpdateEmployeeDto {
   email?: string;
   mobileNumber?: string;
   consultantType?: ConsultantType;
+  department?: string;
   assignedProjectId?: number | null;
   reportsToId?: number | null;
   isHr?: boolean;

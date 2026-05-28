@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -94,6 +94,14 @@ function SalarySlipsHubContent() {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [bulkOpen, setBulkOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  // Multi-select for bulk publish / withdraw / delete.
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState<null | 'publish' | 'unpublish' | 'delete'>(null);
+  // Delete confirmation modal target — either one slip (row trash icon)
+  // or the whole current selection (bulk bar). `null` = modal closed.
+  const [deleteTarget, setDeleteTarget] = useState<
+    null | { kind: 'single'; slip: SalarySlip } | { kind: 'bulk'; count: number }
+  >(null);
 
   // ── List slips for the selected filters ─────────────────────────────────
   const slipsQ = useQuery({
@@ -156,6 +164,112 @@ function SalarySlipsHubContent() {
     }
   };
 
+  // ── Selection + bulk actions ─────────────────────────────────────────────
+  const slips = slipsQ.data ?? [];
+  // Drop any selected ids that are no longer in the current result set
+  // (e.g. after a filter change) so bulk actions never touch hidden rows.
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const visible = new Set(slips.map((s) => s.id));
+      const next = new Set([...prev].filter((id) => visible.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [slips]);
+
+  const allSelected = slips.length > 0 && slips.every((s) => selectedIds.has(s.id));
+  const someSelected = selectedIds.size > 0;
+
+  const toggleOne = (id: number) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleAll = () =>
+    setSelectedIds((prev) =>
+      prev.size === slips.length ? new Set() : new Set(slips.map((s) => s.id)),
+    );
+
+  /**
+   * Run a publish / unpublish / delete across the selected slips.
+   *
+   * Publish and unpublish are status-aware: we only call the endpoint
+   * for slips that actually need the change (publish → drafts only,
+   * withdraw → published only). Slips already in the target state are
+   * counted as "already …" and reported, rather than firing a no-op
+   * call that would otherwise read as a misleading success/failure.
+   * Delete applies to the whole selection (admin-only; 403s for others).
+   */
+  const runBulk = async (action: 'publish' | 'unpublish' | 'delete') => {
+    const selected = slips.filter((s) => selectedIds.has(s.id));
+    if (selected.length === 0) return;
+
+    // Partition into rows that need the action vs. ones already there.
+    let targets = selected;
+    let alreadyCount = 0;
+    if (action === 'publish') {
+      targets = selected.filter((s) => !s.isPublished);
+      alreadyCount = selected.length - targets.length;
+    } else if (action === 'unpublish') {
+      targets = selected.filter((s) => s.isPublished);
+      alreadyCount = selected.length - targets.length;
+    }
+
+    // Nothing to do — everything is already in the desired state.
+    if (targets.length === 0) {
+      toast.info(
+        action === 'publish'
+          ? `All ${selected.length} selected slip${selected.length > 1 ? 's are' : ' is'} already published.`
+          : `All ${selected.length} selected slip${selected.length > 1 ? 's are' : ' is'} already in draft.`,
+      );
+      return;
+    }
+
+    const verb =
+      action === 'publish' ? salarySlipsApi.publish
+      : action === 'unpublish' ? salarySlipsApi.unpublish
+      : salarySlipsApi.remove;
+
+    setBulkBusy(action);
+    try {
+      const results = await Promise.allSettled(targets.map((s) => verb(s.id)));
+      const ok = results.filter((r) => r.status === 'fulfilled').length;
+      const failed = results.length - ok;
+      const forbidden = results.some(
+        (r) => r.status === 'rejected' && (r.reason as any)?.response?.status === 403,
+      );
+      const label =
+        action === 'publish' ? 'Published'
+        : action === 'unpublish' ? 'Withdrawn to draft'
+        : 'Deleted';
+
+      if (ok > 0) {
+        const extras = [
+          failed > 0 ? `${failed} failed` : null,
+          alreadyCount > 0
+            ? `${alreadyCount} already ${action === 'publish' ? 'published' : 'draft'}`
+            : null,
+        ].filter(Boolean);
+        toast.success(
+          `${label} ${ok} slip${ok > 1 ? 's' : ''}` +
+            (extras.length ? ` · ${extras.join(' · ')}` : '') +
+            (action === 'publish' ? ' — employees notified.' : '.'),
+        );
+      } else {
+        toast.error(
+          forbidden
+            ? 'Only admins can delete slips.'
+            : `Could not ${action === 'unpublish' ? 'withdraw' : action} the selected slips.`,
+        );
+      }
+      setSelectedIds(new Set());
+      qc.invalidateQueries({ queryKey: ['salary-slips-hub'] });
+    } finally {
+      setBulkBusy(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -203,6 +317,48 @@ function SalarySlipsHubContent() {
         </CardContent>
       </Card>
 
+      {/* Bulk action bar — appears once one or more slips are ticked. */}
+      {someSelected && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-blue-500/30 bg-blue-500/5 px-3 py-2">
+          <span className="text-sm font-medium">
+            {selectedIds.size} selected
+          </span>
+          <div className="ml-auto flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!!bulkBusy}
+              onClick={() => runBulk('publish')}
+            >
+              {bulkBusy === 'publish' ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
+              Publish
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!!bulkBusy}
+              onClick={() => runBulk('unpublish')}
+            >
+              {bulkBusy === 'unpublish' ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Eye className="mr-1.5 h-4 w-4" />}
+              Withdraw to Draft
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-rose-600 hover:text-rose-700"
+              disabled={!!bulkBusy}
+              onClick={() => setDeleteTarget({ kind: 'bulk', count: selectedIds.size })}
+            >
+              {bulkBusy === 'delete' ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Trash2 className="mr-1.5 h-4 w-4" />}
+              Delete
+            </Button>
+            <Button size="sm" variant="ghost" disabled={!!bulkBusy} onClick={() => setSelectedIds(new Set())}>
+              <X className="mr-1.5 h-4 w-4" /> Clear
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* List */}
       <Card>
         <CardContent className="p-0">
@@ -227,6 +383,19 @@ function SalarySlipsHubContent() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={allSelected}
+                      // Indeterminate state when some-but-not-all are ticked.
+                      ref={(el) => {
+                        if (el) el.indeterminate = someSelected && !allSelected;
+                      }}
+                      onChange={toggleAll}
+                      aria-label="Select all slips"
+                    />
+                  </TableHead>
                   <TableHead>Month</TableHead>
                   <TableHead>Employee</TableHead>
                   <TableHead>Department</TableHead>
@@ -235,8 +404,17 @@ function SalarySlipsHubContent() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {(slipsQ.data ?? []).map((slip) => (
-                  <TableRow key={slip.id}>
+                {slips.map((slip) => (
+                  <TableRow key={slip.id} data-state={selectedIds.has(slip.id) ? 'selected' : undefined}>
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4"
+                        checked={selectedIds.has(slip.id)}
+                        onChange={() => toggleOne(slip.id)}
+                        aria-label={`Select slip ${slip.slipMonth}`}
+                      />
+                    </TableCell>
                     <TableCell className="font-mono text-xs">{slip.slipMonth}</TableCell>
                     <TableCell>
                       <div className="font-medium">{slip.employee?.name ?? `#${slip.employeeId}`}</div>
@@ -294,11 +472,7 @@ function SalarySlipsHubContent() {
                           size="sm"
                           title="Delete (admin only)"
                           disabled={deleteMut.isPending}
-                          onClick={() => {
-                            if (confirm(`Delete slip for ${slip.employee?.name ?? slip.employeeId} (${slip.slipMonth})? This can't be undone.`)) {
-                              deleteMut.mutate(slip.id);
-                            }
-                          }}
+                          onClick={() => setDeleteTarget({ kind: 'single', slip })}
                         >
                           <Trash2 className="h-4 w-4 text-rose-500" />
                         </Button>
@@ -321,6 +495,67 @@ function SalarySlipsHubContent() {
           qc.invalidateQueries({ queryKey: ['salary-slips-hub'] });
         }}
       />
+
+      {/* Delete confirmation modal — replaces the native confirm() for
+          both the per-row trash icon and the bulk Delete action. */}
+      <Dialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) setDeleteTarget(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-rose-500/15">
+                <Trash2 className="h-4 w-4 text-rose-600" />
+              </span>
+              Delete salary slip{deleteTarget?.kind === 'bulk' && deleteTarget.count > 1 ? 's' : ''}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {deleteTarget?.kind === 'single' ? (
+              <>
+                Delete the slip for{' '}
+                <span className="font-medium text-foreground">
+                  {deleteTarget.slip.employee?.name ?? `#${deleteTarget.slip.employeeId}`}
+                </span>{' '}
+                ({deleteTarget.slip.slipMonth})? This can&apos;t be undone.
+              </>
+            ) : deleteTarget?.kind === 'bulk' ? (
+              <>
+                Delete <span className="font-medium text-foreground">{deleteTarget.count}</span>{' '}
+                selected salary slip{deleteTarget.count > 1 ? 's' : ''}? This can&apos;t be undone.
+              </>
+            ) : null}
+          </p>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              disabled={deleteMut.isPending || bulkBusy === 'delete'}
+              onClick={() => setDeleteTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteMut.isPending || bulkBusy === 'delete'}
+              onClick={async () => {
+                if (!deleteTarget) return;
+                if (deleteTarget.kind === 'single') {
+                  deleteMut.mutate(deleteTarget.slip.id);
+                  setDeleteTarget(null);
+                } else {
+                  await runBulk('delete');
+                  setDeleteTarget(null);
+                }
+              }}
+            >
+              {(deleteMut.isPending || bulkBusy === 'delete') ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="mr-1.5 h-4 w-4" />
+              )}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

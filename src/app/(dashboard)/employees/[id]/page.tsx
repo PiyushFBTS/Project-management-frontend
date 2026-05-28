@@ -57,7 +57,7 @@ const PRAISE_TYPES = [
 const TYPE_LABELS: Record<string, string> = {
   project_manager: 'Project Manager', functional: 'Functional Consultant',
   technical: 'Technical Consultant', full_stack_developer: 'Full Stack Developer',
-  account_consultant: 'Account Consultant',
+  account_manager: 'Account Manager',
   human_resource_manager: 'Human Resource Manager',
   management: 'Management', core_team: 'Core Team',
 };
@@ -66,6 +66,24 @@ const CATEGORY_LABELS: Record<string, string> = {
   aadhaar: 'Aadhaar Card', pan: 'PAN Card', resume: 'Resume',
   joining: 'Joining Doc', exit: 'Exit Doc', other: 'Other',
 };
+
+/**
+ * Normalise any date-ish value to the `YYYY-MM-DD` an <input type="date">
+ * needs. Accepts a clean date string, a full ISO datetime, or a Date;
+ * returns '' for anything unparseable. Date parts are taken in local
+ * time to match the read-only view's `format(new Date(...))` display.
+ */
+function toDateInputValue(v: string | Date | null | undefined): string {
+  if (!v) return '';
+  const s = String(v);
+  const m = /^(\d{4}-\d{2}-\d{2})$/.exec(s);
+  if (m) return m[1];
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return '';
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
 
 /**
  * Read/edit pair for a plain-string profile field. Saves duplicating the
@@ -188,6 +206,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
   const [editPhone, setEditPhone] = useState('');
   const [editDob, setEditDob] = useState('');
   const [editType, setEditType] = useState('');
+  const [editDepartment, setEditDepartment] = useState('');
   const [editJoiningDate, setEditJoiningDate] = useState('');
   const [editIsHr, setEditIsHr] = useState(false);
   const [editIsAccounts, setEditIsAccounts] = useState(false);
@@ -433,7 +452,15 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
     setEditPhone(emp.mobileNumber ?? '');
     setEditDob(emp.dateOfBirth ?? '');
     setEditType(emp.consultantType ?? '');
-    setEditJoiningDate(emp.joiningDate ?? '');
+    setEditDepartment((emp as any).department ?? '');
+    // Pre-fill the Joined date input. Prefer the real joining date;
+    // fall back to the account-created date so the edit input matches
+    // what the read-only view shows (the view uses the same fallback).
+    // Normalised to YYYY-MM-DD so the <input type="date"> renders it
+    // regardless of whether the API returns a clean date or full ISO.
+    setEditJoiningDate(
+      toDateInputValue(emp.joiningDate) || toDateInputValue(emp.createdAt),
+    );
     setEditIsHr(!!emp.isHr);
     setEditIsAccounts(!!(emp as any).isAccounts);
     setEditIsAdmin(!!(emp as any).isAdmin);
@@ -498,7 +525,8 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
       const dto: any = {
         name: editName, email: editEmail, mobileNumber: editPhone,
         dateOfBirth: editDob || undefined,
-        consultantType: editType, joiningDate: editJoiningDate || undefined,
+        consultantType: editType, department: editDepartment || undefined,
+        joiningDate: editJoiningDate || undefined,
         isHr: editIsHr, isAccounts: editIsAccounts, isAdmin: editIsAdmin,
         reportsToId,
         fillDaysOverride: editFillDays ? Number(editFillDays) : null,
@@ -725,6 +753,12 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                             </SelectContent>
                           </Select>
                         ) : <p className="text-sm font-medium uppercase">{targetType === 'admin' ? 'Admin' : TYPE_LABELS[emp.consultantType] ?? emp.consultantType}</p>}
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Department</p>
+                        {editMode && canManageAllDocs ? (
+                          <Input value={editDepartment} onChange={(e) => setEditDepartment(e.target.value)} className="h-8 text-sm" placeholder="e.g. IT" />
+                        ) : <p className="text-sm font-medium">{(emp as any).department || '—'}</p>}
                       </div>
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Joined</p>
@@ -1706,12 +1740,6 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                       <thead className="border-b text-left text-xs text-muted-foreground">
                         <tr>
                           <th className="py-2 font-medium">Month</th>
-                          {/* Net Pay is hidden on the employee's own
-                              profile view — they download the slip PDF
-                              for the figure; the list just tracks months
-                              + status. Managers still see it on the
-                              /employees/[id] view. */}
-                          {!isSelfProfile && <th className="py-2 font-medium text-right">Net Pay</th>}
                           <th className="py-2 font-medium">Status</th>
                           <th className="py-2 font-medium">Created by</th>
                           <th className="py-2 font-medium text-right">Actions</th>
@@ -1727,11 +1755,6 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                           return (
                             <tr key={slip.id} className="border-b last:border-0 hover:bg-accent/30 transition-colors">
                               <td className="py-2.5 font-medium">{monthLabel}</td>
-                              {!isSelfProfile && (
-                                <td className="py-2.5 text-right font-mono text-xs">
-                                  ₹{Number(slip.netPay).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                </td>
-                              )}
                               <td className="py-2.5">
                                 {slip.isPublished ? (
                                   <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/15">
