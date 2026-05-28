@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { projectsApi } from '@/lib/api/projects';
+import { employeesApi } from '@/lib/api/employees';
 import { projectPlanningApi, employeePlanningApi, clientPlanningApi } from '@/lib/api/project-planning';
 import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
@@ -240,6 +241,55 @@ export default function ProjectDetailPage() {
       toast.success('Client removed');
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to remove'),
+  });
+
+  // ── Project Members (assigned employees) — admin / HR manage ──
+  const canManageMembers = isAdmin || isHr;
+  const [membersDialogOpen, setMembersDialogOpen] = useState(false);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [selectedMemberIds, setSelectedMemberIds] = useState<Set<number>>(new Set());
+
+  const { data: members, isLoading: membersLoading } = useQuery({
+    queryKey: ['project-members', id, user?._type],
+    queryFn: () => projectsApi.getMembers(Number(id)).then((r: any) => r.data?.data ?? r.data ?? []),
+    enabled: !!project && canManageMembers,
+  });
+
+  // Employee pool for the add-members picker (admin vs HR endpoint).
+  const { data: employeePool } = useQuery({
+    queryKey: ['members-employee-pool', user?._type, memberSearch],
+    queryFn: async () => {
+      const r = isAdmin
+        ? await employeesApi.getAll({ search: memberSearch, isActive: true, limit: 100 })
+        : await employeesApi.employeeGetAll({ search: memberSearch, isActive: true, limit: 100 });
+      const list = r.data?.data ?? [];
+      return Array.isArray(list) ? list : [];
+    },
+    enabled: membersDialogOpen && canManageMembers,
+  });
+
+  const addMembersMut = useMutation({
+    mutationFn: () => projectsApi.addMembers(Number(id), Array.from(selectedMemberIds)),
+    onSuccess: (r: any) => {
+      const added = r.data?.data?.added?.length ?? 0;
+      const skipped = r.data?.data?.skipped?.length ?? 0;
+      toast.success(`${added} added${skipped > 0 ? ` · ${skipped} already members` : ''}`);
+      qc.invalidateQueries({ queryKey: ['project-members', id] });
+      setMembersDialogOpen(false);
+      setSelectedMemberIds(new Set());
+      setMemberSearch('');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to add members'),
+  });
+
+  const removeMemberMut = useMutation({
+    mutationFn: (userId: number) => projectsApi.removeMember(Number(id), userId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project-members', id] });
+      toast.success('Member removed');
+    },
+    // 409 carries the "still has tickets assigned" guard message.
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to remove member'),
   });
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1067,6 +1117,125 @@ export default function ProjectDetailPage() {
         )}
       </div>
       )}
+
+      {/* ── Team Members (assigned employees) — admin / HR ──────────── */}
+      {(editMode || activeTab === 'overview') && canManageMembers && (
+        <div className="rounded-xl border bg-card p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+              <Users className="h-3 w-3" /> Team Members
+              {Array.isArray(members) && members.length > 0 && (
+                <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-foreground">{members.length}</span>
+              )}
+            </div>
+            <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => { setSelectedMemberIds(new Set()); setMemberSearch(''); setMembersDialogOpen(true); }}>
+              <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Add Members
+            </Button>
+          </div>
+
+          {membersLoading ? (
+            <div className="space-y-2">
+              {[...Array(2)].map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
+            </div>
+          ) : !(members as any[])?.length ? (
+            <p className="text-xs text-muted-foreground text-center py-6">
+              No team members yet. Add employees so they can see this project, its tickets, and log time against it.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {(members as any[]).map((m: any) => (
+                <div key={m.id} className="flex items-center gap-3 rounded-lg border p-3">
+                  <div className="h-9 w-9 rounded-full bg-linear-to-br from-violet-500 to-indigo-500 flex items-center justify-center text-sm font-bold text-white shrink-0">
+                    {m.name?.charAt(0).toUpperCase() ?? '?'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{m.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {m.empCode ? `${m.empCode} · ` : ''}{m.email}
+                    </p>
+                  </div>
+                  {!m.isActive && (
+                    <span className="rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 bg-rose-500/15 text-rose-500 ring-rose-500/30 shrink-0">
+                      Inactive
+                    </span>
+                  )}
+                  <Button
+                    variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600 shrink-0"
+                    title="Remove member"
+                    disabled={removeMemberMut.isPending}
+                    onClick={() => { if (confirm(`Remove "${m.name}" from this project?`)) removeMemberMut.mutate(m.id); }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Add Members Dialog ─────────────────────────────────────── */}
+      <Dialog open={membersDialogOpen} onOpenChange={(v) => { if (!v) { setMembersDialogOpen(false); setSelectedMemberIds(new Set()); setMemberSearch(''); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-4 w-4 text-violet-500" /> Add Team Members
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                className="pl-8"
+                placeholder="Search employees by name or code…"
+                value={memberSearch}
+                onChange={(e) => setMemberSearch(e.target.value)}
+              />
+            </div>
+            <div className="max-h-72 overflow-y-auto rounded-md border divide-y">
+              {(employeePool ?? [])
+                .filter((e: any) => e._type !== 'admin')
+                .filter((e: any) => !(members as any[])?.some((m) => m.id === e.id))
+                .length === 0 ? (
+                <p className="p-6 text-center text-sm text-muted-foreground">No employees match.</p>
+              ) : (
+                (employeePool ?? [])
+                  .filter((e: any) => e._type !== 'admin')
+                  .filter((e: any) => !(members as any[])?.some((m) => m.id === e.id))
+                  .map((emp: any) => (
+                    <label key={emp.id} className="flex items-center gap-3 px-3 py-2 hover:bg-muted/40 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4"
+                        checked={selectedMemberIds.has(emp.id)}
+                        onChange={() => setSelectedMemberIds((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(emp.id)) next.delete(emp.id); else next.add(emp.id);
+                          return next;
+                        })}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">{emp.name}</p>
+                        <p className="text-[11px] text-muted-foreground truncate">{emp.empCode ? `${emp.empCode} · ` : ''}{emp.email}</p>
+                      </div>
+                    </label>
+                  ))
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground">{selectedMemberIds.size} selected</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMembersDialogOpen(false)}>Cancel</Button>
+            <Button
+              disabled={selectedMemberIds.size === 0 || addMembersMut.isPending}
+              onClick={() => addMembersMut.mutate()}
+            >
+              {addMembersMut.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <UserPlus className="mr-1.5 h-4 w-4" />}
+              Add {selectedMemberIds.size > 0 ? `(${selectedMemberIds.size})` : ''}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Client Users (admin only) ──────────────────────────────── */}
       {(editMode || activeTab === 'overview') && isAdmin && (

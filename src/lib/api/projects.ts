@@ -2,6 +2,16 @@ import { api } from './axios-instance';
 import { tokenStorage } from '@/lib/auth/token-storage';
 import { ApiResponse, Project, CreateProjectDto, UpdateProjectDto, PaginationParams, Employee } from '@/types';
 
+export interface ProjectMember {
+  id: number;
+  name: string;
+  empCode: string | null;
+  email: string;
+  consultantType: string | null;
+  isActive: boolean;
+  memberSince: string;
+}
+
 function projectsBase() {
   return tokenStorage.getLoginType() === 'admin' ? '/projects' : '/employee/projects';
 }
@@ -20,6 +30,21 @@ export const projectsApi = {
   remove: (id: number) => api.delete<ApiResponse<null>>(`/projects/${id}`),
 
   getEmployees: (id: number) => api.get<ApiResponse<Employee[]>>(`/projects/${id}/employees`),
+
+  // ── Project members (admin via /projects, HR via /employee/projects) ──
+  getMembers: (projectId: number) =>
+    api.get<ApiResponse<ProjectMember[]>>(`${projectsBase()}/${projectId}/members`),
+
+  addMembers: (projectId: number, userIds: number[]) =>
+    api.post<ApiResponse<{ added: number[]; skipped: number[] }>>(
+      `${projectsBase()}/${projectId}/members`,
+      { userIds },
+    ),
+
+  removeMember: (projectId: number, userId: number) =>
+    api.delete<ApiResponse<{ removed: number }>>(
+      `${projectsBase()}/${projectId}/members/${userId}`,
+    ),
 
   getManagers: () =>
     api.get<ApiResponse<{ id: number; name: string; empCode: string }[]>>('/projects/managers/list'),
