@@ -13,6 +13,9 @@
 }
 
 @theme inline {
+  /* Extra-small phone breakpoint (≥480px). Sits below Tailwind's
+     default sm (640px) so layouts can adapt on small handsets. */
+  --breakpoint-xs: 30rem;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist);

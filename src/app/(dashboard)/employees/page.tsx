@@ -112,18 +112,18 @@ export default function EmployeesPage() {
       <div className="relative overflow-hidden rounded-2xl shadow-lg">
         <div className="absolute inset-0 bg-linear-to-r from-emerald-600 via-teal-600 to-cyan-600" />
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djZoLTZWMzRoNnptMC0zMHY2aC02VjRoNnptMCAzMHY2aC02di02aDZ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30" />
-        <div className="relative px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+        <div className="relative px-4 py-4 sm:px-6 sm:py-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
               <Users className="h-5 w-5 text-white" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">Employees</h1>
-              <p className="text-sm text-white/60">Manage your team members</p>
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl font-bold text-white truncate">Employees</h1>
+              <p className="text-xs sm:text-sm text-white/60 truncate">Manage your team members</p>
             </div>
           </div>
           {isAdmin && (
-            <Button size="sm" onClick={openCreate} className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg">
+            <Button size="sm" onClick={openCreate} className="w-full sm:w-auto bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg">
               <Plus className="mr-1.5 h-4 w-4" /> New Employee
             </Button>
           )}
@@ -142,7 +142,7 @@ export default function EmployeesPage() {
         </div>
         {canSeeInactive && (
           <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'active' | 'inactive' | 'all')}>
-            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full xs:w-36"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="inactive">Inactive</SelectItem>
@@ -153,7 +153,7 @@ export default function EmployeesPage() {
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {[...Array(6)].map((_, i) => (
             <Card key={i} className="p-4 flex items-center gap-3">
               <Skeleton className="h-12 w-12 rounded-full" />
@@ -169,7 +169,7 @@ export default function EmployeesPage() {
           No employees found.
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
           {(data ?? []).map((emp) => {
             const isAdminRow = (emp as any)._type === 'admin';
             const roleLabel = typeLabels[emp.consultantType] ?? 'Employee';
@@ -225,7 +225,10 @@ export default function EmployeesPage() {
                   </div>
                 </Link>
                 {isAdmin && !isAdminRow && (
-                  <div className="absolute top-2 right-2 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  // Always visible on touch / small screens (hover doesn't
+                  // exist there); fade-in on hover from lg up where a mouse
+                  // is the norm and the cleaner look pays off.
+                  <div className="absolute top-2 right-2 flex gap-0.5 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                     {/* <Button variant="ghost" size="icon" className="h-6 w-6" title="Assign project" onClick={(e) => { e.preventDefault(); openAssign(emp); }}>
                       <FolderInput className="h-3 w-3" />
                     </Button> */}

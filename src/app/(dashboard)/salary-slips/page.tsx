@@ -8,7 +8,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   Wallet, Loader2, FileSpreadsheet, Plus, Send, Eye, FileDown,
-  Trash2, Edit3, ShieldAlert, X, Search,
+  Trash2, Edit3, ShieldAlert, X, Search, Undo2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +29,7 @@ import { employeesApi } from '@/lib/api/employees';
 import {
   salarySlipsApi,
   downloadSalarySlipPdf,
+  previewSalarySlipPdfById,
   downloadSalarySlipsXlsx,
   type SalarySlip,
 } from '@/lib/api/salary-slips';
@@ -270,25 +271,99 @@ function SalarySlipsHubContent() {
     }
   };
 
+  // Shared bits so the desktop table and the mobile card list stay in
+  // sync (one source of truth for the status pill + row actions).
+  const statusBadge = (slip: SalarySlip) =>
+    slip.isPublished ? (
+      <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">Published</Badge>
+    ) : (
+      <Badge variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-400/50">Draft</Badge>
+    );
+
+  const renderActions = (slip: SalarySlip) => (
+    <div className="flex gap-1">
+      <Button
+        variant="ghost"
+        size="sm"
+        title="Preview PDF"
+        onClick={async () => {
+          try {
+            await previewSalarySlipPdfById({ slipId: slip.id, asManager: true });
+          } catch (e: any) {
+            toast.error(e?.message ?? 'Preview failed');
+          }
+        }}
+      >
+        <Eye className="h-4 w-4" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        title="Download PDF"
+        onClick={() => downloadSalarySlipPdf({ slipId: slip.id, asManager: true })}
+      >
+        <FileDown className="h-4 w-4" />
+      </Button>
+      <Link
+        href={`/employees/${slip.employeeId}/salary-slips/${slip.id}/edit?targetType=admin`}
+        title="Edit"
+      >
+        <Button variant="ghost" size="sm"><Edit3 className="h-4 w-4" /></Button>
+      </Link>
+      {slip.isPublished ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          title="Unpublish"
+          disabled={unpublishMut.isPending}
+          onClick={() => unpublishMut.mutate(slip.id)}
+        >
+          <Undo2 className="h-4 w-4" />
+        </Button>
+      ) : (
+        <Button
+          variant="ghost"
+          size="sm"
+          title="Publish + notify employee"
+          disabled={publishMut.isPending}
+          onClick={() => publishMut.mutate(slip.id)}
+        >
+          <Send className="h-4 w-4" />
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        title="Delete (admin only)"
+        disabled={deleteMut.isPending}
+        onClick={() => setDeleteTarget({ kind: 'single', slip })}
+      >
+        <Trash2 className="h-4 w-4 text-rose-500" />
+      </Button>
+    </div>
+  );
+
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="h-10 w-10 rounded-xl bg-pink-500/15 flex items-center justify-center">
-          <Wallet className="h-5 w-5 text-pink-600 dark:text-pink-400" />
+      {/* Header — stacks on phones, row from sm up. */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="h-10 w-10 shrink-0 rounded-xl bg-pink-500/15 flex items-center justify-center">
+            <Wallet className="h-5 w-5 text-pink-600 dark:text-pink-400" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-xl font-bold">Salary Slips</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground">
+              Bulk-generate, publish, and export payslips for your team.
+            </p>
+          </div>
         </div>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold">Salary Slips</h1>
-          <p className="text-sm text-muted-foreground">
-            Bulk-generate, publish, and export payslips for your team.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExport} disabled={exporting}>
+        <div className="flex flex-col xs:flex-row gap-2 sm:ml-auto">
+          <Button variant="outline" className="w-full xs:w-auto" onClick={handleExport} disabled={exporting}>
             {exporting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <FileSpreadsheet className="mr-1.5 h-4 w-4" />}
             Export Excel
           </Button>
-          <Button onClick={() => setBulkOpen(true)}>
+          <Button className="w-full xs:w-auto" onClick={() => setBulkOpen(true)}>
             <Plus className="mr-1.5 h-4 w-4" /> Bulk Generate
           </Button>
         </div>
@@ -317,13 +392,15 @@ function SalarySlipsHubContent() {
         </CardContent>
       </Card>
 
-      {/* Bulk action bar — appears once one or more slips are ticked. */}
+      {/* Bulk action bar — appears once one or more slips are ticked.
+          Stacks the label above the buttons on phones; row from sm up.
+          Buttons wrap and stay tappable at every width. */}
       {someSelected && (
-        <div className="flex flex-wrap items-center gap-2 rounded-md border border-blue-500/30 bg-blue-500/5 px-3 py-2">
+        <div className="flex flex-col gap-2 rounded-md border border-blue-500/30 bg-blue-500/5 px-3 py-2 sm:flex-row sm:items-center">
           <span className="text-sm font-medium">
             {selectedIds.size} selected
           </span>
-          <div className="ml-auto flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 sm:ml-auto">
             <Button
               size="sm"
               variant="outline"
@@ -339,8 +416,9 @@ function SalarySlipsHubContent() {
               disabled={!!bulkBusy}
               onClick={() => runBulk('unpublish')}
             >
-              {bulkBusy === 'unpublish' ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Eye className="mr-1.5 h-4 w-4" />}
-              Withdraw to Draft
+              {bulkBusy === 'unpublish' ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Undo2 className="mr-1.5 h-4 w-4" />}
+              <span className="hidden xs:inline">Withdraw to Draft</span>
+              <span className="xs:hidden">Withdraw</span>
             </Button>
             <Button
               size="sm"
@@ -380,108 +458,113 @@ function SalarySlipsHubContent() {
               to start.
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-10">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4"
-                      checked={allSelected}
-                      // Indeterminate state when some-but-not-all are ticked.
-                      ref={(el) => {
-                        if (el) el.indeterminate = someSelected && !allSelected;
-                      }}
-                      onChange={toggleAll}
-                      aria-label="Select all slips"
-                    />
-                  </TableHead>
-                  <TableHead>Month</TableHead>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Department</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {slips.map((slip) => (
-                  <TableRow key={slip.id} data-state={selectedIds.has(slip.id) ? 'selected' : undefined}>
-                    <TableCell>
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4"
-                        checked={selectedIds.has(slip.id)}
-                        onChange={() => toggleOne(slip.id)}
-                        aria-label={`Select slip ${slip.slipMonth}`}
-                      />
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">{slip.slipMonth}</TableCell>
-                    <TableCell>
-                      <div className="font-medium">{slip.employee?.name ?? `#${slip.employeeId}`}</div>
-                      {slip.employee?.empCode && (
-                        <div className="text-[10px] text-muted-foreground">{slip.employee.empCode}</div>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{slip.department || '—'}</TableCell>
-                    <TableCell>
-                      {slip.isPublished ? (
-                        <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">Published</Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-400/50">Draft</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          title="Download PDF"
-                          onClick={() => downloadSalarySlipPdf({ slipId: slip.id, asManager: true })}
-                        >
-                          <FileDown className="h-4 w-4" />
-                        </Button>
-                        <Link
-                          href={`/employees/${slip.employeeId}/salary-slips/${slip.id}/edit?targetType=admin`}
-                          title="Edit"
-                        >
-                          <Button variant="ghost" size="sm"><Edit3 className="h-4 w-4" /></Button>
-                        </Link>
-                        {slip.isPublished ? (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            title="Unpublish"
-                            disabled={unpublishMut.isPending}
-                            onClick={() => unpublishMut.mutate(slip.id)}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            title="Publish + notify employee"
-                            disabled={publishMut.isPending}
-                            onClick={() => publishMut.mutate(slip.id)}
-                          >
-                            <Send className="h-4 w-4" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          title="Delete (admin only)"
-                          disabled={deleteMut.isPending}
-                          onClick={() => setDeleteTarget({ kind: 'single', slip })}
-                        >
-                          <Trash2 className="h-4 w-4 text-rose-500" />
-                        </Button>
+            <>
+              {/* ── Mobile / small screens: card list (below md) ── */}
+              <div className="md:hidden">
+                <div className="flex items-center gap-2 border-b px-4 py-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={allSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someSelected && !allSelected;
+                    }}
+                    onChange={toggleAll}
+                    aria-label="Select all slips"
+                  />
+                  Select all
+                </div>
+                <ul className="divide-y">
+                  {slips.map((slip) => (
+                    <li
+                      key={slip.id}
+                      className={`p-4 ${selectedIds.has(slip.id) ? 'bg-muted/40' : ''}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4 shrink-0"
+                          checked={selectedIds.has(slip.id)}
+                          onChange={() => toggleOne(slip.id)}
+                          aria-label={`Select slip ${slip.slipMonth}`}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="font-medium truncate">{slip.employee?.name ?? `#${slip.employeeId}`}</p>
+                              {slip.employee?.empCode && (
+                                <p className="text-[10px] text-muted-foreground truncate">{slip.employee.empCode}</p>
+                              )}
+                            </div>
+                            {statusBadge(slip)}
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
+                            <span className="font-mono">{slip.slipMonth}</span>
+                            <span>{slip.department || '—'}</span>
+                          </div>
+                        </div>
                       </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                      <div className="mt-2 flex justify-end">{renderActions(slip)}</div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* ── md and up: full table (scrolls horizontally if cramped) ── */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4"
+                          checked={allSelected}
+                          // Indeterminate state when some-but-not-all are ticked.
+                          ref={(el) => {
+                            if (el) el.indeterminate = someSelected && !allSelected;
+                          }}
+                          onChange={toggleAll}
+                          aria-label="Select all slips"
+                        />
+                      </TableHead>
+                      <TableHead>Month</TableHead>
+                      <TableHead>Employee</TableHead>
+                      <TableHead>Department</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {slips.map((slip) => (
+                      <TableRow key={slip.id} data-state={selectedIds.has(slip.id) ? 'selected' : undefined}>
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4"
+                            checked={selectedIds.has(slip.id)}
+                            onChange={() => toggleOne(slip.id)}
+                            aria-label={`Select slip ${slip.slipMonth}`}
+                          />
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{slip.slipMonth}</TableCell>
+                        <TableCell>
+                          <div className="font-medium">{slip.employee?.name ?? `#${slip.employeeId}`}</div>
+                          {slip.employee?.empCode && (
+                            <div className="text-[10px] text-muted-foreground">{slip.employee.empCode}</div>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">{slip.department || '—'}</TableCell>
+                        <TableCell>{statusBadge(slip)}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end">{renderActions(slip)}</div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

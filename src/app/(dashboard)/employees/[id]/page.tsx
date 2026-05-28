@@ -650,6 +650,86 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
     ...((isSelf || canManageAllDocs) ? [{ key: 'security' as Tab, label: 'Security', icon: Shield }] : []),
   ];
 
+  // '2026-05' → 'May 2026' (falls back to the raw string on parse fail).
+  const slipMonthLabel = (slipMonth: string) => {
+    const [y, m] = slipMonth.split('-');
+    const d = new Date(Number(y), Number(m) - 1, 1);
+    return Number.isNaN(d.getTime()) ? slipMonth : format(d, 'MMM yyyy');
+  };
+
+  // Shared status pill + row actions so the desktop table and the mobile
+  // card list stay in sync.
+  const slipStatusBadge = (slip: SalarySlip) =>
+    slip.isPublished ? (
+      <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/15">
+        <CheckCircle2 className="mr-1 h-3 w-3" /> Published
+      </Badge>
+    ) : (
+      <Badge variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-400/50">
+        Draft
+      </Badge>
+    );
+
+  const renderSlipActions = (slip: SalarySlip) => (
+    <div className="flex items-center gap-1">
+      {slip.isPublished && (
+        <Button
+          variant="ghost" size="icon" className="h-8 w-8"
+          title="Download PDF"
+          onClick={async () => {
+            try {
+              await downloadSalarySlipPdf({ slipId: slip.id, asManager: canManageSalarySlips });
+            } catch (e: any) {
+              toast.error(e?.response?.data?.message ?? 'Download failed');
+            }
+          }}
+        >
+          <Download className="h-4 w-4" />
+        </Button>
+      )}
+      {canManageSalarySlips && (
+        <>
+          {!slip.isPublished && (
+            <Link href={`/employees/${id}/salary-slips/${slip.id}/edit?targetType=${targetType}`}>
+              <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit">
+                <Pencil className="h-4 w-4" />
+              </Button>
+            </Link>
+          )}
+          {slip.isPublished ? (
+            <Button
+              variant="ghost" size="icon" className="h-8 w-8 text-amber-600"
+              title="Unpublish"
+              disabled={unpublishMut.isPending}
+              onClick={() => unpublishMut.mutate(slip.id)}
+            >
+              <Undo2 className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button
+              variant="ghost" size="icon" className="h-8 w-8 text-emerald-600"
+              title="Publish"
+              disabled={publishMut.isPending}
+              onClick={() => publishMut.mutate(slip.id)}
+            >
+              <Send className="h-4 w-4" />
+            </Button>
+          )}
+          {isAdmin && (
+            <Button
+              variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600"
+              title="Delete"
+              disabled={deleteSlipMut.isPending}
+              onClick={() => setSlipToDelete(slip)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       <Button variant="ghost" size="sm" className="gap-1.5 -ml-1" onClick={() => router.back()}>
@@ -674,10 +754,10 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                   {getInitials(emp.name)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h1 className="text-lg font-bold text-white">{emp.name}</h1>
-                  <div className="flex flex-wrap items-center gap-3 mt-1 text-white/70 text-xs">
-                    {emp.email && <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{emp.email}</span>}
-                    {emp.mobileNumber && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{emp.mobileNumber}</span>}
+                  <h1 className="text-base sm:text-lg font-bold text-white truncate">{emp.name}</h1>
+                  <div className="flex flex-col xs:flex-row xs:flex-wrap xs:items-center gap-1 xs:gap-3 mt-1 text-white/70 text-xs">
+                    {emp.email && <span className="flex items-center gap-1 min-w-0"><Mail className="h-3 w-3 shrink-0" /><span className="truncate">{emp.email}</span></span>}
+                    {emp.mobileNumber && <span className="flex items-center gap-1 min-w-0"><Phone className="h-3 w-3 shrink-0" /><span className="truncate">{emp.mobileNumber}</span></span>}
                   </div>
                 </div>
                 <Badge className={`text-[10px] border-0 shrink-0 ${emp.isActive ? 'bg-emerald-500/20 text-emerald-100' : 'bg-red-500/20 text-red-100'}`}>
@@ -687,18 +767,24 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
             </div>
           </Card>
 
-          {/* ── Horizontal Tabs ─────────────────────── */}
-          <div className="flex gap-1 border-b">
+          {/* ── Horizontal Tabs ─────────────────────────
+              Scrolls sideways on narrow screens instead of wrapping or
+              clipping — all tabs stay reachable via swipe. Tabs never
+              shrink so labels don't get squeezed. On phones/tablets the
+              strip breaks out of the page padding so it scrolls
+              edge-to-edge (matches the layout's p-4 / sm:p-6); aligns
+              back with the content at lg where the sidebar appears. */}
+          <div className="flex gap-1 border-b overflow-x-auto scrollbar-hide -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0">
             {tabs.map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
                 onClick={() => setActiveTab(key)}
-                className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === key
+                className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 sm:px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === key
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/30'
                   }`}
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="h-4 w-4 shrink-0" />
                 {label}
               </button>
             ))}
@@ -1063,13 +1149,13 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
           {/* ── Documents tab ─────────────────────── */}
           {activeTab === 'documents' && (
             <Card className="shadow-sm">
-              <CardContent className="px-5 py-4">
-                <div className="flex items-center justify-between mb-4">
+              <CardContent className="px-4 sm:px-5 py-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
                   <h2 className="text-base font-semibold">Documents</h2>
                   {canUploadDocs && (
                     <div className="flex items-center gap-2">
                       <Select value={docCategory} onValueChange={setDocCategory}>
-                        <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="h-8 text-xs flex-1 sm:flex-none sm:w-32"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="aadhaar">Aadhaar Card</SelectItem>
                           <SelectItem value="pan">PAN Card</SelectItem>
@@ -1405,13 +1491,13 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
           {activeTab === 'pip' && (canManageAllDocs || isSelf) && (
             <div className="space-y-4">
               <Card className="shadow-sm">
-                <CardContent className="px-5 py-4">
-                  <div className="flex items-center justify-between mb-4">
+                <CardContent className="px-4 sm:px-5 py-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
                     <h2 className="text-base font-semibold flex items-center gap-2">
-                      <AlertTriangle className="h-4 w-4 text-amber-500" /> Performance Improvement Plans
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" /> Performance Improvement Plans
                     </h2>
                     {canManageAllDocs && !isSelf && (
-                      <Button size="sm" onClick={() => { setPipForm({ reason: '', improvementAreas: '', startDate: format(new Date(), 'yyyy-MM-dd'), endDate: '', goals: '' }); setPipDialogOpen(true); }}>
+                      <Button size="sm" className="w-full sm:w-auto" onClick={() => { setPipForm({ reason: '', improvementAreas: '', startDate: format(new Date(), 'yyyy-MM-dd'), endDate: '', goals: '' }); setPipDialogOpen(true); }}>
                         <Plus className="h-3.5 w-3.5 mr-1" /> Initiate PIP
                       </Button>
                     )}
@@ -1707,17 +1793,17 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
           {/* ── Salary Slips tab ───── */}
           {activeTab === 'salary-slips' && canSeeSalarySlips && (
             <Card className="shadow-sm">
-              <CardContent className="px-5 py-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
+              <CardContent className="px-4 sm:px-5 py-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-4">
+                  <div className="min-w-0">
                     <h2 className="text-base font-semibold">Salary Slips</h2>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Monthly payslips. Drafts are visible only to HR / Admin / Accounts; published slips appear to the employee too.
                     </p>
                   </div>
                   {canManageSalarySlips && (
-                    <Link href={`/employees/${id}/salary-slips/new?targetType=${targetType}`}>
-                      <Button size="sm">
+                    <Link href={`/employees/${id}/salary-slips/new?targetType=${targetType}`} className="shrink-0">
+                      <Button size="sm" className="w-full sm:w-auto">
                         <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Slip
                       </Button>
                     </Link>
@@ -1735,113 +1821,49 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                       : 'No slips yet. Tap Add Slip to create one.'}
                   </p>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="border-b text-left text-xs text-muted-foreground">
-                        <tr>
-                          <th className="py-2 font-medium">Month</th>
-                          <th className="py-2 font-medium">Status</th>
-                          <th className="py-2 font-medium">Created by</th>
-                          <th className="py-2 font-medium text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {slips.map((slip) => {
-                          const monthLabel = (() => {
-                            const [y, m] = slip.slipMonth.split('-');
-                            const d = new Date(Number(y), Number(m) - 1, 1);
-                            return Number.isNaN(d.getTime()) ? slip.slipMonth : format(d, 'MMM yyyy');
-                          })();
-                          return (
+                  <>
+                    {/* Mobile / small screens: card list (below sm). */}
+                    <ul className="space-y-2 sm:hidden">
+                      {slips.map((slip) => (
+                        <li key={slip.id} className="rounded-lg border p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium">{slipMonthLabel(slip.slipMonth)}</p>
+                              <p className="text-[11px] text-muted-foreground truncate">by {slip.createdByName}</p>
+                            </div>
+                            {slipStatusBadge(slip)}
+                          </div>
+                          <div className="mt-2 flex justify-end">{renderSlipActions(slip)}</div>
+                        </li>
+                      ))}
+                    </ul>
+
+                    {/* sm and up: table (scrolls horizontally if cramped). */}
+                    <div className="hidden sm:block overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="border-b text-left text-xs text-muted-foreground">
+                          <tr>
+                            <th className="py-2 font-medium">Month</th>
+                            <th className="py-2 font-medium">Status</th>
+                            <th className="py-2 font-medium">Created by</th>
+                            <th className="py-2 font-medium text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {slips.map((slip) => (
                             <tr key={slip.id} className="border-b last:border-0 hover:bg-accent/30 transition-colors">
-                              <td className="py-2.5 font-medium">{monthLabel}</td>
-                              <td className="py-2.5">
-                                {slip.isPublished ? (
-                                  <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/15">
-                                    <CheckCircle2 className="mr-1 h-3 w-3" /> Published
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="outline" className="text-amber-700 dark:text-amber-400 border-amber-400/50">
-                                    Draft
-                                  </Badge>
-                                )}
-                              </td>
+                              <td className="py-2.5 font-medium">{slipMonthLabel(slip.slipMonth)}</td>
+                              <td className="py-2.5">{slipStatusBadge(slip)}</td>
                               <td className="py-2.5 text-xs text-muted-foreground">{slip.createdByName}</td>
                               <td className="py-2.5">
-                                <div className="flex items-center justify-end gap-1">
-                                  {/* Download is available the moment a slip is published.
-                                      Managers (admin / HR / accounts) hit the admin route
-                                      which also accepts drafts, but we only surface the
-                                      button for published rows to match the spec. */}
-                                  {slip.isPublished && (
-                                    <Button
-                                      variant="ghost" size="icon" className="h-8 w-8"
-                                      title="Download PDF"
-                                      onClick={async () => {
-                                        try {
-                                          await downloadSalarySlipPdf({
-                                            slipId: slip.id,
-                                            asManager: canManageSalarySlips,
-                                          });
-                                        } catch (e: any) {
-                                          toast.error(e?.response?.data?.message ?? 'Download failed');
-                                        }
-                                      }}
-                                    >
-                                      <Download className="h-4 w-4" />
-                                    </Button>
-                                  )}
-                                  {canManageSalarySlips && (
-                                    <>
-                                      {/* Edit only available on drafts — published slips must be unpublished first. */}
-                                      {!slip.isPublished && (
-                                        <Link href={`/employees/${id}/salary-slips/${slip.id}/edit?targetType=${targetType}`}>
-                                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit">
-                                            <Pencil className="h-4 w-4" />
-                                          </Button>
-                                        </Link>
-                                      )}
-                                      {slip.isPublished ? (
-                                        <Button
-                                          variant="ghost" size="icon" className="h-8 w-8 text-amber-600"
-                                          title="Unpublish"
-                                          disabled={unpublishMut.isPending}
-                                          onClick={() => unpublishMut.mutate(slip.id)}
-                                        >
-                                          <Undo2 className="h-4 w-4" />
-                                        </Button>
-                                      ) : (
-                                        <Button
-                                          variant="ghost" size="icon" className="h-8 w-8 text-emerald-600"
-                                          title="Publish"
-                                          disabled={publishMut.isPending}
-                                          onClick={() => publishMut.mutate(slip.id)}
-                                        >
-                                          <Send className="h-4 w-4" />
-                                        </Button>
-                                      )}
-                                      {/* Delete is admin-only on the backend, but we hide the
-                                          icon for HR/Accounts too so the UI matches. */}
-                                      {isAdmin && (
-                                        <Button
-                                          variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600"
-                                          title="Delete"
-                                          disabled={deleteSlipMut.isPending}
-                                          onClick={() => setSlipToDelete(slip)}
-                                        >
-                                          <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                      )}
-                                    </>
-                                  )}
-                                </div>
+                                <div className="flex justify-end">{renderSlipActions(slip)}</div>
                               </td>
                             </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -1902,7 +1924,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
             {/* Password change (self only) */}
             {isSelf && (
               <Card className="shadow-sm">
-                <CardContent className="px-5 py-4">
+                <CardContent className="px-4 sm:px-5 py-4">
                   <h2 className="text-base font-semibold mb-4 flex items-center gap-2">
                     <KeyRound className="h-4 w-4 text-amber-500" /> Change Password
                   </h2>
@@ -1965,11 +1987,11 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
             {/* Block / Deactivate (admin/HR only) */}
             {canManageAllDocs && !isSelf && (
               <Card className="shadow-sm border-red-200 dark:border-red-800">
-                <CardContent className="px-5 py-4 space-y-3">
+                <CardContent className="px-4 sm:px-5 py-4 space-y-3">
                   <h2 className="text-base font-semibold text-red-600">Danger Zone</h2>
                   <p className="text-xs text-muted-foreground">These actions affect the employee&apos;s account access.</p>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-950/30"
+                  <div className="flex flex-col xs:flex-row gap-2">
+                    <Button variant="outline" size="sm" className="w-full xs:w-auto text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-950/30"
                       onClick={async () => {
                         if (!confirm(emp.isActive ? 'Deactivate this employee? They will lose access.' : 'Reactivate this employee?')) return;
                         try {
@@ -1981,7 +2003,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                       <Ban className="h-3.5 w-3.5 mr-1.5" />
                       {emp.isActive ? 'Deactivate Account' : 'Reactivate Account'}
                     </Button>
-                    <Button variant="outline" size="sm" className="text-amber-600 border-amber-200 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                    <Button variant="outline" size="sm" className="w-full xs:w-auto text-amber-600 border-amber-200 hover:bg-amber-50 dark:hover:bg-amber-950/30"
                       onClick={async () => {
                         const pwd = prompt('Enter new password for this employee (min 8 chars):');
                         if (!pwd || pwd.length < 8) { if (pwd) toast.error('Password must be at least 8 characters'); return; }

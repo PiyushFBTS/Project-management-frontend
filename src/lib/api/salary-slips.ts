@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { api } from './axios-instance';
 
 /**
@@ -150,6 +151,63 @@ export async function downloadSalarySlipPdf(opts: {
   // Defer revoke so Safari's late open-in-tab path doesn't lose the
   // blob mid-download.
   setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+/**
+ * Opens a *saved* slip's PDF inline in a new browser tab (view, not
+ * download). Same auth-header constraint as the download helper, so we
+ * fetch the blob via axios and hand the object-URL to `window.open`.
+ * Managers hit the admin route (drafts allowed); everyone else the self
+ * route (published + owned only).
+ */
+export async function previewSalarySlipPdfById(opts: {
+  slipId: number;
+  asManager: boolean;
+}): Promise<void> {
+  const { slipId, asManager } = opts;
+  // Open the tab *synchronously* inside the click gesture so pop-up
+  // blockers don't swallow it (opening after the `await` below is what
+  // gets blocked). We point it at the blob once the PDF arrives. Note:
+  // no `noopener` here — that flag makes window.open return null, so we
+  // couldn't navigate the tab afterwards.
+  const win = typeof window !== 'undefined' ? window.open('', '_blank') : null;
+  try {
+    const res = asManager
+      ? await salarySlipsApi.downloadPdfAsAdmin(slipId)
+      : await salarySlipsApi.downloadPdfAsSelf(slipId);
+
+    const blob = new Blob([res.data as BlobPart], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    if (win) {
+      win.location.href = url;
+    } else {
+      // Pop-up was blocked — fall back to a synthetic anchor click.
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e: any) {
+    if (win) win.close();
+    // With responseType:'blob', axios returns the error body as a Blob,
+    // so the JSON message isn't directly reachable — decode it to give
+    // a real reason instead of a generic failure.
+    const errBlob = e?.response?.data;
+    let msg: string | null = null;
+    if (errBlob instanceof Blob) {
+      try {
+        const parsed = JSON.parse(await errBlob.text());
+        if (typeof parsed?.message === 'string') msg = parsed.message;
+      } catch {
+        /* not JSON — keep generic */
+      }
+    }
+    throw msg ? new Error(msg) : e;
+  }
 }
 
 /**
