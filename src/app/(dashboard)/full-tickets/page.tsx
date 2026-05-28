@@ -555,8 +555,9 @@ function FullTicketsPageInner() {
 
       {/* Toolbar — search + actions on row 1, filter dropdowns on row 2 */}
       <div className="rounded-xl border bg-card shadow-sm p-3 sm:p-4 space-y-3">
-        {/* Row 1: search (flex-1) + actions */}
-        <div className="flex items-center gap-2">
+        {/* Row 1: search (full width on phones) + actions below. From sm
+            up the search flexes and the buttons sit inline beside it. */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -571,25 +572,27 @@ function FullTicketsPageInner() {
               </button>
             )}
           </div>
-          <Button
-            size="sm"
-            className="h-9 shrink-0 bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-sm"
-            onClick={handleNewTicketClick}
-            disabled={!isClient && creatableProjects.length === 0}
-          >
-            <Ticket className="h-4 w-4 mr-1.5" />
-            New Ticket
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 shrink-0"
-            disabled={tasks.length === 0}
-            onClick={exportToExcel}
-          >
-            <Download className="h-4 w-4 mr-1.5" />
-            Export Excel
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              className="h-9 flex-1 sm:flex-none bg-linear-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-sm"
+              onClick={handleNewTicketClick}
+              disabled={!isClient && creatableProjects.length === 0}
+            >
+              <Ticket className="h-4 w-4 mr-1.5" />
+              New Ticket
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 flex-1 sm:flex-none"
+              disabled={tasks.length === 0}
+              onClick={exportToExcel}
+            >
+              <Download className="h-4 w-4 mr-1.5" />
+              Export Excel
+            </Button>
+          </div>
         </div>
 
         {/* Row 2: filter dropdowns */}

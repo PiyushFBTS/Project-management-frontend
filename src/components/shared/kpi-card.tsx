@@ -41,16 +41,16 @@ export function KpiCard({
   const isNeg = trendPositive === false;
   return (
     <Card className="group relative overflow-hidden rounded-2xl border border-slate-200/70 bg-white shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 dark:border-slate-800/60 dark:bg-slate-900">
-      <CardContent className="px-5 py-4">
-        <div className="flex items-center gap-4">
-          <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-full ${bubbleBg}`}>
-            <Icon className={`h-6 w-6 ${iconFg}`} />
+      <CardContent className="px-3 py-3 sm:px-5 sm:py-4">
+        <div className="flex items-center gap-2.5 sm:gap-4">
+          <div className={`flex h-10 w-10 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-full ${bubbleBg}`}>
+            <Icon className={`h-5 w-5 sm:h-6 sm:w-6 ${iconFg}`} />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-medium text-slate-500 dark:text-slate-400">
+            <p className="truncate text-[11px] sm:text-xs font-medium text-slate-500 dark:text-slate-400">
               {title}
             </p>
-            <p className="mt-0.5 truncate text-2xl font-bold text-slate-900 dark:text-slate-50">
+            <p className="mt-0.5 truncate text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-50">
               {value}
             </p>
             {hasTrend ? (

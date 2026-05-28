@@ -101,13 +101,13 @@ export default function LeaveBalancePage() {
       {/* Page header */}
       <div className="relative overflow-hidden rounded-2xl shadow-lg">
         <div className="absolute inset-0 bg-linear-to-br from-blue-600 to-blue-800" />
-        <div className="relative px-5 sm:px-6 py-5 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+        <div className="relative px-4 sm:px-6 py-4 sm:py-5 flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
             <Wallet className="h-5 w-5 text-white" />
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-white">Leave Balance</h1>
-            <p className="text-sm text-white/70">Your annual allowance, what you&apos;ve used, and what&apos;s left</p>
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-xl font-bold text-white">Leave Balance</h1>
+            <p className="text-xs sm:text-sm text-white/70">Your annual allowance, what you&apos;ve used, and what&apos;s left</p>
           </div>
         </div>
       </div>

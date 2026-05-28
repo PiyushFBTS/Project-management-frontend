@@ -140,18 +140,18 @@ export default function LeaveTypesPage() {
       <div className="relative overflow-hidden rounded-2xl shadow-lg">
         <div className="absolute inset-0 bg-linear-to-r from-orange-600 via-rose-600 to-pink-600" />
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djZoLTZWMzRoNnptMC0zMHY2aC02VjRoNnptMCAzMHY2aC02di02aDZ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30" />
-        <div className="relative px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+        <div className="relative px-4 py-4 sm:px-6 sm:py-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
               <FileText className="h-5 w-5 text-white" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">Leave Types</h1>
-              <p className="text-sm text-white/60">Leave type categories</p>
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl font-bold text-white truncate">Leave Types</h1>
+              <p className="text-xs sm:text-sm text-white/60 truncate">Leave type categories</p>
             </div>
           </div>
           {canManage && (
-            <Button size="sm" onClick={openCreate} className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg">
+            <Button size="sm" onClick={openCreate} className="w-full sm:w-auto bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg">
               <Plus className="mr-1.5 h-4 w-4" /> New Leave Type
             </Button>
           )}
@@ -168,7 +168,58 @@ export default function LeaveTypesPage() {
         />
       </div>
 
-      <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
+      {/* ── Mobile / small screens: card list (below md) ── */}
+      <div className="md:hidden space-y-3">
+        {isLoading ? (
+          [...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-lg" />)
+        ) : (data ?? []).length === 0 ? (
+          <div className="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground">No leave types found.</div>
+        ) : (
+          (data ?? []).map((r) => (
+            <div key={r.id} className="rounded-lg border bg-card shadow-sm overflow-hidden">
+              <div className="h-1 bg-linear-to-r from-orange-500 via-rose-500 to-pink-500" />
+              <div className="p-4 space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold truncate">{r.reasonName}</p>
+                    <p className="font-mono text-[11px] text-muted-foreground mt-0.5">{r.reasonCode}</p>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${r.isActive ? 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30 dark:text-emerald-400' : 'bg-rose-500/15 text-rose-500 ring-rose-500/30'}`}>
+                    {r.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                {r.description && (
+                  <p className="text-xs text-muted-foreground">{r.description}</p>
+                )}
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground">
+                    Annual:{' '}
+                    <span className="font-medium text-foreground tabular-nums">
+                      {((r as any).defaultDays ?? 0) > 0 ? `${(r as any).defaultDays} days` : '—'}
+                    </span>
+                  </span>
+                  {canManage && (
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(r)}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600"
+                        onClick={() => { if (confirm(`Deactivate "${r.reasonName}"?`)) deleteMutation.mutate({ id: r.id, name: r.reasonName }); }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* ── md and up: full table (scrolls horizontally if cramped) ── */}
+      <div className="hidden md:block rounded-lg border bg-card overflow-x-auto shadow-sm">
         <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-orange-500 via-rose-500 to-pink-500" />
         <Table>
           <TableHeader>

@@ -282,7 +282,7 @@ export default function MyTasksPage() {
           )}
         </div>
         <div className="hidden sm:block h-6 w-px bg-border" />
-        <div className="grid grid-cols-3 gap-2 sm:flex sm:gap-3">
+        <div className="grid grid-cols-1 xs:grid-cols-3 gap-2 sm:flex sm:gap-3">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-full sm:w-36">
               <SelectValue placeholder="Status" />

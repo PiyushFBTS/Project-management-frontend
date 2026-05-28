@@ -108,16 +108,16 @@ export default function HolidaysPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <PartyPopper className="h-5 w-5 text-primary" /> Public Holidays
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-bold flex items-center gap-2">
+            <PartyPopper className="h-5 w-5 shrink-0 text-primary" /> <span className="truncate">Public Holidays</span>
           </h1>
-          <p className="text-sm text-muted-foreground">{holidays.length} holidays this year</p>
+          <p className="text-xs sm:text-sm text-muted-foreground">{holidays.length} holidays this year</p>
         </div>
         {canEdit && (
-          <Button size="sm" onClick={openAdd}>
-            <Plus className="h-4 w-4 mr-1" /> Add Holiday
+          <Button size="sm" className="shrink-0" onClick={openAdd}>
+            <Plus className="h-4 w-4 mr-1" /> <span className="hidden xs:inline">Add Holiday</span><span className="xs:hidden">Add</span>
           </Button>
         )}
       </div>
@@ -142,15 +142,15 @@ export default function HolidaysPage() {
                         <span className="text-[10px] uppercase">{format(d, 'MMM')}</span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-sm">{h.name}</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="font-semibold text-sm truncate">{h.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">
                           {format(d, 'EEEE')}
                           {h.description ? ` · ${h.description}` : ''}
                         </p>
                       </div>
-                      {isPast && <Badge variant="outline" className="text-[10px] shrink-0">Past</Badge>}
+                      {isPast && <Badge variant="outline" className="hidden xs:inline-flex text-[10px] shrink-0">Past</Badge>}
                       {!isPast && (
-                        <Badge className="text-[10px] bg-emerald-500/10 text-emerald-600 border-0 shrink-0">
+                        <Badge className="hidden xs:inline-flex text-[10px] bg-emerald-500/10 text-emerald-600 border-0 shrink-0">
                           Upcoming
                         </Badge>
                       )}

@@ -66,27 +66,75 @@ export default function ProjectsPage() {
     onError: (e: any, _, ctx) => toast.error(e?.response?.data?.message ?? 'Failed to remove project', { id: ctx?.id }),
   });
 
+  const TYPE_LABELS: Record<string, string> = {
+    fresh_implement: 'Fresh Implement', migration: 'Migration',
+    change_request: 'Change Request', support: 'Support',
+    development: 'Development', consulting: 'Consulting', maintenance: 'Maintenance',
+  };
+
+  // Shared status pill + row actions so the desktop table and the mobile
+  // card list render identically from one source.
+  const statusPill = (p: any) => {
+    const s = p.status ?? 'active';
+    const cls = s === 'active'
+      ? 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30'
+      : s === 'completed'
+        ? 'bg-blue-500/15 text-blue-600 ring-blue-500/30'
+        : 'bg-slate-500/15 text-slate-500 ring-slate-500/30';
+    return (
+      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>
+        {s === 'active' ? 'Active' : s === 'completed' ? 'Completed' : 'Inactive'}
+      </span>
+    );
+  };
+
+  const renderActions = (p: any) => (
+    <div className="flex gap-1">
+      <Button
+        variant="ghost" size="icon" className="h-7 w-7 text-violet-500 hover:text-violet-600"
+        title="Planning"
+        onClick={() => router.push(`/projects/${p.id}/planning`)}
+      >
+        <ClipboardList className="h-3.5 w-3.5" />
+      </Button>
+      {!isEmployee && (
+        <>
+          <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => router.push(`/projects/${p.id}`)}>
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600"
+            title="Remove"
+            onClick={() => { if (confirm(`Remove "${p.projectName}"?`)) deleteMutation.mutate({ id: p.id, name: p.projectName }); }}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       {/* Gradient Header */}
       <div className="relative overflow-hidden rounded-2xl shadow-lg">
         <div className="absolute inset-0 bg-linear-to-r from-indigo-600 via-violet-600 to-fuchsia-600" />
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djZoLTZWMzRoNnptMC0zMHY2aC02VjRoNnptMCAzMHY2aC02di02aDZ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30" />
-        <div className="relative px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+        <div className="relative px-4 py-4 sm:px-6 sm:py-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
               <FolderKanban className="h-5 w-5 text-white" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">Projects</h1>
-              <p className="text-sm text-white/60">{isEmployee ? 'Projects with your assigned tickets' : 'Manage all your projects'}</p>
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl font-bold text-white truncate">Projects</h1>
+              <p className="text-xs sm:text-sm text-white/60 truncate">{isEmployee ? 'Projects with your assigned tickets' : 'Manage all your projects'}</p>
             </div>
           </div>
           {!isEmployee && (
             <Button
               size="sm"
               onClick={() => router.push('/projects/new')}
-              className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg"
+              className="w-full sm:w-auto bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg"
             >
               <Plus className="mr-1.5 h-4 w-4" /> New Project
             </Button>
@@ -106,7 +154,7 @@ export default function ProjectsPage() {
         </div>
         {canSeeInactive && (
           <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'active' | 'inactive' | 'all')}>
-            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full xs:w-36"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="inactive">Inactive</SelectItem>
@@ -116,7 +164,48 @@ export default function ProjectsPage() {
         )}
       </div>
 
-      <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
+      {/* ── Mobile / small screens: card list (below md) ── */}
+      <div className="md:hidden space-y-3">
+        {isLoading ? (
+          [...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-lg" />)
+        ) : (data ?? []).length === 0 ? (
+          <div className="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground">No projects found.</div>
+        ) : (
+          (data ?? []).map((p) => (
+            <div key={p.id} className="rounded-lg border bg-card shadow-sm overflow-hidden">
+              <div className="h-1 bg-linear-to-r from-indigo-500 via-violet-500 to-fuchsia-500" />
+              <div className="p-4 space-y-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <Link href={`/projects/${p.id}`} className="font-semibold text-violet-600 dark:text-violet-400 hover:underline block truncate">
+                      {p.projectName}
+                    </Link>
+                    <p className="font-mono text-[11px] text-muted-foreground mt-0.5">{p.projectCode}</p>
+                  </div>
+                  {statusPill(p)}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <Badge variant="outline">{TYPE_LABELS[p.projectType] ?? p.projectType}</Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Client</p>
+                    <p className="truncate text-foreground">{p.clientName || '—'}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Manager</p>
+                    <p className="truncate text-foreground">{p.projectManager?.name ?? '—'}</p>
+                  </div>
+                </div>
+                <div className="flex justify-end border-t pt-2">{renderActions(p)}</div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* ── md and up: full table (scrolls horizontally if cramped) ── */}
+      <div className="hidden md:block rounded-lg border bg-card overflow-x-auto shadow-sm">
         <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-indigo-500 via-violet-500 to-fuchsia-500" />
         <Table>
           <TableHeader>
@@ -148,53 +237,14 @@ export default function ProjectsPage() {
                       </Link>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{
-                        ({ fresh_implement: 'Fresh Implement', migration: 'Migration', change_request: 'Change Request', support: 'Support', development: 'Development', consulting: 'Consulting', maintenance: 'Maintenance' } as Record<string, string>)[p.projectType] ?? p.projectType
-                      }</Badge>
+                      <Badge variant="outline">{TYPE_LABELS[p.projectType] ?? p.projectType}</Badge>
                     </TableCell>
                     <TableCell className="text-slate-600">{p.clientName}</TableCell>
                     <TableCell className="text-slate-600 text-sm">
                       {p.projectManager ? p.projectManager.name : <span className="text-muted-foreground">—</span>}
                     </TableCell>
-                    <TableCell>
-                      {(() => {
-                        const s = (p as any).status ?? 'active';
-                        const cls = s === 'active'
-                          ? 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30'
-                          : s === 'completed'
-                            ? 'bg-blue-500/15 text-blue-600 ring-blue-500/30'
-                            : 'bg-slate-500/15 text-slate-500 ring-slate-500/30';
-                        return (
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${cls}`}>
-                            {s === 'active' ? 'Active' : s === 'completed' ? 'Completed' : 'Inactive'}
-                          </span>
-                        );
-                      })()}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost" size="icon" className="h-7 w-7 text-violet-500 hover:text-violet-600"
-                          title="Planning"
-                          onClick={() => router.push(`/projects/${p.id}/planning`)}
-                        >
-                          <ClipboardList className="h-3.5 w-3.5" />
-                        </Button>
-                        {!isEmployee && (
-                          <>
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => router.push(`/projects/${p.id}`)}>
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600"
-                              onClick={() => { if (confirm(`Remove "${p.projectName}"?`)) deleteMutation.mutate({ id: p.id, name: p.projectName }); }}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </TableCell>
+                    <TableCell>{statusPill(p)}</TableCell>
+                    <TableCell>{renderActions(p)}</TableCell>
                   </TableRow>
                 ))}
           </TableBody>

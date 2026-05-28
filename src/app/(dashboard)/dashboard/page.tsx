@@ -222,7 +222,7 @@ function TodayEventsWidget({ isEmployee }: { isEmployee?: boolean }) {
   return (
     <Card className="shadow-sm">
       <CardHeader className="pb-2">
-        <div className="flex gap-1 p-0.5 bg-muted rounded-lg w-fit">
+        <div className="flex flex-wrap gap-1 p-0.5 bg-muted rounded-lg w-fit max-w-full">
           <button onClick={() => setEvtTab('on-leave')}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${evtTab === 'on-leave' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
             {/* <Plane className="h-3.5 w-3.5 text-sky-500" /> */}
@@ -352,17 +352,17 @@ function EmployeeDashboard() {
       <div className="relative overflow-hidden rounded-2xl border-0 shadow-lg">
         <div className="absolute inset-0 bg-linear-to-r from-indigo-600 via-violet-600 to-purple-600" />
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djZoLTZWMzRoNnptMC0zMHY2aC02VjRoNnptMCAzMHY2aC02di02aDZ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30" />
-        <div className="relative px-6 py-6 flex items-center justify-between">
-          <div>
+        <div className="relative px-4 py-5 sm:px-6 sm:py-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <p className="text-sm font-medium text-white/70">Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'},</p>
-            <h1 className="text-2xl font-bold text-white mt-0.5">{displayName}</h1>
+            <h1 className="text-xl sm:text-2xl font-bold text-white mt-0.5 truncate">{displayName}</h1>
             <p className="text-sm text-white/60 mt-1">
               {todayFilled
                 ? `Today's sheet submitted (${todayHours}h)`
                 : "You haven't filled today's sheet yet"}
             </p>
           </div>
-          <Button asChild size="sm" className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg">
+          <Button asChild size="sm" className="w-full sm:w-auto shrink-0 bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg">
             <Link href="/task-sheets/fill">
               <ClipboardList className="mr-1.5 h-4 w-4" />
               {todayFilled ? 'View Sheet' : 'Fill Sheet'}
@@ -827,8 +827,8 @@ function ClientDashboard() {
         <div className="absolute inset-0 bg-linear-to-r from-blue-600 via-blue-700 to-blue-900" />
         <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
         <div className="absolute -right-4 bottom-2 h-24 w-24 rounded-full bg-blue-300/20 blur-xl" />
-        <div className="relative px-6 py-6 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4 min-w-0">
+        <div className="relative px-4 py-5 sm:px-6 sm:py-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
             {client.companyLogoUrl ? (
               <img
                 src={`${apiBase}${client.companyLogoUrl}`}
@@ -844,7 +844,7 @@ function ClientDashboard() {
               <p className="text-sm font-medium text-white/75">
                 Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'},
               </p>
-              <h1 className="text-2xl font-bold text-white mt-0.5 truncate">{client.fullName}</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-white mt-0.5 truncate">{client.fullName}</h1>
               <p className="text-sm text-white/70 mt-0.5 truncate">
                 {client.projectName ? (
                   <>
@@ -858,7 +858,7 @@ function ClientDashboard() {
             </div>
           </div>
           {client.projectId ? (
-            <Button asChild size="sm" className="shrink-0 bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg">
+            <Button asChild size="sm" className="w-full sm:w-auto shrink-0 bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg">
               <Link href={`/projects/${client.projectId}`}>
                 <FolderKanban className="mr-1.5 h-4 w-4" />
                 View Project

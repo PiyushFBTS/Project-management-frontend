@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
 import { Suspense, useState, useEffect } from 'react';
@@ -422,14 +423,14 @@ function LeaveRequestsContent() {
       <div className="relative overflow-hidden rounded-2xl shadow-lg">
         <div className="absolute inset-0 bg-linear-to-r from-orange-600 via-rose-600 to-violet-600" />
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djZoLTZWMzRoNnptMC0zMHY2aC02VjRoNnptMCAzMHY2aC02di02aDZ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30" />
-        <div className="relative px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+        <div className="relative px-4 py-4 sm:px-6 sm:py-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
               <CalendarDays className="h-5 w-5 text-white" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">Leave Requests</h1>
-              <p className="text-sm text-white/60">Leave requests & approvals</p>
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl font-bold text-white truncate">Leave Requests</h1>
+              <p className="text-xs sm:text-sm text-white/60 truncate">Leave requests & approvals</p>
             </div>
           </div>
           {(isEmployee || isAdmin) && (() => {
@@ -444,7 +445,7 @@ function LeaveRequestsContent() {
                   setApplyMode(onTeamTab ? 'on-behalf' : 'self');
                   setApplyOpen(true);
                 }}
-                className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg"
+                className="w-full sm:w-auto shrink-0 bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg"
                 size="sm"
               >
                 <Plus className="mr-1.5 h-4 w-4" />
@@ -459,14 +460,14 @@ function LeaveRequestsContent() {
           Plain employees with no reports → 2 tabs: My Leave + Calendar.
           HR + Reporting Managers         → 3 tabs: My / Team / Calendar. */}
       {isEmployee && (
-        <div className="flex rounded-lg border border-border bg-muted/50 p-1 w-fit">
+        <div className="flex rounded-lg border border-border bg-muted/50 p-1 w-fit max-w-full overflow-x-auto scrollbar-hide">
           {((canSeeTeam
             ? ['my-leaves', 'team-leaves', 'calendar']
             : ['my-leaves', 'calendar']) as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => { setTab(t); if (t !== 'team-leaves') setTeamEmployeeId(''); }}
-              className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
+              className={`shrink-0 whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
                 tab === t
                   ? 'bg-white dark:bg-card shadow-sm text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
@@ -484,12 +485,12 @@ function LeaveRequestsContent() {
 
       {/* Admin tabs — My Leaves / Team Leaves / Calendar */}
       {isAdmin && (
-        <div className="flex rounded-lg border border-border bg-muted/50 p-1 w-fit">
+        <div className="flex rounded-lg border border-border bg-muted/50 p-1 w-fit max-w-full overflow-x-auto scrollbar-hide">
           {(['my-leaves', 'team-leaves', 'calendar'] as AdminTab[]).map((t) => (
             <button
               key={t}
               onClick={() => setAdminTab(t)}
-              className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
+              className={`shrink-0 whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
                 adminTab === t
                   ? 'bg-white dark:bg-card shadow-sm text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
@@ -513,7 +514,7 @@ function LeaveRequestsContent() {
           </div>
         )}
         {isEmployee && tab === 'team-leaves' && (
-          <div className="w-56">
+          <div className="w-full sm:w-56">
             <SearchableSelect
               placeholder="Filter by employee"
               value={teamEmployeeId}
@@ -525,7 +526,7 @@ function LeaveRequestsContent() {
             />
           </div>
         )}
-        <div className="w-44">
+        <div className="w-full sm:w-44">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
             <SelectContent>
@@ -536,10 +537,10 @@ function LeaveRequestsContent() {
             </SelectContent>
           </Select>
         </div>
-        <div className="flex gap-2 items-center">
-          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-36" />
-          <span className="text-muted-foreground text-sm">to</span>
-          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-36" />
+        <div className="flex w-full sm:w-auto gap-2 items-center">
+          <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="flex-1 sm:w-36" />
+          <span className="text-muted-foreground text-sm shrink-0">to</span>
+          <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="flex-1 sm:w-36" />
         </div>
         {(statusFilter !== 'all' || dateFrom || dateTo || search || teamEmployeeId) && (
           <Button
@@ -863,7 +864,7 @@ function LeaveRequestsContent() {
       {/* Apply for Leave Dialog — open for both employee and admin */}
       {(isEmployee || isAdmin) && (
         <Dialog open={applyOpen} onOpenChange={(v) => { if (!v) { setApplyOpen(false); setApplyMode('self'); setApplyForm({ leaveReasonId: '', dateFrom: '', dateTo: '', remarks: '', watcherIds: [], onBehalfOfEmployeeId: '' }); } }}>
-          <DialogContent className="max-w-md overflow-hidden">
+          <DialogContent className="max-w-md overflow-hidden py-8">
             <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-orange-500 via-rose-500 to-violet-500" />
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
