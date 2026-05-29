@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Plus, Pencil, Trash2, ClipboardList, FolderKanban, Search as SearchIcon } from 'lucide-react';
+import { Plus, Pencil, Trash2, ClipboardList, FolderKanban, Search as SearchIcon, Layers, ChevronDown, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { projectsApi } from '@/lib/api/projects';
@@ -30,6 +30,8 @@ export default function ProjectsPage() {
   const canSeeInactive = !isEmployee || isHr;
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
+  const [groupFilter, setGroupFilter] = useState<string>('all'); // 'all' | groupId | 'ungrouped'
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   // Regular employees can only see active projects — mirror the employees page pattern.
   const effectiveStatus = canSeeInactive ? statusFilter : 'active';
 
@@ -114,6 +116,104 @@ export default function ProjectsPage() {
     </div>
   );
 
+  // ── Grouping: split projects into their "primary name" umbrellas + the
+  // standalone (ungrouped) ones. Group info rides on each project (p.group).
+  const { groups, ungrouped } = useMemo(() => {
+    const map = new Map<number, { id: number; name: string; projects: any[] }>();
+    const loose: any[] = [];
+    for (const p of (data ?? []) as any[]) {
+      const g = p.group;
+      if (g?.id) {
+        const entry = map.get(g.id) ?? { id: g.id, name: g.name, projects: [] as any[] };
+        entry.projects.push(p);
+        map.set(g.id, entry);
+      } else {
+        loose.push(p);
+      }
+    }
+    return {
+      groups: [...map.values()].sort((a, b) => a.name.localeCompare(b.name)),
+      ungrouped: loose,
+    };
+  }, [data]);
+
+  const visibleGroups = groupFilter === 'all'
+    ? groups
+    : groupFilter === 'ungrouped'
+      ? []
+      : groups.filter((g) => String(g.id) === groupFilter);
+  const showUngrouped = groupFilter === 'all' || groupFilter === 'ungrouped';
+  const hasGroups = groups.length > 0;
+  const total = (data ?? []).length;
+
+  const toggleGroup = (id: number) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  const groupBadges = (projects: any[]) => {
+    const types = Array.from(new Set(projects.map((p) => p.projectType).filter(Boolean)));
+    return types.map((t) => (
+      <Badge key={t as string} variant="outline" className="text-[10px]">
+        {TYPE_LABELS[t as string] ?? (t as string)}
+      </Badge>
+    ));
+  };
+
+  // ── Single-source card (mobile) + row (desktop) renderers ──
+  const projectCard = (p: any) => (
+    <div key={p.id} className="rounded-lg border bg-card shadow-sm overflow-hidden">
+      <div className="h-1 bg-linear-to-r from-indigo-500 via-violet-500 to-fuchsia-500" />
+      <div className="p-4 space-y-2.5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <Link href={`/projects/${p.id}`} className="font-semibold text-violet-600 dark:text-violet-400 hover:underline block truncate">
+              {p.projectName}
+            </Link>
+            <p className="font-mono text-[11px] text-muted-foreground mt-0.5">{p.projectCode}</p>
+          </div>
+          {statusPill(p)}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <Badge variant="outline">{TYPE_LABELS[p.projectType] ?? p.projectType}</Badge>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Client</p>
+            <p className="truncate text-foreground">{p.clientName || '—'}</p>
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Manager</p>
+            <p className="truncate text-foreground">{p.projectManager?.name ?? '—'}</p>
+          </div>
+        </div>
+        <div className="flex justify-end border-t pt-2">{renderActions(p)}</div>
+      </div>
+    </div>
+  );
+
+  const projectRow = (p: any) => (
+    <TableRow key={p.id}>
+      <TableCell className="font-mono text-xs">{p.projectCode}</TableCell>
+      <TableCell className="font-medium">
+        <Link href={`/projects/${p.id}`} className="text-violet-600 dark:text-violet-400 hover:underline">
+          {p.projectName}
+        </Link>
+      </TableCell>
+      <TableCell>
+        <Badge variant="outline">{TYPE_LABELS[p.projectType] ?? p.projectType}</Badge>
+      </TableCell>
+      <TableCell className="text-slate-600">{p.clientName}</TableCell>
+      <TableCell className="text-slate-600 text-sm">
+        {p.projectManager ? p.projectManager.name : <span className="text-muted-foreground">—</span>}
+      </TableCell>
+      <TableCell>{statusPill(p)}</TableCell>
+      <TableCell>{renderActions(p)}</TableCell>
+    </TableRow>
+  );
+
   return (
     <div className="space-y-4">
       {/* Gradient Header */}
@@ -162,45 +262,60 @@ export default function ProjectsPage() {
             </SelectContent>
           </Select>
         )}
+        {hasGroups && (
+          <Select value={groupFilter} onValueChange={setGroupFilter}>
+            <SelectTrigger className="w-full xs:w-44"><SelectValue placeholder="All groups" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All groups</SelectItem>
+              {ungrouped.length > 0 && <SelectItem value="ungrouped">Ungrouped</SelectItem>}
+              {groups.map((g) => <SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       {/* ── Mobile / small screens: card list (below md) ── */}
       <div className="md:hidden space-y-3">
         {isLoading ? (
           [...Array(4)].map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-lg" />)
-        ) : (data ?? []).length === 0 ? (
+        ) : total === 0 ? (
           <div className="rounded-lg border bg-card p-8 text-center text-sm text-muted-foreground">No projects found.</div>
         ) : (
-          (data ?? []).map((p) => (
-            <div key={p.id} className="rounded-lg border bg-card shadow-sm overflow-hidden">
-              <div className="h-1 bg-linear-to-r from-indigo-500 via-violet-500 to-fuchsia-500" />
-              <div className="p-4 space-y-2.5">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <Link href={`/projects/${p.id}`} className="font-semibold text-violet-600 dark:text-violet-400 hover:underline block truncate">
-                      {p.projectName}
+          <>
+            {visibleGroups.map((g) => {
+              const isOpen = !collapsed.has(g.id);
+              return (
+                <div key={g.id} className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(g.id)}
+                    className="w-full flex items-center gap-2 rounded-lg border bg-card px-3 py-2.5 text-left shadow-sm"
+                  >
+                    {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
+                    <Layers className="h-4 w-4 text-teal-500 shrink-0" />
+                    <Link href={`/project-groups/${g.id}`} onClick={(e) => e.stopPropagation()} className="font-semibold text-foreground hover:underline truncate">
+                      {g.name}
                     </Link>
-                    <p className="font-mono text-[11px] text-muted-foreground mt-0.5">{p.projectCode}</p>
-                  </div>
-                  {statusPill(p)}
+                    <Badge variant="secondary" className="text-[10px] shrink-0">{g.projects.length}</Badge>
+                    <div className="ml-auto hidden xs:flex flex-wrap gap-1 justify-end">{groupBadges(g.projects)}</div>
+                  </button>
+                  {isOpen && (
+                    <div className="space-y-3 border-l-2 border-teal-500/30 pl-3">
+                      {g.projects.map(projectCard)}
+                    </div>
+                  )}
                 </div>
-                <div className="flex flex-wrap items-center gap-2 text-xs">
-                  <Badge variant="outline">{TYPE_LABELS[p.projectType] ?? p.projectType}</Badge>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="min-w-0">
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Client</p>
-                    <p className="truncate text-foreground">{p.clientName || '—'}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Manager</p>
-                    <p className="truncate text-foreground">{p.projectManager?.name ?? '—'}</p>
-                  </div>
-                </div>
-                <div className="flex justify-end border-t pt-2">{renderActions(p)}</div>
-              </div>
-            </div>
-          ))
+              );
+            })}
+            {showUngrouped && ungrouped.length > 0 && (
+              <>
+                {hasGroups && (
+                  <p className="px-1 pt-1 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Ungrouped</p>
+                )}
+                {ungrouped.map(projectCard)}
+              </>
+            )}
+          </>
         )}
       </div>
 
@@ -220,33 +335,53 @@ export default function ProjectsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoading
-              ? [...Array(5)].map((_, i) => (
-                  <TableRow key={i}>
-                    {[...Array(7)].map((__, j) => (
-                      <TableCell key={j}><Skeleton className="h-5 w-24" /></TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              : (data ?? []).map((p) => (
-                  <TableRow key={p.id}>
-                    <TableCell className="font-mono text-xs">{p.projectCode}</TableCell>
-                    <TableCell className="font-medium">
-                      <Link href={`/projects/${p.id}`} className="text-violet-600 dark:text-violet-400 hover:underline">
-                        {p.projectName}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{TYPE_LABELS[p.projectType] ?? p.projectType}</Badge>
-                    </TableCell>
-                    <TableCell className="text-slate-600">{p.clientName}</TableCell>
-                    <TableCell className="text-slate-600 text-sm">
-                      {p.projectManager ? p.projectManager.name : <span className="text-muted-foreground">—</span>}
-                    </TableCell>
-                    <TableCell>{statusPill(p)}</TableCell>
-                    <TableCell>{renderActions(p)}</TableCell>
-                  </TableRow>
-                ))}
+            {isLoading ? (
+              [...Array(5)].map((_, i) => (
+                <TableRow key={i}>
+                  {[...Array(7)].map((__, j) => (
+                    <TableCell key={j}><Skeleton className="h-5 w-24" /></TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : total === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center text-sm text-muted-foreground py-8">No projects found.</TableCell>
+              </TableRow>
+            ) : (
+              <>
+                {visibleGroups.map((g) => {
+                  const isOpen = !collapsed.has(g.id);
+                  return (
+                    <Fragment key={g.id}>
+                      <TableRow className="bg-muted/40 hover:bg-muted/40">
+                        <TableCell colSpan={7} className="py-2">
+                          <button type="button" onClick={() => toggleGroup(g.id)} className="flex items-center gap-2 w-full text-left">
+                            {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                            <Layers className="h-4 w-4 text-teal-500" />
+                            <Link href={`/project-groups/${g.id}`} onClick={(e) => e.stopPropagation()} className="font-semibold hover:underline">
+                              {g.name}
+                            </Link>
+                            <Badge variant="secondary" className="text-[10px]">{g.projects.length}</Badge>
+                            <div className="ml-2 flex flex-wrap gap-1">{groupBadges(g.projects)}</div>
+                          </button>
+                        </TableCell>
+                      </TableRow>
+                      {isOpen && g.projects.map(projectRow)}
+                    </Fragment>
+                  );
+                })}
+                {showUngrouped && ungrouped.length > 0 && (
+                  <>
+                    {hasGroups && (
+                      <TableRow className="bg-muted/20 hover:bg-muted/20">
+                        <TableCell colSpan={7} className="py-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">Ungrouped</TableCell>
+                      </TableRow>
+                    )}
+                    {ungrouped.map(projectRow)}
+                  </>
+                )}
+              </>
+            )}
           </TableBody>
         </Table>
       </div>

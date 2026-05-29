@@ -8,7 +8,7 @@ import {
   LayoutDashboard, FolderKanban, Tags, Users, Receipt,
   ClipboardList, BarChart3, ChevronDown, X,
   ChevronLeft, ChevronRight, CalendarDays, Building2, LogOut, Settings, ListTodo, Ticket, Mail,
-  Megaphone, Wallet,
+  Megaphone, Wallet, Layers,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -54,6 +54,13 @@ const navItems: NavItem[] = [
     iconColor: 'text-cyan-400', iconBg: 'bg-cyan-500/20',
     activeBg: 'bg-cyan-500/20', hoverBg: 'hover:bg-cyan-500/10',
     borderColor: 'border-l-cyan-400', dotColor: 'bg-cyan-400',
+    adminOnly: true,
+  },
+  {
+    label: 'Project Groups', href: '/project-groups', icon: Layers,
+    iconColor: 'text-teal-400', iconBg: 'bg-teal-500/20',
+    activeBg: 'bg-teal-500/20', hoverBg: 'hover:bg-teal-500/10',
+    borderColor: 'border-l-teal-400', dotColor: 'bg-teal-400',
     adminOnly: true,
   },
 

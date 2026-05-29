@@ -98,6 +98,29 @@ export default function ProjectDetailPage() {
     enabled: isAdmin && editMode,
   });
 
+  // Project types (dynamic) — replaces the old hardcoded list so the edit
+  // dropdown matches the create form + the types admin page.
+  const { data: dynamicTypesRaw } = useQuery({
+    queryKey: ['project-types'],
+    queryFn: () => projectsApi.getProjectTypes().then((r: any) => r.data?.data ?? r.data ?? []),
+    enabled: isAdmin,
+  });
+  const dynamicTypeOptions = ((dynamicTypesRaw ?? []) as any[]).map((t: any) => ({
+    value: t.value ?? '', label: t.label ?? t.value ?? '',
+  }));
+  const typeLabel = (v: string) =>
+    dynamicTypeOptions.find((t) => t.value === v)?.label
+    ?? typeOptions.find((t) => t.value === v)?.label
+    ?? v;
+
+  // Groups for the "primary name" picker (admin, edit mode).
+  const { data: groupsRaw } = useQuery({
+    queryKey: ['project-groups'],
+    queryFn: () => projectsApi.getGroups().then((r: any) => r.data?.data ?? r.data ?? []),
+    enabled: isAdmin && editMode,
+  });
+  const groups = (groupsRaw ?? []) as any[];
+
   const updateMut = useMutation({
     mutationFn: (dto: any) => projectsApi.update(Number(id), dto),
     onSuccess: () => {
@@ -310,6 +333,7 @@ export default function ProjectDetailPage() {
       endDate: project.endDate?.slice(0, 10) ?? '',
       description: project.description ?? '',
       projectManagerId: project.projectManagerId?.toString() ?? 'none',
+      groupId: project.groupId?.toString() ?? 'none',
     });
     setEditMode(true);
   };
@@ -329,6 +353,7 @@ export default function ProjectDetailPage() {
       endDate: form.endDate || undefined,
       description: form.description || undefined,
       projectManagerId: form.projectManagerId && form.projectManagerId !== 'none' ? Number(form.projectManagerId) : null,
+      groupId: form.groupId && form.groupId !== 'none' ? Number(form.groupId) : null,
     });
   };
 
@@ -492,12 +517,29 @@ export default function ProjectDetailPage() {
             <FolderKanban className="h-3 w-3" /> Type
           </div>
           {!editMode ? (
-            <p className="text-sm font-medium">{typeOptions.find((t) => t.value === project.projectType)?.label ?? project.projectType}</p>
+            <p className="text-sm font-medium">{typeLabel(project.projectType)}</p>
           ) : (
             <Select value={form.projectType} onValueChange={(v) => setForm((p) => ({ ...p, projectType: v }))}>
               <SelectTrigger className="h-8 text-sm  w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {typeOptions.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                {(dynamicTypeOptions.length ? dynamicTypeOptions : typeOptions).map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+
+        <div className="rounded-xl border bg-card p-4">
+          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-teal-600 dark:text-teal-400 mb-1.5">
+            <Layers className="h-3 w-3" /> Project Group
+          </div>
+          {!editMode ? (
+            <p className="text-sm font-medium">{project.group?.name ?? '—'}</p>
+          ) : (
+            <Select value={form.groupId} onValueChange={(v) => setForm((p) => ({ ...p, groupId: v }))}>
+              <SelectTrigger className="h-8 text-sm w-full"><SelectValue placeholder="Select group" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No group (standalone)</SelectItem>
+                {groups.map((g: any) => <SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>)}
               </SelectContent>
             </Select>
           )}

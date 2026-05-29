@@ -140,6 +140,20 @@ export interface LookupCurrency {
 export type ProjectType = 'project' | 'support' | 'development' | 'consulting' | 'migration' | 'maintenance';
 export type ProjectStatus = 'active' | 'inactive' | 'completed';
 
+// A "primary project name" umbrella that groups several typed projects.
+export interface ProjectGroup {
+  id: number;
+  name: string;
+  code?: string | null;
+  clientName?: string | null;
+  description?: string | null;
+  isActive?: boolean;
+  projectCount?: number;
+  projects?: Array<Pick<Project, 'id' | 'projectCode' | 'projectName' | 'projectType' | 'status'>>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Project {
   id: number;
   projectCode: string;
@@ -152,6 +166,8 @@ export interface Project {
   description?: string;
   projectManagerId?: number;
   projectManager?: { id: number; name: string; empCode: string };
+  groupId?: number | null;
+  group?: { id: number; name: string } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -166,6 +182,7 @@ export interface CreateProjectDto {
   endDate?: string;
   description?: string;
   projectManagerId?: number;
+  groupId?: number | null;
 }
 
 export type UpdateProjectDto = Partial<CreateProjectDto>;

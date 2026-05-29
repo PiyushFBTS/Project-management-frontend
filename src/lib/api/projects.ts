@@ -1,6 +1,13 @@
 import { api } from './axios-instance';
 import { tokenStorage } from '@/lib/auth/token-storage';
-import { ApiResponse, Project, CreateProjectDto, UpdateProjectDto, PaginationParams, Employee } from '@/types';
+import { ApiResponse, Project, CreateProjectDto, UpdateProjectDto, PaginationParams, Employee, ProjectGroup } from '@/types';
+
+export interface ProjectGroupDto {
+  name: string;
+  code?: string;
+  clientName?: string;
+  description?: string;
+}
 
 export interface ProjectMember {
   id: number;
@@ -133,4 +140,27 @@ export const projectsApi = {
 
   deleteProjectType: (typeId: number) =>
     api.delete(`${projectsBase()}/types/${typeId}`),
+
+  // Project Groups (primary-name umbrellas) — admins use /projects,
+  // employees/HR use /employee/projects (reads open, writes HR-only).
+  getGroups: (search?: string) =>
+    api.get<ApiResponse<ProjectGroup[]>>(`${projectsBase()}/groups/list`, {
+      params: search ? { search } : undefined,
+    }),
+
+  getGroup: (id: number) =>
+    api.get<ApiResponse<ProjectGroup>>(`${projectsBase()}/groups/${id}`),
+
+  createGroup: (dto: ProjectGroupDto) =>
+    api.post<ApiResponse<ProjectGroup>>(`${projectsBase()}/groups`, dto),
+
+  updateGroup: (id: number, dto: Partial<ProjectGroupDto>) =>
+    api.patch<ApiResponse<ProjectGroup>>(`${projectsBase()}/groups/${id}`, dto),
+
+  deleteGroup: (id: number) =>
+    api.delete<ApiResponse<{ ungrouped: number }>>(`${projectsBase()}/groups/${id}`),
+
+  // Bulk-fold existing projects into a group (migration helper).
+  assignProjectsToGroup: (groupId: number, projectIds: number[]) =>
+    api.post<ApiResponse<{ assigned: number }>>(`${projectsBase()}/groups/${groupId}/assign`, { projectIds }),
 };

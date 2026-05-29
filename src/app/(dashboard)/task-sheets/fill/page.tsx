@@ -101,6 +101,17 @@ function to12Parts(v: string): { h: string; m: string; ampm: 'AM' | 'PM' } {
   return { h: String(h12), m: mStr ?? '', ampm };
 }
 
+/// Convert typed 12-hour parts to a "HH:MM" 24-hour string, or '' if the
+/// input is incomplete / out of range.
+function to24(nh: string, nm: string, nAmpm: 'AM' | 'PM'): string {
+  const hh = parseInt(nh, 10);
+  const mm = parseInt(nm, 10);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm) || hh < 1 || hh > 12 || mm < 0 || mm > 59) return '';
+  let h24 = hh % 12;
+  if (nAmpm === 'PM') h24 += 12;
+  return `${String(h24).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+
 /// 12-hour time picker: typed hour (1-12), typed minute (00-59), AM/PM
 /// select. Emits "HH:MM" 24-hour upward so the rest of the form
 /// (diffHours, parseTimeToMinutes, the API contract) stays unchanged.
@@ -113,7 +124,11 @@ function Time12Picker({ value, onChange }: { value: string; onChange: (v: string
   const [ampm, setAmpm] = useState<'AM' | 'PM'>(initAmpm);
 
   // Re-sync when the parent value changes (edit-mode prefill, suggestFromTime).
+  // Guard: skip when the parent value already matches what the current inputs
+  // emit — otherwise typing a minute re-pads "3" → "03" and you can never
+  // reach "30" (the hour is unpadded so it wasn't affected).
   useEffect(() => {
+    if (to24(h, m, ampm) === value) return;
     const parts = to12Parts(value);
     setH(parts.h);
     setM(parts.m);
@@ -122,15 +137,7 @@ function Time12Picker({ value, onChange }: { value: string; onChange: (v: string
   }, [value]);
 
   const emit = (nh: string, nm: string, nAmpm: 'AM' | 'PM') => {
-    const hh = parseInt(nh, 10);
-    const mm = parseInt(nm, 10);
-    if (!Number.isFinite(hh) || !Number.isFinite(mm) || hh < 1 || hh > 12 || mm < 0 || mm > 59) {
-      onChange('');
-      return;
-    }
-    let h24 = hh % 12;
-    if (nAmpm === 'PM') h24 += 12;
-    onChange(`${String(h24).padStart(2, '0')}:${String(mm).padStart(2, '0')}`);
+    onChange(to24(nh, nm, nAmpm));
   };
 
   const wrap = (n: number, min: number, max: number) => {
