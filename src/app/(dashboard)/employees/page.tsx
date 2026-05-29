@@ -65,6 +65,11 @@ export default function EmployeesPage() {
       ).then((r) => r.data.data),
   });
 
+  // Show employees alphabetically by name (case-insensitive).
+  const sortedEmployees = [...(data ?? [])].sort((a, b) =>
+    (a.name ?? '').localeCompare(b.name ?? '', undefined, { sensitivity: 'base' }),
+  );
+
   const { data: projects } = useQuery({
     queryKey: ['projects-active'],
     queryFn: () => projectsApi.getAll({ status: 'active', limit: 200 }).then((r) => r.data.data),
@@ -164,13 +169,13 @@ export default function EmployeesPage() {
             </Card>
           ))}
         </div>
-      ) : (data ?? []).length === 0 ? (
+      ) : sortedEmployees.length === 0 ? (
         <Card className="py-12 text-center text-muted-foreground">
           No employees found.
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-3 xs:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-          {(data ?? []).map((emp) => {
+          {sortedEmployees.map((emp) => {
             const isAdminRow = (emp as any)._type === 'admin';
             const roleLabel = typeLabels[emp.consultantType] ?? 'Employee';
             return (

@@ -5,7 +5,7 @@ import { use, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { format } from 'date-fns';
-import { ArrowLeft, BarChart3, FolderKanban, Ticket as TicketIcon, Download } from 'lucide-react';
+import { ArrowLeft, BarChart3, FolderKanban, Ticket as TicketIcon, Download, ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { reportsApi } from '@/lib/api/reports';
 import { downloadBlob } from '@/lib/utils/download';
@@ -88,6 +88,15 @@ export default function EmployeeBreakdownPage({
     total_man_days: number;
   };
 
+  // Collapsible project sections — collapsed ids are hidden.
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  const toggleProject = (id: number) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
   const [exporting, setExporting] = useState(false);
   const handleExport = async () => {
     if (exporting) return;
@@ -163,11 +172,20 @@ export default function EmployeeBreakdownPage({
         </div>
       ) : (
         <div className="space-y-3">
-          {projects.map((proj) => (
+          {projects.map((proj) => {
+            const isOpen = !collapsed.has(proj.project_id);
+            return (
             <div key={proj.project_id} className="rounded-lg border bg-card overflow-hidden shadow-sm">
-              {/* Project header */}
-              <div className="flex items-center justify-between gap-3 px-4 py-3 bg-linear-to-r from-blue-50 to-blue-100/40 dark:from-blue-950/40 dark:to-blue-900/20 border-b border-blue-500/15">
+              {/* Project header — click to collapse / expand */}
+              <button
+                type="button"
+                onClick={() => toggleProject(proj.project_id)}
+                className="w-full text-left flex items-center justify-between gap-3 px-4 py-3 bg-linear-to-r from-blue-50 to-blue-100/40 dark:from-blue-950/40 dark:to-blue-900/20 border-b border-blue-500/15"
+              >
                 <div className="flex items-center gap-2 min-w-0">
+                  {isOpen
+                    ? <ChevronDown className="h-4 w-4 shrink-0 text-blue-700 dark:text-blue-400" />
+                    : <ChevronRight className="h-4 w-4 shrink-0 text-blue-700 dark:text-blue-400" />}
                   <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-linear-to-br from-blue-600 to-blue-800 text-white">
                     <FolderKanban className="h-3.5 w-3.5" />
                   </span>
@@ -193,12 +211,13 @@ export default function EmployeeBreakdownPage({
                     })()}
                   </p>
                 </div>
-              </div>
+              </button>
               {/* Ticket / activity rows.
                   - Ticketed → ticket-number badge + summed hours.
                   - Non-ticketed → activity_type badge (Internal
                     Meeting / Client Meeting / Other) so each piece of
                     work shows up in detail with its own row. */}
+              {isOpen && (
               <ul className="divide-y">
                 {proj.tickets.map((t, idx) => {
                   const isTicketed = t.ticket_id != null;
@@ -242,8 +261,10 @@ export default function EmployeeBreakdownPage({
                   );
                 })}
               </ul>
+              )}
             </div>
-          ))}
+            );
+          })}
 
           <div className="flex justify-end">
             <Badge variant="secondary" className="text-sm font-semibold">
