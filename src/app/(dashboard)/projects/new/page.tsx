@@ -64,6 +64,12 @@ function NewProjectPage() {
     groupId: groupFromUrl,
   });
 
+  // Per-field validation: which required fields are currently flagged
+  // (highlighted red + inline "Required"). Cleared as the user fixes each.
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
+  const clearError = (key: string) =>
+    setErrors((e) => (e[key] ? { ...e, [key]: false } : e));
+
   // Inline "create group" dialog state
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
   const [newGroupName, setNewGroupName] = useState('');
@@ -149,12 +155,20 @@ function NewProjectPage() {
   };
 
   const handleSave = () => {
-    console.log("form",form);
-    
-    if (!form.projectCode.trim() || !form.projectName.trim() || !form.projectType || !form.startDate) {
-      toast.error('Please fill in all required fields (Code, Name, Type, Start Date)');
+    // Collect each missing required field so we can name it + highlight it.
+    const missing: { key: string; label: string }[] = [];
+    if (!form.projectCode.trim()) missing.push({ key: 'projectCode', label: 'Project Code' });
+    if (!form.projectName.trim()) missing.push({ key: 'projectName', label: 'Project Name' });
+    if (!form.projectType) missing.push({ key: 'projectType', label: 'Type' });
+    if (!form.startDate) missing.push({ key: 'startDate', label: 'Start Date' });
+
+    if (missing.length > 0) {
+      setErrors(Object.fromEntries(missing.map((m) => [m.key, true])));
+      const names = missing.map((m) => m.label).join(', ');
+      toast.error(missing.length === 1 ? `${names} is required` : `Required: ${names}`);
       return;
     }
+    setErrors({});
     if (milestones.length === 0) {
       toast.error('Please add at least one milestone');
       return;
@@ -245,10 +259,11 @@ function NewProjectPage() {
           </div>
           <Input
             value={form.projectCode}
-            onChange={(e) => setForm((p) => ({ ...p, projectCode: e.target.value }))}
+            onChange={(e) => { setForm((p) => ({ ...p, projectCode: e.target.value })); clearError('projectCode'); }}
             placeholder="e.g. PRJ-001"
-            className="h-8 text-sm font-mono"
+            className={`h-8 text-sm font-mono ${errors.projectCode ? 'border-red-500 ring-1 ring-red-500' : ''}`}
           />
+          {errors.projectCode && <p className="text-[10px] text-red-500 mt-1">Project Code is required</p>}
         </div>
 
         <div className="rounded-xl border bg-card p-4">
@@ -257,10 +272,11 @@ function NewProjectPage() {
           </div>
           <Input
             value={form.projectName}
-            onChange={(e) => setForm((p) => ({ ...p, projectName: capitalizeFirst(e.target.value) }))}
+            onChange={(e) => { setForm((p) => ({ ...p, projectName: capitalizeFirst(e.target.value) })); clearError('projectName'); }}
             placeholder="e.g. E-commerce Platform"
-            className="h-8 text-sm"
+            className={`h-8 text-sm ${errors.projectName ? 'border-red-500 ring-1 ring-red-500' : ''}`}
           />
+          {errors.projectName && <p className="text-[10px] text-red-500 mt-1">Project Name is required</p>}
         </div>
 
         <div className="rounded-xl border bg-card p-4">
@@ -279,12 +295,13 @@ function NewProjectPage() {
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-violet-600 dark:text-violet-400 mb-1.5">
             <FolderKanban className="h-3 w-3" /> Type <span className="text-red-500">*</span>
           </div>
-          <Select value={form.projectType} onValueChange={(v) => setForm((p) => ({ ...p, projectType: v }))}>
-            <SelectTrigger className="h-8 text-sm w-full"><SelectValue /></SelectTrigger>
+          <Select value={form.projectType} onValueChange={(v) => { setForm((p) => ({ ...p, projectType: v })); clearError('projectType'); }}>
+            <SelectTrigger className={`h-8 text-sm w-full ${errors.projectType ? 'border-red-500 ring-1 ring-red-500' : ''}`}><SelectValue placeholder="Select type" /></SelectTrigger>
             <SelectContent>
               {typeOptions.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
             </SelectContent>
           </Select>
+          {errors.projectType && <p className="text-[10px] text-red-500 mt-1">Type is required</p>}
         </div>
 
         <div className="rounded-xl border bg-card p-4">
@@ -347,9 +364,10 @@ function NewProjectPage() {
           <Input
             type="date"
             value={form.startDate}
-            onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))}
-            className="h-8 text-sm"
+            onChange={(e) => { setForm((p) => ({ ...p, startDate: e.target.value })); clearError('startDate'); }}
+            className={`h-8 text-sm ${errors.startDate ? 'border-red-500 ring-1 ring-red-500' : ''}`}
           />
+          {errors.startDate && <p className="text-[10px] text-red-500 mt-1">Start Date is required</p>}
         </div>
 
         <div className="rounded-xl border bg-card p-4">

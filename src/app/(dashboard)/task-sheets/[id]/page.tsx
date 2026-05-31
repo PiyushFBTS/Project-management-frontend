@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams, useRouter } from 'next/navigation';
 import { format } from 'date-fns';
@@ -139,10 +140,6 @@ export default function TaskSheetDetailPage() {
                             : rawAct === 'client_meeting'
                               ? 'Client Meeting'
                               : 'Other';
-                          // Clip description to 100 chars per spec.
-                          const desc = (e.taskDescription ?? '').length > 100
-                            ? `${e.taskDescription.slice(0, 100)}…`
-                            : (e.taskDescription ?? '');
                           return (
                             <TableRow key={e.id}>
                               <TableCell className="text-muted-foreground">{i + 1}</TableCell>
@@ -163,7 +160,7 @@ export default function TaskSheetDetailPage() {
                                 )}
                               </TableCell>
                               <TableCell className="text-sm text-muted-foreground max-w-md">
-                                <div className="truncate" title={e.taskDescription ?? ''}>{desc || '—'}</div>
+                                <ExpandableDesc text={e.taskDescription ?? ''} />
                               </TableCell>
                               <TableCell className="text-sm text-muted-foreground max-w-xs">
                                 {e.blockers ? (
@@ -198,5 +195,46 @@ export default function TaskSheetDetailPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+/// Task description cell: shows the first 40 chars with "…See more" when the
+/// description exceeds 40 characters or spans multiple lines. Expands to the
+/// full text with line breaks preserved exactly as the user entered them.
+function ExpandableDesc({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const trimmed = (text ?? '').trim();
+  if (!trimmed) return <span>—</span>;
+
+  const needsToggle = trimmed.length > 40 || trimmed.includes('\n');
+  if (!needsToggle) return <span>{trimmed}</span>;
+
+  if (expanded) {
+    return (
+      <span>
+        <span className="whitespace-pre-line wrap-break-word">{trimmed}</span>{' '}
+        <button
+          type="button"
+          onClick={() => setExpanded(false)}
+          className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+        >
+          See less
+        </button>
+      </span>
+    );
+  }
+
+  const preview = trimmed.slice(0, 40).replace(/\s+/g, ' ').trimEnd();
+  return (
+    <span>
+      <span>{preview}… </span>
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+      >
+        See more
+      </button>
+    </span>
   );
 }

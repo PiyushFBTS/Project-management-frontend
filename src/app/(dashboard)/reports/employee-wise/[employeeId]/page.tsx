@@ -224,7 +224,7 @@ export default function EmployeeBreakdownPage({
                   return (
                     <li
                       key={`${proj.project_id}-${isTicketed ? `t-${t.ticket_id}` : `a-${idx}-${t.activity_type ?? ''}`}`}
-                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40"
+                      className="flex items-start gap-3 px-4 py-2.5 hover:bg-muted/40"
                     >
                       <TicketIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                       {isTicketed && t.ticket_number ? (
@@ -255,7 +255,7 @@ export default function EmployeeBreakdownPage({
                           {STATUS_LABEL[t.status]}
                         </Badge>
                       )}
-                      <span className="flex-1 min-w-0 truncate text-sm">{t.title}</span>
+                      <ExpandableDesc text={t.title} />
                       <span className="text-sm font-semibold shrink-0">{t.hours.toFixed(1)} hrs</span>
                     </li>
                   );
@@ -274,5 +274,46 @@ export default function EmployeeBreakdownPage({
         </div>
       )}
     </div>
+  );
+}
+
+/// Activity/ticket description: one truncated line with "…See more"; expands
+/// to the full text with line breaks preserved exactly as the user entered
+/// them. The toggle only appears when the text overflows or has line breaks.
+function ExpandableDesc({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const trimmed = (text ?? '').trim();
+  if (!trimmed) return <span className="flex-1 min-w-0 text-sm">—</span>;
+
+  const needsToggle = trimmed.length > 40 || trimmed.includes('\n');
+  if (!needsToggle) return <span className="flex-1 min-w-0 text-sm">{trimmed}</span>;
+
+  if (expanded) {
+    return (
+      <span className="flex-1 min-w-0 text-sm">
+        <span className="whitespace-pre-line wrap-break-word">{trimmed}</span>{' '}
+        <button
+          type="button"
+          onClick={() => setExpanded(false)}
+          className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+        >
+          See less
+        </button>
+      </span>
+    );
+  }
+
+  const preview = trimmed.slice(0, 40).replace(/\s+/g, ' ').trimEnd();
+  return (
+    <span className="flex-1 min-w-0 text-sm">
+      <span>{preview}… </span>
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        className="font-medium text-blue-600 hover:underline dark:text-blue-400"
+      >
+        See more
+      </button>
+    </span>
   );
 }

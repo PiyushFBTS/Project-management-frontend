@@ -257,6 +257,11 @@ function FillTaskSheetPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TaskEntry | null>(null);
   const [form, setForm] = useState(emptyForm);
+  // Per-field validation flags (highlight + inline message). Cleared as
+  // each field is fixed, and reset whenever the dialog opens.
+  const [errors, setErrors] = useState<Record<string, boolean>>({});
+  const clearError = (key: string) =>
+    setErrors((e) => (e[key] ? { ...e, [key]: false } : e));
 
   // Sheet for the selected date (auto-created by backend)
   const { data: sheet, isLoading: sheetLoading, refetch, error: sheetError } = useQuery({
@@ -387,6 +392,7 @@ function FillTaskSheetPage() {
 
   const openAddForm = () => {
     setEditingEntry(null);
+    setErrors({});
     // Pre-fill fromTime with the suggested next slot so the user only
     // has to pick an end time (or override the start).
     setForm({
@@ -398,6 +404,7 @@ function FillTaskSheetPage() {
 
   const openEditForm = (entry: TaskEntry) => {
     setEditingEntry(entry);
+    setErrors({});
     // Restore Ticket/Activity field from whichever column was saved.
     const ticketRef = entry.ticketId
       ? String(entry.ticketId)
@@ -419,32 +426,45 @@ function FillTaskSheetPage() {
 
   const handleSave = () => {
     const isOther = form.projectId === 'other';
-    if (!form.projectId || !form.fromTime || !form.toTime || !form.taskDescription) {
-      toast.error('Please fill all required fields');
+
+    // Collect every missing required field so we can name + highlight each.
+    const e: Record<string, boolean> = {};
+    const missing: string[] = [];
+    if (!form.projectId) { e.project = true; missing.push('Project'); }
+    if (isOther && !form.otherProjectName.trim()) { e.otherProjectName = true; missing.push('Project name'); }
+    if (!form.taskDescription.trim()) { e.description = true; missing.push('Description'); }
+    if (!form.fromTime) { e.fromTime = true; missing.push('Start Time'); }
+    if (!form.toTime) { e.toTime = true; missing.push('End Time'); }
+
+    if (missing.length > 0) {
+      setErrors(e);
+      toast.error(missing.length === 1 ? `${missing[0]} is required` : `Required: ${missing.join(', ')}`);
       return;
     }
-    if (isOther && !form.otherProjectName.trim()) {
-      toast.error('Please enter a project name');
-      return;
-    }
+
     const fromM = parseTimeToMinutes(form.fromTime);
     const toM = parseTimeToMinutes(form.toTime);
     if (fromM == null || toM == null) {
+      setErrors({ fromTime: fromM == null, toTime: toM == null });
       toast.error('Invalid time format');
       return;
     }
     if (toM <= fromM) {
+      setErrors({ fromTime: true, toTime: true });
       toast.error('End time must be after start time');
       return;
     }
     if (computedHours <= 0 || computedHours > 24) {
+      setErrors({ fromTime: true, toTime: true });
       toast.error('Duration must be between 0 and 24 hours');
       return;
     }
-    if (form.taskDescription.length < 10) {
+    if (form.taskDescription.trim().length < 10) {
+      setErrors({ description: true });
       toast.error('Description must be at least 10 characters');
       return;
     }
+    setErrors({});
     if (editingEntry) {
       updateMutation.mutate({ entryId: editingEntry.id, data: form });
     } else {
@@ -686,21 +706,28 @@ function FillTaskSheetPage() {
             {/* 1. Project (required - searchable) */}
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">Project <span className="text-destructive">*</span></Label>
-              <SearchableSelect
-                value={form.projectId}
-                onValueChange={(v) => setForm((p) => ({ ...p, projectId: v, otherProjectName: v === 'other' ? p.otherProjectName : '', ticketId: '' }))}
-                placeholder="Search project..."
-                options={[
-                  ...(projects ?? []).map((p) => ({ value: String(p.id), label: p.projectName })),
-                  { value: 'other', label: 'Other' },
-                ]}
-              />
-              {form.projectId === 'other' && (
-                <Input
-                  placeholder="Enter project name"
-                  value={form.otherProjectName}
-                  onChange={(e) => setForm((p) => ({ ...p, otherProjectName: e.target.value }))}
+              <div className={errors.project ? 'rounded-md ring-1 ring-red-500' : ''}>
+                <SearchableSelect
+                  value={form.projectId}
+                  onValueChange={(v) => { setForm((p) => ({ ...p, projectId: v, otherProjectName: v === 'other' ? p.otherProjectName : '', ticketId: '' })); clearError('project'); }}
+                  placeholder="Search project..."
+                  options={[
+                    ...(projects ?? []).map((p) => ({ value: String(p.id), label: p.projectName })),
+                    { value: 'other', label: 'Other' },
+                  ]}
                 />
+              </div>
+              {errors.project && <p className="text-xs text-red-500">Project is required</p>}
+              {form.projectId === 'other' && (
+                <>
+                  <Input
+                    placeholder="Enter project name"
+                    value={form.otherProjectName}
+                    onChange={(e) => { setForm((p) => ({ ...p, otherProjectName: e.target.value })); clearError('otherProjectName'); }}
+                    className={errors.otherProjectName ? 'border-red-500 ring-1 ring-red-500' : ''}
+                  />
+                  {errors.otherProjectName && <p className="text-xs text-red-500">Project name is required</p>}
+                </>
               )}
             </div>
 
@@ -757,10 +784,15 @@ function FillTaskSheetPage() {
               <Textarea
                 placeholder="What did you work on? (min 10 characters)"
                 value={form.taskDescription}
-                onChange={(e) => setForm((p) => ({ ...p, taskDescription: e.target.value }))}
+                onChange={(e) => { setForm((p) => ({ ...p, taskDescription: e.target.value })); clearError('description'); }}
                 rows={3}
+                className={errors.description ? 'border-red-500 ring-1 ring-red-500' : ''}
               />
-              <p className="text-xs text-muted-foreground">{form.taskDescription.length}/10 min characters</p>
+              <p className={`text-xs ${errors.description ? 'text-red-500' : 'text-muted-foreground'}`}>
+                {errors.description && form.taskDescription.trim().length < 10
+                  ? `Description must be at least 10 characters (${form.taskDescription.length}/10)`
+                  : `${form.taskDescription.length}/10 min characters`}
+              </p>
             </div>
 
             {/* 4b. Blockers (optional) */}
@@ -780,17 +812,23 @@ function FillTaskSheetPage() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">Start Time <span className="text-destructive">*</span></Label>
-                <Time12Picker
-                  value={form.fromTime}
-                  onChange={(v) => setForm((p) => ({ ...p, fromTime: v }))}
-                />
+                <div className={errors.fromTime ? 'rounded-md ring-1 ring-red-500 p-1 -m-1' : ''}>
+                  <Time12Picker
+                    value={form.fromTime}
+                    onChange={(v) => { setForm((p) => ({ ...p, fromTime: v })); clearError('fromTime'); }}
+                  />
+                </div>
+                {errors.fromTime && <p className="text-xs text-red-500">Required</p>}
               </div>
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">End Time <span className="text-destructive">*</span></Label>
-                <Time12Picker
-                  value={form.toTime}
-                  onChange={(v) => setForm((p) => ({ ...p, toTime: v }))}
-                />
+                <div className={errors.toTime ? 'rounded-md ring-1 ring-red-500 p-1 -m-1' : ''}>
+                  <Time12Picker
+                    value={form.toTime}
+                    onChange={(v) => { setForm((p) => ({ ...p, toTime: v })); clearError('toTime'); }}
+                  />
+                </div>
+                {errors.toTime && <p className="text-xs text-red-500">Required</p>}
               </div>
             </div>
             <p className="text-xs text-muted-foreground -mt-2">
