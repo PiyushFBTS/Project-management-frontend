@@ -99,6 +99,15 @@ export default function AssetsReportsPage() {
             Inventory rollup · upcoming events within {data.horizonDays} days
           </p>
         </div>
+        <Link href="/assets/reports/detailed">
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-500/40 dark:text-emerald-400"
+          >
+            Detailed Report
+          </Button>
+        </Link>
       </div>
 
       {/* KPI cards */}

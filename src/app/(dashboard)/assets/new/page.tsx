@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/select';
 
 interface Draft {
+  assetTag: string;
   category: AssetCategory;
   categoryOtherName: string;
   brand: string;
@@ -59,6 +60,7 @@ interface Draft {
 }
 
 const initialDraft: Draft = {
+  assetTag: '',
   category: 'laptop',
   categoryOtherName: '',
   brand: '',
@@ -112,6 +114,7 @@ export default function NewAssetPage() {
       if (draft.specOs.trim()) specs.os = draft.specOs.trim();
 
       return assetsApi.create({
+        assetTag: draft.assetTag.trim(),
         category: draft.category,
         categoryOtherName:
           draft.category === 'other'
@@ -161,6 +164,9 @@ export default function NewAssetPage() {
 
   const validateAndSubmit = () => {
     const errs: Record<string, boolean> = {};
+    if (!draft.assetTag.trim()) {
+      errs.assetTag = true;
+    }
     if (draft.category === 'other' && !draft.categoryOtherName.trim()) {
       errs.categoryOtherName = true;
     }
@@ -222,6 +228,17 @@ export default function NewAssetPage() {
       {/* Identity */}
       <Section title="Identity" icon={<Tag className="h-3 w-3" />}>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <Field label="Asset Tag *" error={errors.assetTag}>
+            <Input
+              value={draft.assetTag}
+              onChange={(e) =>
+                setDraft((p) => ({ ...p, assetTag: e.target.value }))
+              }
+              placeholder="e.g. LP-CEO-01"
+              className={`font-mono ${errors.assetTag ? 'border-red-500' : ''}`}
+              maxLength={50}
+            />
+          </Field>
           <Field label="Category *">
             <Select
               value={draft.category}

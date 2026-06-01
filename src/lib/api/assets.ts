@@ -36,6 +36,8 @@ function vendorsBase() {
 }
 
 export interface CreateAssetDto {
+  /** Required — the company's own label for the device. */
+  assetTag: string;
   category: AssetCategory;
   categoryOtherName?: string;
   brand?: string;
@@ -104,6 +106,43 @@ export interface CreateAssetMaintenanceDto {
 }
 
 export type UpdateAssetMaintenanceDto = Partial<CreateAssetMaintenanceDto>;
+
+export interface AssetDetailedReportRow {
+  // Asset
+  assetId: number;
+  assetTag: string;
+  assetName: string | null;
+  category: AssetCategory;
+  condition: AssetCondition;
+  status: AssetStatus;
+  ownership: AssetOwnership;
+  rentalMonthlyAmount: number | null;
+  purchasePrice: number | null;
+  // Vendor
+  vendorId: number | null;
+  vendorName: string | null;
+  // Latest assignment + holder
+  assignmentId: number | null;
+  employeeId: number | null;
+  employeeName: string | null;
+  assignedAt: string | null;
+  returnedAt: string | null;
+  returnCondition: AssetCondition | null;
+  // Lifetime maintenance aggregate
+  maintenanceCount: number;
+  maintenanceTotalCost: number;
+  lastMaintenanceDate: string | null;
+  lastMaintenanceType: AssetMaintenanceType | null;
+}
+
+export interface DetailedReportFilters {
+  dateFrom?: string;
+  dateTo?: string;
+  vendorId?: number;
+  employeeId?: number;
+  category?: AssetCategory;
+  status?: AssetStatus;
+}
 
 export interface AssetReportsSummary {
   totals: {
@@ -213,6 +252,40 @@ export const assetsApi = {
     return api.get<ApiResponse<AssetReportsSummary>>(base, {
       params: daysAhead ? { daysAhead } : undefined,
     });
+  },
+
+  reportsDetailed: (filters: DetailedReportFilters = {}) => {
+    const base = tokenStorage.getLoginType() === 'admin'
+      ? '/assets/reports/detailed'
+      : '/employee/assets/reports/detailed';
+    // Only forward set params so the backend's class-validator
+    // doesn't reject empty-string ISO dates.
+    const params: Record<string, unknown> = {};
+    if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+    if (filters.dateTo) params.dateTo = filters.dateTo;
+    if (filters.vendorId) params.vendorId = filters.vendorId;
+    if (filters.employeeId) params.employeeId = filters.employeeId;
+    if (filters.category) params.category = filters.category;
+    if (filters.status) params.status = filters.status;
+    return api.get<ApiResponse<AssetDetailedReportRow[]>>(base, { params });
+  },
+
+  /**
+   * Download the same detailed report as CSV. Returns the response as
+   * a Blob so the caller can hand it to the browser via `URL.createObjectURL`.
+   */
+  reportsDetailedCsv: (filters: DetailedReportFilters = {}) => {
+    const base = tokenStorage.getLoginType() === 'admin'
+      ? '/assets/reports/detailed'
+      : '/employee/assets/reports/detailed';
+    const params: Record<string, unknown> = { format: 'csv' };
+    if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+    if (filters.dateTo) params.dateTo = filters.dateTo;
+    if (filters.vendorId) params.vendorId = filters.vendorId;
+    if (filters.employeeId) params.employeeId = filters.employeeId;
+    if (filters.category) params.category = filters.category;
+    if (filters.status) params.status = filters.status;
+    return api.get<Blob>(base, { params, responseType: 'blob' });
   },
 
   // ── Vendors ───────────────────────────────────────────────────────

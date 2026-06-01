@@ -272,6 +272,15 @@ export interface AssetAssignment {
   companyId: number;
 }
 
+export interface AssetMaintenanceStatusChange {
+  id: number;
+  fromStatus: AssetMaintenanceStatus | null;
+  toStatus: AssetMaintenanceStatus;
+  changedAt: string;
+  changedById?: number | null;
+  changedBy?: { id: number; name: string } | null;
+}
+
 export interface AssetMaintenance {
   id: number;
   assetId: number;
@@ -288,6 +297,8 @@ export interface AssetMaintenance {
   reportedBy?: { id: number; name: string } | null;
   completedById?: number | null;
   completedBy?: { id: number; name: string } | null;
+  /** Audit trail — one entry per status transition, newest first. */
+  statusHistory?: AssetMaintenanceStatusChange[];
   companyId: number;
   createdAt: string;
   updatedAt: string;

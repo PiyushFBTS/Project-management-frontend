@@ -26,6 +26,7 @@ import type {
   AssetCondition,
   AssetMaintenance,
   AssetMaintenanceStatus,
+  AssetMaintenanceStatusChange,
   AssetMaintenanceType,
   AssetStatus,
   AssetVendor,
@@ -197,6 +198,7 @@ function OverviewTab({
 }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
+    assetTag: asset.assetTag,
     brand: asset.brand ?? '',
     model: asset.model ?? '',
     serialNumber: asset.serialNumber ?? '',
@@ -209,6 +211,7 @@ function OverviewTab({
   const updateMut = useMutation({
     mutationFn: () =>
       assetsApi.update(asset.id, {
+        assetTag: form.assetTag,
         brand: form.brand,
         model: form.model,
         serialNumber: form.serialNumber,
@@ -289,6 +292,16 @@ function OverviewTab({
 
         {editing ? (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <SmallField label="Asset Tag">
+              <Input
+                value={form.assetTag}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, assetTag: e.target.value }))
+                }
+                className="font-mono"
+                maxLength={50}
+              />
+            </SmallField>
             <SmallField label="Brand">
               <Input
                 value={form.brand}
@@ -483,6 +496,8 @@ function AssignmentsTab({
   qc: ReturnType<typeof useQueryClient>;
 }) {
   const [assignOpen, setAssignOpen] = useState(false);
+  const [returnOpen, setReturnOpen] = useState(false);
+  const [returnNotes, setReturnNotes] = useState('');
   const [userId, setUserId] = useState('');
   const [notes, setNotes] = useState('');
 
@@ -523,11 +538,16 @@ function AssignmentsTab({
   });
 
   const unassignMut = useMutation({
-    mutationFn: () => assetsApi.unassign(asset.id, {}),
+    mutationFn: () =>
+      assetsApi.unassign(asset.id, {
+        returnNotes: returnNotes.trim() || undefined,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['asset', String(asset.id)] });
       qc.invalidateQueries({ queryKey: ['asset-assignments', asset.id] });
       toast.success('Asset returned');
+      setReturnOpen(false);
+      setReturnNotes('');
     },
     onError: (e: any) =>
       toast.error(e?.response?.data?.message ?? 'Failed to unassign'),
@@ -555,10 +575,7 @@ function AssignmentsTab({
             <Button
               size="sm"
               variant="outline"
-              onClick={() => {
-                if (confirm('Return this asset from its current holder?'))
-                  unassignMut.mutate();
-              }}
+              onClick={() => setReturnOpen(true)}
               disabled={unassignMut.isPending}
             >
               <UserMinus className="mr-1 h-3.5 w-3.5" /> Return
@@ -682,6 +699,50 @@ function AssignmentsTab({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Return confirmation dialog */}
+      <Dialog open={returnOpen} onOpenChange={setReturnOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Return asset?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            <p className="text-sm text-muted-foreground">
+              Return{' '}
+              <span className="font-mono font-semibold">{asset.assetTag}</span>
+              {asset.currentHolder
+                ? ` from ${asset.currentHolder.userName}`
+                : ''}
+              ? The asset will become available for re-assignment.
+            </p>
+            <SmallField label="Return notes (optional)">
+              <Textarea
+                rows={2}
+                value={returnNotes}
+                onChange={(e) => setReturnNotes(e.target.value)}
+                placeholder="Condition, accessories handed back, …"
+              />
+            </SmallField>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setReturnOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => unassignMut.mutate()}
+              disabled={unassignMut.isPending}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              {unassignMut.isPending ? (
+                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <UserMinus className="mr-1 h-3.5 w-3.5" />
+              )}
+              Return
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -771,86 +832,205 @@ function MaintenanceTab({
 
   const list = (jobs ?? []) as AssetMaintenance[];
 
+  // Active: jobs currently in scheduled / in_progress — one card per
+  // job, fully editable, status pill matches the live row.
+  const active = list.filter(
+    (j) => j.status === 'scheduled' || j.status === 'in_progress',
+  );
+
+  // History: jobs that have reached a terminal state. Each statusHistory
+  // entry on those jobs becomes its own read-only card so the timeline
+  // shows every transition (e.g. one card for in_progress and one for
+  // completed when a single job moved through both).
+  const terminalJobs = list.filter(
+    (j) => j.status === 'completed' || j.status === 'cancelled',
+  );
+  type HistoryCard = { job: AssetMaintenance; entry: AssetMaintenanceStatusChange };
+  const history: HistoryCard[] = terminalJobs
+    .flatMap((j) =>
+      (j.statusHistory ?? []).map((entry) => ({ job: j, entry })),
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.entry.changedAt).getTime() -
+        new Date(a.entry.changedAt).getTime(),
+    );
+
+  // Aggregate stats — count terminal jobs once, sum cost from the live
+  // row (historical cost snapshots aren't stored).
+  const completed = terminalJobs.filter((j) => j.status === 'completed');
+  const totalCost = completed.reduce(
+    (s, j) => s + (Number(j.cost) || 0),
+    0,
+  );
+  const lastCompletedDate =
+    completed.length > 0
+      ? completed
+          .map((j) => j.endDate ?? j.startDate)
+          .sort()
+          .pop() ?? null
+      : null;
+
+  // Read-only card for a historical status snapshot. Shows the job's
+  // current data (vendor / cost / description) overlaid with the
+  // historical status pill + when/who changed it. Cancel actions are
+  // hidden — past events aren't editable.
+  const renderHistoryCard = (h: HistoryCard) => {
+    const { job: j, entry } = h;
+    return (
+      <div
+        key={`${j.id}-${entry.id}`}
+        className="rounded-lg border bg-background p-3 text-sm"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Wrench className="h-3.5 w-3.5 text-emerald-600" />
+            <span className="font-semibold capitalize">{j.type}</span>
+            <Badge className={`${M_STATUS_COLORS[entry.toStatus]} text-[10px]`}>
+              {entry.toStatus.replace(/_/g, ' ')}
+            </Badge>
+          </div>
+          <span className="text-[10px] text-muted-foreground">
+            {formatDate(entry.changedAt)}
+            {entry.changedBy ? ` · ${entry.changedBy.name}` : ''}
+          </span>
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">
+          {formatDate(j.startDate)}
+          {j.endDate ? ` → ${formatDate(j.endDate)}` : ''}
+          {j.vendor ? ` · ${j.vendor.name}` : ''}
+          {j.cost
+            ? ` · ₹${Number(j.cost).toLocaleString('en-IN')}`
+            : ''}
+        </p>
+        <p className="text-xs mt-1">{j.description}</p>
+      </div>
+    );
+  };
+
+  const renderJob = (j: AssetMaintenance) => (
+    <div
+      key={j.id}
+      className="rounded-lg border bg-background p-3 text-sm"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Wrench className="h-3.5 w-3.5 text-emerald-600" />
+          <span className="font-semibold capitalize">{j.type}</span>
+          <Badge className={`${M_STATUS_COLORS[j.status]} text-[10px]`}>
+            {j.status.replace(/_/g, ' ')}
+          </Badge>
+        </div>
+        {canManage && (
+          <div className="flex items-center gap-1">
+            <Select
+              value={j.status}
+              onValueChange={(v) =>
+                updateStatusMut.mutate({
+                  mId: j.id,
+                  status: v as AssetMaintenanceStatus,
+                })
+              }
+            >
+              <SelectTrigger className="h-7 text-xs w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="scheduled">scheduled</SelectItem>
+                <SelectItem value="in_progress">in_progress</SelectItem>
+                <SelectItem value="completed">completed</SelectItem>
+                <SelectItem value="cancelled">cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 w-7 p-0 text-red-500"
+              onClick={() => {
+                if (confirm('Delete this job?')) deleteMut.mutate(j.id);
+              }}
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        )}
+      </div>
+      <p className="text-xs text-muted-foreground mt-1">
+        {formatDate(j.startDate)}
+        {j.endDate ? ` → ${formatDate(j.endDate)}` : ''}
+        {j.vendor ? ` · ${j.vendor.name}` : ''}
+        {j.cost
+          ? ` · ₹${Number(j.cost).toLocaleString('en-IN')}`
+          : ''}
+      </p>
+      <p className="text-xs mt-1">{j.description}</p>
+    </div>
+  );
+
   return (
     <div className="space-y-4">
-      {canManage && (
-        <div className="flex justify-end">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h2 className="text-sm font-semibold">Maintenance</h2>
+        {canManage && (
           <Button size="sm" onClick={() => setOpen(true)}>
             <Plus className="mr-1 h-3.5 w-3.5" /> New Job
           </Button>
+        )}
+      </div>
+
+      {/* Summary stats — only meaningful once there's at least one row */}
+      {list.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <StatCard label="Total Jobs" value={list.length.toString()} />
+          <StatCard
+            label="Completed"
+            value={completed.length.toString()}
+            tint="emerald"
+          />
+          <StatCard
+            label="Total Cost"
+            value={`₹${totalCost.toLocaleString('en-IN')}`}
+            tint="blue"
+          />
+          <StatCard
+            label="Last Completed"
+            value={lastCompletedDate ? formatDate(lastCompletedDate) : '—'}
+            tint="violet"
+          />
         </div>
       )}
 
-      <div className="rounded-xl border bg-card p-4">
-        {list.length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-6">
-            No maintenance history.
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {list.map((j) => (
-              <div
-                key={j.id}
-                className="rounded-lg border bg-background p-3 text-sm"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Wrench className="h-3.5 w-3.5 text-emerald-600" />
-                    <span className="font-semibold capitalize">{j.type}</span>
-                    <Badge
-                      className={`${M_STATUS_COLORS[j.status]} text-[10px]`}
-                    >
-                      {j.status.replace(/_/g, ' ')}
-                    </Badge>
-                  </div>
-                  {canManage && (
-                    <div className="flex items-center gap-1">
-                      <Select
-                        value={j.status}
-                        onValueChange={(v) =>
-                          updateStatusMut.mutate({
-                            mId: j.id,
-                            status: v as AssetMaintenanceStatus,
-                          })
-                        }
-                      >
-                        <SelectTrigger className="h-7 text-xs w-32">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="scheduled">scheduled</SelectItem>
-                          <SelectItem value="in_progress">
-                            in_progress
-                          </SelectItem>
-                          <SelectItem value="completed">completed</SelectItem>
-                          <SelectItem value="cancelled">cancelled</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 w-7 p-0 text-red-500"
-                        onClick={() => {
-                          if (confirm('Delete this job?'))
-                            deleteMut.mutate(j.id);
-                        }}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {formatDate(j.startDate)}
-                  {j.endDate ? ` → ${formatDate(j.endDate)}` : ''}
-                  {j.vendor ? ` · ${j.vendor.name}` : ''}
-                  {j.cost ? ` · ₹${Number(j.cost).toLocaleString('en-IN')}` : ''}
-                </p>
-                <p className="text-xs mt-1">{j.description}</p>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* Active jobs (scheduled + in_progress) */}
+      <div>
+        <h3 className="text-xs uppercase tracking-wider font-semibold text-muted-foreground mb-2">
+          Active {active.length > 0 && `(${active.length})`}
+        </h3>
+        <div className="rounded-xl border bg-card p-4">
+          {active.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-4">
+              No active jobs.
+            </p>
+          ) : (
+            <div className="space-y-2">{active.map(renderJob)}</div>
+          )}
+        </div>
+      </div>
+
+      {/* History — one card per status transition on completed/cancelled
+          jobs, newest first */}
+      <div>
+        <h3 className="text-xs uppercase tracking-wider font-semibold text-muted-foreground mb-2">
+          History {history.length > 0 && `(${history.length})`}
+        </h3>
+        <div className="rounded-xl border bg-card p-4">
+          {history.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-4">
+              No completed or cancelled jobs yet.
+            </p>
+          ) : (
+            <div className="space-y-2">{history.map(renderHistoryCard)}</div>
+          )}
+        </div>
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -970,6 +1150,33 @@ function KV({ k, children }: { k: string; children: React.ReactNode }) {
         {k}
       </div>
       <div className="text-sm">{children}</div>
+    </div>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  tint,
+}: {
+  label: string;
+  value: string;
+  tint?: 'emerald' | 'blue' | 'violet';
+}) {
+  const accent =
+    tint === 'emerald'
+      ? 'text-emerald-700 dark:text-emerald-400'
+      : tint === 'blue'
+        ? 'text-blue-700 dark:text-blue-400'
+        : tint === 'violet'
+          ? 'text-violet-700 dark:text-violet-400'
+          : 'text-foreground';
+  return (
+    <div className="rounded-xl border bg-card p-3">
+      <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+        {label}
+      </div>
+      <div className={`mt-1 text-base font-bold ${accent}`}>{value}</div>
     </div>
   );
 }
