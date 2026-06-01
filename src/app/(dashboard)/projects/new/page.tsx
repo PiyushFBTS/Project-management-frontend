@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowLeft, FolderKanban, Loader2, CheckCircle2, User, Calendar, Clock, FileText, Check, X, Paperclip, Upload, File, Trash2, Milestone, Plus, Layers } from 'lucide-react';
+import { ArrowLeft, FolderKanban, Loader2, CheckCircle2, User, Calendar, Clock, FileText, Check, X, Paperclip, Upload, File, Trash2, Milestone, Plus, Layers, Repeat } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { projectsApi } from '@/lib/api/projects';
 import { SearchableSelect } from '@/components/ui/searchable-select';
@@ -89,6 +89,19 @@ function NewProjectPage() {
     value: t.value ?? t.slug ?? t.name?.toLowerCase().replace(/\s+/g, '_') ?? '',
     label: t.label ?? t.name ?? '',
   }));
+  // Selected project type's `isRecurring` flag — switches the form's
+  // lower section between Milestones (default) and Recurring billing rows.
+  const selectedTypeIsRecurring = ((projectTypesRaw ?? []) as any[])
+    .some((t: any) => (t.value ?? t.slug ?? '') === form.projectType && t.isRecurring === true);
+
+  // Recurring billing setup (only used when the selected type is recurring).
+  const _today = new Date();
+  const defaultStartMonth = `${_today.getFullYear()}-${String(_today.getMonth() + 1).padStart(2, '0')}-01`;
+  const [recurringForm, setRecurringForm] = useState({
+    startMonth: defaultStartMonth,
+    months: '12',
+    expectedAmount: '',
+  });
 
   const { data: groupsRaw } = useQuery({
     queryKey: ['project-groups'],
@@ -120,8 +133,16 @@ function NewProjectPage() {
           try { await projectsApi.uploadDocument(newId, file, category); } catch { /* ignore individual errors */ }
         }
       }
-      // Create milestones if any
-      if (milestones.length > 0) {
+      // Bulk-create either recurring rows (for recurring types) or milestones.
+      if (selectedTypeIsRecurring) {
+        try {
+          await projectsApi.bulkCreateRecurrings(newId, {
+            startMonth: recurringForm.startMonth,
+            months: Number(recurringForm.months) || 12,
+            expectedAmount: Number(recurringForm.expectedAmount),
+          });
+        } catch { /* ignore — user can fix from project detail */ }
+      } else if (milestones.length > 0) {
         try {
           await projectsApi.bulkCreateMilestones(
             newId,
@@ -162,6 +183,16 @@ function NewProjectPage() {
     if (!form.projectType) missing.push({ key: 'projectType', label: 'Type' });
     if (!form.startDate) missing.push({ key: 'startDate', label: 'Start Date' });
 
+    // Recurring-type projects require Start Month + Monthly Amount instead
+    // of milestones. Non-recurring still require at least one milestone.
+    if (selectedTypeIsRecurring) {
+      if (!recurringForm.startMonth) missing.push({ key: 'recurringStartMonth', label: 'Start Month' });
+      const amt = Number(recurringForm.expectedAmount);
+      if (!recurringForm.expectedAmount || !Number.isFinite(amt) || amt <= 0) {
+        missing.push({ key: 'recurringAmount', label: 'Monthly Amount' });
+      }
+    }
+
     if (missing.length > 0) {
       setErrors(Object.fromEntries(missing.map((m) => [m.key, true])));
       const names = missing.map((m) => m.label).join(', ');
@@ -169,7 +200,7 @@ function NewProjectPage() {
       return;
     }
     setErrors({});
-    if (milestones.length === 0) {
+    if (!selectedTypeIsRecurring && milestones.length === 0) {
       toast.error('Please add at least one milestone');
       return;
     }
@@ -222,20 +253,26 @@ function NewProjectPage() {
           <p className="text-sm text-muted-foreground">Fill in the details to create a new project</p>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setMilestoneDialogOpen(true)}
-            className="relative"
-          >
-            <Milestone className="mr-1 h-3.5 w-3.5" />
-            Milestones
-            {milestones.length > 0 && (
-              <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white px-1">
-                {milestones.length}
-              </span>
-            )}
-          </Button>
+          {selectedTypeIsRecurring ? (
+            <span className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30 px-2.5 py-1 text-xs font-semibold">
+              <Repeat className="h-3 w-3" /> Recurring
+            </span>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setMilestoneDialogOpen(true)}
+              className="relative"
+            >
+              <Milestone className="mr-1 h-3.5 w-3.5" />
+              Milestones
+              {milestones.length > 0 && (
+                <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white px-1">
+                  {milestones.length}
+                </span>
+              )}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => router.back()}>
             <X className="mr-1 h-3.5 w-3.5" /> Cancel
           </Button>
@@ -383,6 +420,73 @@ function NewProjectPage() {
         </div>
 
       </div>
+
+      {/* Recurring Setup (only for recurring project types) */}
+      {selectedTypeIsRecurring && (
+        <div className="rounded-xl border border-emerald-300 bg-emerald-50/40 dark:border-emerald-500/30 dark:bg-emerald-500/5 p-4">
+          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-emerald-700 dark:text-emerald-400 mb-3">
+            <Repeat className="h-3 w-3" /> Recurring Setup
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div>
+              <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">
+                Start Month <span className="text-red-500">*</span>
+              </label>
+              <Input
+                type="month"
+                value={recurringForm.startMonth ? recurringForm.startMonth.slice(0, 7) : ''}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setRecurringForm((p) => ({ ...p, startMonth: v ? `${v}-01` : '' }));
+                  clearError('recurringStartMonth');
+                }}
+                className={`h-8 text-sm ${errors.recurringStartMonth ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+              />
+              {errors.recurringStartMonth && (
+                <p className="text-[10px] text-red-500 mt-1">Start Month is required</p>
+              )}
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">
+                Months Count
+              </label>
+              <Input
+                type="number"
+                min={1}
+                max={60}
+                value={recurringForm.months}
+                onChange={(e) => setRecurringForm((p) => ({ ...p, months: e.target.value }))}
+                placeholder="12"
+                className="h-8 text-sm"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">How many months to pre-create (1–60).</p>
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">
+                Monthly Amount <span className="text-red-500">*</span>
+              </label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={recurringForm.expectedAmount}
+                onChange={(e) => {
+                  setRecurringForm((p) => ({ ...p, expectedAmount: e.target.value }));
+                  clearError('recurringAmount');
+                }}
+                placeholder="0.00"
+                className={`h-8 text-sm ${errors.recurringAmount ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+              />
+              {errors.recurringAmount && (
+                <p className="text-[10px] text-red-500 mt-1">Monthly Amount is required</p>
+              )}
+            </div>
+          </div>
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            One billable row per month will be created. You can mark each month as received from the project detail page.
+          </p>
+        </div>
+      )}
 
       {/* Description */}
       <div className="rounded-xl border bg-card p-4">

@@ -1,6 +1,6 @@
 import { api } from './axios-instance';
 import { tokenStorage } from '@/lib/auth/token-storage';
-import { ApiResponse, Project, CreateProjectDto, UpdateProjectDto, PaginationParams, Employee, ProjectGroup } from '@/types';
+import { ApiResponse, Project, CreateProjectDto, UpdateProjectDto, PaginationParams, Employee, ProjectGroup, ProjectRecurring, ProjectRecurringStatus } from '@/types';
 
 export interface ProjectGroupDto {
   name: string;
@@ -135,8 +135,11 @@ export const projectsApi = {
   getProjectTypes: () =>
     api.get(`${projectsBase()}/types/list`),
 
-  createProjectType: (dto: { value: string; label: string; description?: string }) =>
+  createProjectType: (dto: { value: string; label: string; description?: string; isRecurring?: boolean }) =>
     api.post(`${projectsBase()}/types`, dto),
+
+  updateProjectType: (typeId: number, dto: { label?: string; description?: string; isRecurring?: boolean }) =>
+    api.patch(`${projectsBase()}/types/${typeId}`, dto),
 
   deleteProjectType: (typeId: number) =>
     api.delete(`${projectsBase()}/types/${typeId}`),
@@ -163,4 +166,20 @@ export const projectsApi = {
   // Bulk-fold existing projects into a group (migration helper).
   assignProjectsToGroup: (groupId: number, projectIds: number[]) =>
     api.post<ApiResponse<{ assigned: number }>>(`${projectsBase()}/groups/${groupId}/assign`, { projectIds }),
+
+  // ── Recurring billing rows (recurring-type projects) ──
+  getRecurrings: (projectId: number) =>
+    api.get<ApiResponse<ProjectRecurring[]>>(`/projects/${projectId}/recurrings`),
+
+  createRecurring: (projectId: number, dto: { billingMonth: string; expectedAmount: number; receivedAmount?: number }) =>
+    api.post<ApiResponse<ProjectRecurring>>(`/projects/${projectId}/recurrings`, dto),
+
+  bulkCreateRecurrings: (projectId: number, dto: { startMonth: string; months: number; expectedAmount: number }) =>
+    api.post<ApiResponse<{ created: number; skipped: number }>>(`/projects/${projectId}/recurrings/bulk`, dto),
+
+  updateRecurring: (projectId: number, recurringId: number, dto: { expectedAmount?: number; receivedAmount?: number; status?: ProjectRecurringStatus }) =>
+    api.patch<ApiResponse<ProjectRecurring>>(`/projects/${projectId}/recurrings/${recurringId}`, dto),
+
+  deleteRecurring: (projectId: number, recurringId: number) =>
+    api.delete<ApiResponse<{ message: string }>>(`/projects/${projectId}/recurrings/${recurringId}`),
 };

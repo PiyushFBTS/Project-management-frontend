@@ -140,6 +140,35 @@ export interface LookupCurrency {
 export type ProjectType = 'project' | 'support' | 'development' | 'consulting' | 'migration' | 'maintenance';
 export type ProjectStatus = 'active' | 'inactive' | 'completed';
 
+/** A row from the dynamic `project_types` catalog. */
+export interface ProjectTypeDef {
+  id: number;
+  value: string;
+  label: string;
+  description?: string;
+  /** Marks this type as recurring-billing (e.g. Support). Projects of a
+   *  recurring type use monthly recurring rows instead of milestones. */
+  isRecurring?: boolean;
+  isActive?: boolean;
+}
+
+export type ProjectRecurringStatus = 'pending' | 'billed' | 'received';
+
+/** One billing month for a recurring-type project (parallels Milestone). */
+export interface ProjectRecurring {
+  id: number;
+  projectId: number;
+  /** First day of the billing month (YYYY-MM-01). */
+  billingMonth: string;
+  expectedAmount: number;
+  receivedAmount: number;
+  receivedAt: string | null;
+  status: ProjectRecurringStatus;
+  companyId: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // A "primary project name" umbrella that groups several typed projects.
 export interface ProjectGroup {
   id: number;

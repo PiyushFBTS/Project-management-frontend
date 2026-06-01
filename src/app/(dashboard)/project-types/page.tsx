@@ -1,16 +1,19 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Tags, Plus, Trash2, FolderPlus } from 'lucide-react';
+import { Tags, Plus, Trash2, FolderPlus, Pencil, Repeat, Check, Loader2 } from 'lucide-react';
 import { projectsApi } from '@/lib/api/projects';
 import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 
 const typeColors: Record<string, string> = {
   fresh_implement: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400',
@@ -51,6 +54,20 @@ export default function ProjectTypesPage() {
       toast.success('Deleted');
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
+  });
+
+  // ── Inline edit dialog ──
+  const [editing, setEditing] = useState<{ id: number; label: string; description: string; isRecurring: boolean } | null>(null);
+
+  const updateMut = useMutation({
+    mutationFn: (vars: { id: number; dto: { label?: string; description?: string; isRecurring?: boolean } }) =>
+      projectsApi.updateProjectType(vars.id, vars.dto),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project-types'] });
+      toast.success('Project type updated');
+      setEditing(null);
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to update'),
   });
 
   return (
@@ -101,9 +118,16 @@ export default function ProjectTypesPage() {
               }}
             >
               <div className="flex items-start justify-between gap-2">
-                <Badge className={`${typeColors[type.value] ?? defaultColor} text-xs font-semibold`}>
-                  {type.label}
-                </Badge>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge className={`${typeColors[type.value] ?? defaultColor} text-xs font-semibold`}>
+                    {type.label}
+                  </Badge>
+                  {type.isRecurring && (
+                    <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 text-[10px] font-semibold inline-flex items-center gap-0.5">
+                      <Repeat className="h-2.5 w-2.5" /> Recurring
+                    </Badge>
+                  )}
+                </div>
                 {canManage && (
                   <div className="flex gap-1">
                     <Button
@@ -114,6 +138,23 @@ export default function ProjectTypesPage() {
                       onClick={(ev) => { ev.stopPropagation(); router.push(`/projects/new?type=${encodeURIComponent(type.value)}`); }}
                     >
                       <FolderPlus className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-6 w-6 p-0 text-blue-600 hover:text-blue-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Edit type"
+                      onClick={(ev) => {
+                        ev.stopPropagation();
+                        setEditing({
+                          id: type.id,
+                          label: type.label ?? '',
+                          description: type.description ?? '',
+                          isRecurring: !!type.isRecurring,
+                        });
+                      }}
+                    >
+                      <Pencil className="h-3 w-3" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -133,6 +174,74 @@ export default function ProjectTypesPage() {
         </div>
       )}
 
+      {/* Edit dialog */}
+      <Dialog open={!!editing} onOpenChange={(v) => { if (!v) setEditing(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-4 w-4 text-blue-600" /> Edit Project Type
+            </DialogTitle>
+          </DialogHeader>
+          {editing && (
+            <>
+              <div className="space-y-3 pt-1">
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Label *</label>
+                  <Input value={editing.label} onChange={(e) => setEditing((p) => p ? { ...p, label: e.target.value } : p)} className="h-9" />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Description</label>
+                  <Textarea
+                    value={editing.description}
+                    onChange={(e) => setEditing((p) => p ? { ...p, description: e.target.value } : p)}
+                    rows={3}
+                    placeholder="optional"
+                  />
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={editing.isRecurring}
+                  onClick={() => setEditing((p) => p ? { ...p, isRecurring: !p.isRecurring } : p)}
+                  className="flex w-full items-start gap-3 rounded-lg border p-3 text-left"
+                >
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
+                    <Repeat className="h-3.5 w-3.5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold">Recurring billing type</p>
+                      <span className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${editing.isRecurring ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-600'}`}>
+                        <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${editing.isRecurring ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Per-month recurring rows instead of milestones (e.g. support / maintenance).
+                    </p>
+                  </div>
+                </button>
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+                <Button
+                  disabled={!editing.label.trim() || updateMut.isPending}
+                  onClick={() => updateMut.mutate({
+                    id: editing.id,
+                    dto: {
+                      label: editing.label.trim(),
+                      description: editing.description.trim(),
+                      isRecurring: editing.isRecurring,
+                    },
+                  })}
+                >
+                  {updateMut.isPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
+                  Save
+                </Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

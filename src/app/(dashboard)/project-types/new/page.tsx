@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowLeft, Tags, Loader2, Check, X, Hash, FileText } from 'lucide-react';
+import { ArrowLeft, Tags, Loader2, Check, X, Hash, FileText, Repeat } from 'lucide-react';
 import { projectsApi } from '@/lib/api/projects';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,6 +18,7 @@ export default function NewProjectTypePage() {
   const [label, setLabel] = useState('');
   const [value, setValue] = useState('');
   const [description, setDescription] = useState('');
+  const [isRecurring, setIsRecurring] = useState(false);
   const [valueTouched, setValueTouched] = useState(false);
 
   // Auto-generate slug from label until the user edits the value manually.
@@ -34,6 +35,7 @@ export default function NewProjectTypePage() {
         value: (value || label).trim(),
         label: label.trim(),
         description: description.trim() || undefined,
+        isRecurring,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['project-types'] });
@@ -140,6 +142,36 @@ export default function NewProjectTypePage() {
         />
       </div>
 
+      {/* Recurring toggle */}
+      <div className="rounded-xl border bg-card p-4">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={isRecurring}
+          onClick={() => setIsRecurring((v) => !v)}
+          className="flex w-full items-start gap-3 text-left"
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">
+            <Repeat className="h-4 w-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold">Recurring billing type</p>
+              <span
+                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${isRecurring ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-600'}`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${isRecurring ? 'translate-x-4' : 'translate-x-0.5'}`}
+                />
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Projects of this type use <strong>per-month recurring billing rows</strong> instead of the milestone payment model. Use this for support / maintenance contracts.
+            </p>
+          </div>
+        </button>
+      </div>
+
       {/* Live preview */}
       <div className="rounded-xl border bg-card p-4">
         <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">
@@ -152,6 +184,11 @@ export default function NewProjectTypePage() {
           {value && (
             <span className="text-[10px] text-muted-foreground font-mono">
               {value}
+            </span>
+          )}
+          {isRecurring && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 px-2 py-0.5 text-[10px] font-semibold">
+              <Repeat className="h-2.5 w-2.5" /> Recurring
             </span>
           )}
         </div>

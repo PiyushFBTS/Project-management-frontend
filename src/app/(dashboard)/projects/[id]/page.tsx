@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import {
   ArrowLeft, FolderKanban, Calendar, User, ClipboardList, Clock, FileText, Pencil, Loader2, X, Check,
   Upload, Trash2, Download, File, UserPlus, Users, Milestone, Plus, Layers, Ticket, ExternalLink, Search,
+  Repeat, CalendarPlus,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -103,7 +104,7 @@ export default function ProjectDetailPage() {
   const { data: dynamicTypesRaw } = useQuery({
     queryKey: ['project-types'],
     queryFn: () => projectsApi.getProjectTypes().then((r: any) => r.data?.data ?? r.data ?? []),
-    enabled: isAdmin,
+    enabled: isAdmin || isHr,
   });
   const dynamicTypeOptions = ((dynamicTypesRaw ?? []) as any[]).map((t: any) => ({
     value: t.value ?? '', label: t.label ?? t.value ?? '',
@@ -182,6 +183,85 @@ export default function ProjectDetailPage() {
       toast.success('Milestone deleted');
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
+  });
+
+  // ── Recurring billing (only for project types flagged isRecurring) ──
+  const isRecurringProject = ((dynamicTypesRaw ?? []) as any[])
+    .some((t: any) => (t.value ?? '') === project?.projectType && t.isRecurring === true);
+
+  // Always fetch for admin/HR — that way the type-change guard can show
+  // the recurrings card on a now-non-recurring project that still has
+  // legacy rows.
+  const { data: recurrings = [], isLoading: recurringsLoading } = useQuery({
+    queryKey: ['project-recurrings', id],
+    queryFn: () => projectsApi.getRecurrings(Number(id)).then((r: any) => r.data?.data ?? r.data ?? []),
+    enabled: !!project && canViewMilestones,
+  });
+
+  const [recurringDialogOpen, setRecurringDialogOpen] = useState(false);
+  const [recurringStartMonth, setRecurringStartMonth] = useState('');
+  const [recurringMonths, setRecurringMonths] = useState('12');
+  const [recurringAmount, setRecurringAmount] = useState('');
+
+  const bulkRecurringMut = useMutation({
+    mutationFn: () => projectsApi.bulkCreateRecurrings(Number(id), {
+      startMonth: recurringStartMonth,
+      months: Number(recurringMonths) || 1,
+      expectedAmount: Number(recurringAmount),
+    }),
+    onSuccess: (res: any) => {
+      qc.invalidateQueries({ queryKey: ['project-recurrings', id] });
+      const created = res?.data?.data?.created ?? 0;
+      const skipped = res?.data?.data?.skipped ?? 0;
+      toast.success(`Added ${created} month${created === 1 ? '' : 's'}${skipped ? ` (${skipped} already existed)` : ''}`);
+      setRecurringStartMonth('');
+      setRecurringAmount('');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to add months'),
+  });
+
+  const updateRecurringMut = useMutation({
+    mutationFn: ({ recurringId, dto }: { recurringId: number; dto: any }) =>
+      projectsApi.updateRecurring(Number(id), recurringId, dto),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project-recurrings', id] });
+      toast.success('Updated');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
+  });
+
+  const deleteRecurringMut = useMutation({
+    mutationFn: (recurringId: number) => projectsApi.deleteRecurring(Number(id), recurringId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project-recurrings', id] });
+      toast.success('Removed');
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
+  });
+
+  const formatBillingMonth = (s: string) => {
+    if (!s) return '—';
+    const d = new Date(s);
+    return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric', timeZone: 'UTC' });
+  };
+
+  const recurringTotals = (recurrings as any[]).reduce(
+    (acc: { expected: number; received: number }, r: any) => ({
+      expected: acc.expected + Number(r.expectedAmount ?? 0),
+      received: acc.received + Number(r.receivedAmount ?? 0),
+    }),
+    { expected: 0, received: 0 },
+  );
+
+  // For the inline Overview-tab card we only surface the current month —
+  // the full 12-row schedule stays accessible via the Manage dialog.
+  const _now = new Date();
+  const currentMonthKey = `${_now.getUTCFullYear()}-${String(_now.getUTCMonth() + 1).padStart(2, '0')}`;
+  const currentMonthRecurring = (recurrings as any[]).find((r: any) => {
+    if (!r?.billingMonth) return false;
+    const d = new Date(r.billingMonth);
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    return key === currentMonthKey;
   });
 
   // ── Phases & Tickets (loaded on demand for their tabs) ──
@@ -627,8 +707,86 @@ export default function ProjectDetailPage() {
       </div>
       )}
 
-      {/* ── Inline Milestones (Overview tab only) ──────────────────── */}
-      {!editMode && activeTab === 'overview' && canViewMilestones && (
+      {/* ── Inline Recurring Billing (Overview tab) ─────────────────── */}
+      {/* Shown when the project's type is recurring OR when the project
+          already has recurring rows (e.g. type was changed after rows
+          existed) so data is never orphaned/invisible. */}
+      {!editMode && activeTab === 'overview' && canViewMilestones && (isRecurringProject || (recurrings as any[]).length > 0) && (
+        <div className="rounded-xl border bg-card p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-emerald-600 dark:text-emerald-400">
+              <Repeat className="h-3 w-3" /> Recurring Billing
+              {(recurrings as any[]).length > 0 && (
+                <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white px-1">
+                  {(recurrings as any[]).length}
+                </span>
+              )}
+            </div>
+            {isAdmin && (
+              <Button size="sm" variant="outline" onClick={() => setRecurringDialogOpen(true)}>
+                <CalendarPlus className="mr-1.5 h-3.5 w-3.5" /> Manage
+              </Button>
+            )}
+          </div>
+
+          {recurringsLoading ? (
+            <Skeleton className="h-16 w-full" />
+          ) : (recurrings as any[]).length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-6">
+              {isAdmin ? 'No recurring rows yet. Click Manage to add months.' : 'No recurring rows recorded.'}
+            </p>
+          ) : !currentMonthRecurring ? (
+            <p className="text-xs text-muted-foreground text-center py-6">
+              No recurring row for this month. {isAdmin ? 'Click Manage to add it.' : ''}
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+                    <th className="py-2 pr-2">Month</th>
+                    <th className="py-2 pr-2 text-right">Expected</th>
+                    <th className="py-2 pr-2 text-right">Received</th>
+                    <th className="py-2 pr-2">Status</th>
+                    <th className="py-2 text-right">Received At</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b last:border-0 text-sm">
+                    <td className="py-2 pr-2 font-medium">{formatBillingMonth(currentMonthRecurring.billingMonth)}</td>
+                    <td className="py-2 pr-2 text-right">₹{Number(currentMonthRecurring.expectedAmount ?? 0).toLocaleString('en-IN')}</td>
+                    <td className="py-2 pr-2 text-right">₹{Number(currentMonthRecurring.receivedAmount ?? 0).toLocaleString('en-IN')}</td>
+                    <td className="py-2 pr-2">
+                      <Badge className={
+                        currentMonthRecurring.status === 'received'
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 text-[10px]'
+                          : currentMonthRecurring.status === 'billed'
+                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400 text-[10px]'
+                          : 'bg-slate-100 text-slate-700 dark:bg-slate-500/15 dark:text-slate-400 text-[10px]'
+                      }>
+                        {currentMonthRecurring.status}
+                      </Badge>
+                    </td>
+                    <td className="py-2 text-right text-muted-foreground">{currentMonthRecurring.receivedAt ? formatDate(currentMonthRecurring.receivedAt) : '—'}</td>
+                  </tr>
+                  <tr className="text-sm font-semibold bg-muted/30">
+                    <td className="py-2 pr-2">Contract total ({(recurrings as any[]).length} mo)</td>
+                    <td className="py-2 pr-2 text-right">₹{recurringTotals.expected.toLocaleString('en-IN')}</td>
+                    <td className="py-2 pr-2 text-right">₹{recurringTotals.received.toLocaleString('en-IN')}</td>
+                    <td className="py-2 pr-2"></td>
+                    <td className="py-2"></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Inline Milestones (Overview tab) ────────────────────────── */}
+      {/* Shown for non-recurring types, and also when legacy milestones
+          exist on a now-recurring project so prior data stays editable. */}
+      {!editMode && activeTab === 'overview' && canViewMilestones && (!isRecurringProject || (milestones as any[]).length > 0) && (
         <div className="rounded-xl border bg-card p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-violet-600 dark:text-violet-400">
@@ -905,6 +1063,194 @@ export default function ProjectDetailPage() {
           </div>
         );
       })()}
+
+      {/* ── Recurring Billing Dialog (admin) ────────────────────────── */}
+      <Dialog open={recurringDialogOpen} onOpenChange={setRecurringDialogOpen}>
+        <DialogContent className="sm:max-w-[100vw] md:max-w-[80vw] lg:max-w-[60vw] w-full h-[100vh] md:h-[85vh] max-h-[100vh] md:max-h-[95vh] rounded-none md:rounded-lg flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Repeat className="h-5 w-5 text-emerald-600" /> Recurring Billing
+            </DialogTitle>
+          </DialogHeader>
+
+          {/* Add / extend form */}
+          <div className="border-b pb-3 space-y-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">
+              <div>
+                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Start Month</label>
+                <Input
+                  type="month"
+                  value={recurringStartMonth ? recurringStartMonth.slice(0, 7) : ''}
+                  onChange={(e) => setRecurringStartMonth(e.target.value ? `${e.target.value}-01` : '')}
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Months</label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={recurringMonths}
+                  onChange={(e) => setRecurringMonths(e.target.value)}
+                  placeholder="12"
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Monthly Amount</label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={recurringAmount}
+                  onChange={(e) => setRecurringAmount(e.target.value)}
+                  placeholder="0.00"
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div>
+                <Button
+                  size="sm"
+                  className="h-8 w-full"
+                  disabled={
+                    !recurringStartMonth ||
+                    !recurringAmount ||
+                    Number(recurringAmount) <= 0 ||
+                    bulkRecurringMut.isPending
+                  }
+                  onClick={() => bulkRecurringMut.mutate()}
+                >
+                  {bulkRecurringMut.isPending
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : <><CalendarPlus className="h-3.5 w-3.5 mr-1" /> Add Months</>}
+                </Button>
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Already-existing months are skipped automatically — safe to extend at any time.
+            </p>
+          </div>
+
+          {/* Recurrings list */}
+          <div className="flex-1 overflow-y-auto -mx-6 px-4 sm:px-6">
+            {recurringsLoading ? (
+              <Skeleton className="h-20 w-full" />
+            ) : (recurrings as any[]).length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No months yet. Add some above.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-background">
+                    <tr className="border-b text-left">
+                      <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold">Month</th>
+                      <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold text-right">Expected</th>
+                      <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold text-right">Received</th>
+                      <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold">Status</th>
+                      <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold text-right">Received At</th>
+                      <th className="py-2 w-32 text-xs text-muted-foreground font-semibold text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(recurrings as any[]).map((r: any) => (
+                      <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30">
+                        <td className="py-2 pr-2 font-medium">{formatBillingMonth(r.billingMonth)}</td>
+                        <td className="py-2 pr-2 text-right">
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            defaultValue={String(r.expectedAmount ?? 0)}
+                            onBlur={(e) => {
+                              const v = Number(e.target.value);
+                              if (!Number.isFinite(v) || v === Number(r.expectedAmount)) return;
+                              updateRecurringMut.mutate({ recurringId: r.id, dto: { expectedAmount: v } });
+                            }}
+                            className="h-7 text-xs text-right w-28 inline-block"
+                          />
+                        </td>
+                        <td className="py-2 pr-2 text-right">
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            defaultValue={String(r.receivedAmount ?? 0)}
+                            onBlur={(e) => {
+                              const v = Number(e.target.value);
+                              if (!Number.isFinite(v) || v === Number(r.receivedAmount)) return;
+                              updateRecurringMut.mutate({ recurringId: r.id, dto: { receivedAmount: v } });
+                            }}
+                            className="h-7 text-xs text-right w-28 inline-block"
+                          />
+                        </td>
+                        <td className="py-2 pr-2">
+                          <Select
+                            value={r.status}
+                            onValueChange={(v) =>
+                              updateRecurringMut.mutate({ recurringId: r.id, dto: { status: v } })
+                            }
+                          >
+                            <SelectTrigger className="h-7 text-xs w-28"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">pending</SelectItem>
+                              <SelectItem value="billed">billed</SelectItem>
+                              <SelectItem value="received">received</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </td>
+                        <td className="py-2 pr-2 text-right text-muted-foreground">{r.receivedAt ? formatDate(r.receivedAt) : '—'}</td>
+                        <td className="py-2 text-center">
+                          <div className="flex justify-center gap-1">
+                            {r.status !== 'received' && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2 text-xs text-emerald-600 hover:text-emerald-700"
+                                title="Mark received"
+                                onClick={() =>
+                                  updateRecurringMut.mutate({
+                                    recurringId: r.id,
+                                    dto: { status: 'received', receivedAmount: Number(r.expectedAmount ?? 0) },
+                                  })
+                                }
+                              >
+                                <Check className="h-3.5 w-3.5 mr-1" /> Mark
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 text-red-500 hover:text-red-600"
+                              onClick={() => deleteRecurringMut.mutate(r.id)}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Totals */}
+          {(recurrings as any[]).length > 0 && (
+            <div className="border-t pt-2 shrink-0 text-sm font-semibold flex justify-between px-1">
+              <span>Total</span>
+              <span>
+                Expected ₹{recurringTotals.expected.toLocaleString('en-IN')} &nbsp;·&nbsp;
+                Received ₹{recurringTotals.received.toLocaleString('en-IN')}
+              </span>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRecurringDialogOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Milestones Dialog (admin, HR, super admin) ─────────────── */}
       <Dialog open={msDialogOpen} onOpenChange={setMsDialogOpen} >
