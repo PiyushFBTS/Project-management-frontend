@@ -8,7 +8,7 @@ import {
   LayoutDashboard, FolderKanban, Tags, Users, Receipt,
   ClipboardList, BarChart3, ChevronDown, X,
   ChevronLeft, ChevronRight, CalendarDays, Building2, LogOut, Settings, ListTodo, Ticket, Mail,
-  Megaphone, Wallet, Layers,
+  Megaphone, Wallet, Layers, Laptop2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -138,6 +138,16 @@ const navItems: NavItem[] = [
       { label: 'Monthly Grid', href: '/reports/monthly-grid', dotColor: 'bg-cyan-400' },
       { label: 'Employee Costing', href: '/reports/employee-cost', dotColor: 'bg-orange-400', hrOrAdminOnly: true },
       { label: 'Project Costing', href: '/reports/project-cost', dotColor: 'bg-teal-400', hrOrAdminOnly: true },
+    ],
+  },
+  {
+    label: 'Assets', icon: Laptop2,
+    iconColor: 'text-emerald-400', iconBg: 'bg-emerald-500/20',
+    activeBg: 'bg-emerald-500/20', hoverBg: 'hover:bg-emerald-500/10',
+    borderColor: 'border-l-emerald-400', dotColor: 'bg-emerald-400',
+    children: [
+      { label: 'Inventory', href: '/assets', dotColor: 'bg-emerald-400', hrOrAdminOnly: true },
+      { label: 'Vendors', href: '/asset-vendors', dotColor: 'bg-teal-400', hrOrAdminOnly: true },
     ],
   },
   {

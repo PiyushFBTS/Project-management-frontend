@@ -10,12 +10,15 @@ import {
   ArrowLeft, Mail, Phone, FileText, Download, Paperclip, Upload, Trash2, Loader2,
   User, Shield, KeyRound, Eye, EyeOff, CheckCircle2, Target, Lock, Ban, AlertTriangle, Plus, ChevronDown,
   Receipt, Send, Undo2, Pencil,
+  Laptop2, ExternalLink, UserMinus,
 } from 'lucide-react';
 import Link from 'next/link';
 import { employeesApi } from '@/lib/api/employees';
 import { companiesApi } from '@/lib/api/companies';
 import { authApi } from '@/lib/api/auth';
 import { salarySlipsApi, downloadSalarySlipPdf, type SalarySlip } from '@/lib/api/salary-slips';
+import { assetsApi } from '@/lib/api/assets';
+import type { Asset, AssetAssignment, AssetStatus } from '@/types';
 import { apiErrorMessage } from '@/lib/utils';
 import { useAuth } from '@/providers/auth-provider';
 import { Card, CardContent } from '@/components/ui/card';
@@ -118,7 +121,7 @@ function getInitials(name: string) {
   return name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 }
 
-type Tab = 'profile' | 'documents' | 'goals' | 'pip' | 'security' | 'salary-slips';
+type Tab = 'profile' | 'documents' | 'goals' | 'pip' | 'security' | 'salary-slips' | 'assets';
 type GoalStatus = 'not_started' | 'started' | 'in_progress' | 'finished';
 
 const GOAL_STATUS_META: Record<GoalStatus, { label: string; pill: string; badge: string; dot: string }> = {
@@ -399,6 +402,42 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
   });
   const slips: SalarySlip[] = Array.isArray(slipsRaw) ? slipsRaw : [];
 
+  // ── Assets tab ────────────────────────────────────────────────────────────
+  // Active devices currently held by this employee + full assignment
+  // history. The unassign mutation lives here so HR / admin can return
+  // a device straight from the profile without leaving for the asset
+  // detail page.
+  const canManageAssets = canManageAllDocs; // admin + HR (same scope)
+  const { data: activeAssetsRaw, isLoading: assetsLoading } = useQuery<Asset[]>({
+    queryKey: ['employee-assets-active', id],
+    queryFn: () =>
+      assetsApi.getUserActive(Number(id)).then((r: any) => r.data?.data ?? r.data ?? []),
+    enabled: !!id && activeTab === 'assets' && (canManageAssets || isSelf),
+  });
+  const { data: assetHistoryRaw, isLoading: assetHistoryLoading } = useQuery<
+    AssetAssignment[]
+  >({
+    queryKey: ['employee-assets-history', id],
+    queryFn: () =>
+      assetsApi.getUserHistory(Number(id)).then((r: any) => r.data?.data ?? r.data ?? []),
+    enabled: !!id && activeTab === 'assets' && (canManageAssets || isSelf),
+  });
+  const activeAssets: Asset[] = Array.isArray(activeAssetsRaw) ? activeAssetsRaw : [];
+  const assetHistory: AssetAssignment[] = Array.isArray(assetHistoryRaw)
+    ? assetHistoryRaw
+    : [];
+  const pastAssignments = assetHistory.filter((h) => !!h.returnedAt);
+  const unassignAssetMut = useMutation({
+    mutationFn: (assetId: number) => assetsApi.unassign(assetId, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['employee-assets-active', id] });
+      qc.invalidateQueries({ queryKey: ['employee-assets-history', id] });
+      toast.success('Asset returned');
+    },
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message ?? 'Failed to return asset'),
+  });
+
   // Lifecycle mutations — publish / unpublish toggle the visibility for
   // the recipient, delete is admin-only on the backend (we hide the
   // button for everyone else, but the server is the source of truth).
@@ -647,6 +686,9 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
     ...((canManageAllDocs || isSelf) ? [{ key: 'goals' as Tab, label: 'Goals', icon: Target }] : []),
     ...((canManageAllDocs || isSelf) ? [{ key: 'pip' as Tab, label: 'PIP', icon: AlertTriangle }] : []),
     ...(canSeeSalarySlips ? [{ key: 'salary-slips' as Tab, label: 'Salary Slips', icon: Receipt }] : []),
+    // Assets tab visible to admin / HR (anyone with broader manage scope)
+    // and to the employee viewing their own profile.
+    ...((canManageAllDocs || isSelf) ? [{ key: 'assets' as Tab, label: 'Assets', icon: Laptop2 }] : []),
     ...((isSelf || canManageAllDocs) ? [{ key: 'security' as Tab, label: 'Security', icon: Shield }] : []),
   ];
 
@@ -1918,6 +1960,161 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
+          {/* ── Assets tab ───── */}
+          {activeTab === 'assets' && (canManageAssets || isSelf) && (
+            <Card className="shadow-sm">
+              <CardContent className="px-4 sm:px-5 py-4 space-y-5">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <h2 className="text-base font-semibold flex items-center gap-2">
+                    <Laptop2 className="h-4 w-4 text-emerald-600" /> Assigned Assets
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    {activeAssets.length} active · {pastAssignments.length} previously held
+                  </p>
+                </div>
+
+                {/* Active section */}
+                <div>
+                  <h3 className="text-xs uppercase tracking-wider font-semibold text-muted-foreground mb-2">
+                    Currently Assigned
+                  </h3>
+                  {assetsLoading ? (
+                    <Skeleton className="h-24 w-full rounded-xl" />
+                  ) : activeAssets.length === 0 ? (
+                    <div className="rounded-xl border bg-card text-center py-8 text-sm text-muted-foreground">
+                      No active assignments.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {activeAssets.map((a) => (
+                        <div
+                          key={a.id}
+                          className="rounded-xl border bg-card p-4 hover:shadow-md transition-shadow"
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <Link
+                              href={`/assets/${a.id}`}
+                              className="font-mono text-sm font-semibold hover:underline"
+                            >
+                              {a.assetTag}
+                            </Link>
+                            <Badge
+                              className="bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-400 text-[10px]"
+                            >
+                              {(a.status as AssetStatus).replace(/_/g, ' ')}
+                            </Badge>
+                          </div>
+                          <p className="text-sm font-semibold">
+                            {a.brand} {a.model}
+                          </p>
+                          {a.serialNumber && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              SN {a.serialNumber}
+                            </p>
+                          )}
+                          <div className="grid grid-cols-2 gap-1 mt-3 text-[11px] text-muted-foreground">
+                            <span>Category</span>
+                            <span className="capitalize">
+                              {a.category === 'other'
+                                ? a.categoryOtherName || 'Other'
+                                : a.category}
+                            </span>
+                            <span>Condition</span>
+                            <span className="capitalize">{a.condition}</span>
+                          </div>
+                          <div className="flex items-center justify-between mt-3 pt-3 border-t">
+                            <Link
+                              href={`/assets/${a.id}`}
+                              className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                            >
+                              Open <ExternalLink className="h-3 w-3" />
+                            </Link>
+                            {canManageAssets && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs"
+                                onClick={() => {
+                                  if (
+                                    confirm(
+                                      `Return ${a.assetTag} from this employee?`,
+                                    )
+                                  )
+                                    unassignAssetMut.mutate(a.id);
+                                }}
+                                disabled={unassignAssetMut.isPending}
+                              >
+                                <UserMinus className="mr-1 h-3 w-3" /> Return
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* History section */}
+                <div>
+                  <h3 className="text-xs uppercase tracking-wider font-semibold text-muted-foreground mb-2">
+                    Previously Held
+                  </h3>
+                  {assetHistoryLoading ? (
+                    <Skeleton className="h-20 w-full rounded-xl" />
+                  ) : pastAssignments.length === 0 ? (
+                    <div className="rounded-xl border bg-card text-center py-6 text-xs text-muted-foreground">
+                      No previous assignments.
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border bg-card divide-y">
+                      {pastAssignments.map((h) => (
+                        <div
+                          key={h.id}
+                          className="px-4 py-3 text-sm flex items-center gap-3"
+                        >
+                          {h.asset ? (
+                            <Link
+                              href={`/assets/${h.asset.id}`}
+                              className="font-mono text-xs font-semibold w-20 hover:underline"
+                            >
+                              {h.asset.assetTag}
+                            </Link>
+                          ) : (
+                            <span className="font-mono text-xs font-semibold w-20">
+                              —
+                            </span>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="truncate">
+                              {h.asset?.brand} {h.asset?.model}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {h.assignedAt
+                                ? format(new Date(h.assignedAt), 'dd MMM yyyy')
+                                : '—'}{' '}
+                              →{' '}
+                              {h.returnedAt
+                                ? format(new Date(h.returnedAt), 'dd MMM yyyy')
+                                : '—'}
+                            </p>
+                          </div>
+                          {h.returnCondition && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] capitalize"
+                            >
+                              {h.returnCondition}
+                            </Badge>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* ── Security tab ───── */}
           {activeTab === 'security' && (isSelf || canManageAllDocs) && (<>

@@ -169,6 +169,130 @@ export interface ProjectRecurring {
   updatedAt: string;
 }
 
+// ── Asset & Inventory Management ─────────────────────────────────────
+export type AssetCategory =
+  | 'laptop'
+  | 'desktop'
+  | 'monitor'
+  | 'phone'
+  | 'accessory'
+  | 'other';
+
+export type AssetOwnership = 'owned' | 'rented' | 'leased';
+
+export type AssetCondition = 'new' | 'good' | 'fair' | 'damaged';
+
+export type AssetStatus =
+  | 'available'
+  | 'assigned'
+  | 'in_repair'
+  | 'retired'
+  | 'lost'
+  | 'returned_to_vendor';
+
+export type AssetMaintenanceType =
+  | 'repair'
+  | 'maintenance'
+  | 'inspection'
+  | 'upgrade';
+
+export type AssetMaintenanceStatus =
+  | 'scheduled'
+  | 'in_progress'
+  | 'completed'
+  | 'cancelled';
+
+export interface AssetVendor {
+  id: number;
+  name: string;
+  contactName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  gst?: string | null;
+  paymentTerms?: string | null;
+  notes?: string | null;
+  isActive: boolean;
+  companyId: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AssetAssignmentSummary {
+  id: number;
+  userId: number;
+  userName: string;
+  assignedAt: string;
+}
+
+export interface Asset {
+  id: number;
+  assetTag: string;
+  category: AssetCategory;
+  categoryOtherName?: string | null;
+  brand?: string | null;
+  model?: string | null;
+  serialNumber?: string | null;
+  specs?: Record<string, unknown> | null;
+  ownership: AssetOwnership;
+  vendorId?: number | null;
+  vendor?: Pick<AssetVendor, 'id' | 'name'> | null;
+  purchaseDate?: string | null;
+  purchasePrice?: number | null;
+  rentalStart?: string | null;
+  rentalEnd?: string | null;
+  rentalMonthlyAmount?: number | null;
+  warrantyExpiry?: string | null;
+  condition: AssetCondition;
+  status: AssetStatus;
+  location?: string | null;
+  notes?: string | null;
+  currentAssignmentId?: number | null;
+  currentHolder?: AssetAssignmentSummary | null;
+  companyId: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AssetAssignment {
+  id: number;
+  assetId: number;
+  userId: number;
+  user?: { id: number; name: string; email?: string } | null;
+  assignedAt: string;
+  assignedById?: number | null;
+  assignedBy?: { id: number; name: string } | null;
+  returnedAt: string | null;
+  returnedById?: number | null;
+  returnedBy?: { id: number; name: string } | null;
+  returnCondition?: AssetCondition | null;
+  returnNotes?: string | null;
+  notes?: string | null;
+  asset?: Asset;
+  companyId: number;
+}
+
+export interface AssetMaintenance {
+  id: number;
+  assetId: number;
+  type: AssetMaintenanceType;
+  vendorId?: number | null;
+  vendor?: Pick<AssetVendor, 'id' | 'name'> | null;
+  startDate: string;
+  endDate: string | null;
+  cost?: number | null;
+  description: string;
+  notes?: string | null;
+  status: AssetMaintenanceStatus;
+  reportedById?: number | null;
+  reportedBy?: { id: number; name: string } | null;
+  completedById?: number | null;
+  completedBy?: { id: number; name: string } | null;
+  companyId: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // A "primary project name" umbrella that groups several typed projects.
 export interface ProjectGroup {
   id: number;
