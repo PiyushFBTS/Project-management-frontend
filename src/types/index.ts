@@ -488,6 +488,65 @@ export interface TaskEntry {
   updatedAt: string;
 }
 
+// ── Task sheet PM approvals ────────────────────────────────────────────────
+export type TaskSheetApprovalRowStatus = 'pending' | 'approved' | 'rejected';
+export type TaskSheetOverallApprovalStatus =
+  | 'no_approvals'
+  | 'pending'
+  | 'partial'
+  | 'approved'
+  | 'rejected';
+
+export interface TaskSheetApproval {
+  id: number;
+  taskSheetId: number;
+  /**
+   * The entry this row decides. Per-entry granularity (see migration
+   * 1716900000005) — one row per (sheet, entry, round). Joined on
+   * every PM-inbox + sheet-detail read so the UI can render ticket /
+   * description / hours without a second fetch.
+   */
+  taskEntryId: number;
+  taskEntry?: {
+    id: number;
+    taskDescription: string;
+    fromTime?: string;
+    toTime?: string;
+    durationHours?: number | string;
+    activityType?: string | null;
+    otherProjectName?: string | null;
+    status?: string;
+    blockers?: string | null;
+    ticket?: { id: number; ticketNumber?: string; title?: string } | null;
+  } | null;
+  /**
+   * Joined sheet metadata — present in PM inbox list responses
+   * (`/pm/task-approvals`) so the table can render employee/date/hours
+   * without a second fetch. Not always populated on mutation responses.
+   */
+  taskSheet?: {
+    id: number;
+    sheetDate: string;
+    totalHours?: number;
+    submittedAt?: string | null;
+    employeeId?: number;
+    employee?: { id: number; name: string } | null;
+  } | null;
+  projectId: number | null;
+  project?: { id: number; projectName: string; projectCode?: string } | null;
+  pmId: number | null;
+  pm?: { id: number; name: string } | null;
+  round: number;
+  status: TaskSheetApprovalRowStatus;
+  notes: string | null;
+  decidedAt: string | null;
+  decidedById: number | null;
+  decidedBy?: { id: number; name: string } | null;
+  companyId: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DailyTaskSheet {
   id: number;
   employeeId: number;
@@ -499,6 +558,8 @@ export interface DailyTaskSheet {
   submittedAt?: string;
   remarks?: string;
   taskEntries?: TaskEntry[];
+  /** Derived field — attached by `getByIdWithApproval` on the backend. */
+  overallApprovalStatus?: TaskSheetOverallApprovalStatus;
   createdAt: string;
   updatedAt: string;
 }
@@ -657,6 +718,9 @@ export type NotificationType =
   | 'project_created'
   | 'project_updated'
   | 'task_sheet_submitted'
+  | 'task_sheet_pm_approval_pending'
+  | 'task_sheet_pm_approved'
+  | 'task_sheet_pm_rejected'
   | 'leave_request_submitted'
   | 'leave_request_manager_approved'
   | 'leave_request_manager_rejected'

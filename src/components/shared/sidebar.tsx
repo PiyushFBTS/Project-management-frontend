@@ -13,11 +13,14 @@ import {
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { useSidebar } from '@/providers/sidebar-provider';
 import { useAuth } from '@/providers/auth-provider';
 import { useCompany } from '@/providers/company-provider';
+import { pmTaskApprovalsApi } from '@/lib/api/task-sheets';
+import { ClipboardCheck } from 'lucide-react';
 
 type NavChild = { label: string; href: string; dotColor: string; hrOrAdminOnly?: boolean };
 
@@ -105,6 +108,16 @@ const navItems: NavItem[] = [
     iconColor: 'text-violet-400', iconBg: 'bg-violet-500/20',
     activeBg: 'bg-violet-500/20', hoverBg: 'hover:bg-violet-500/10',
     borderColor: 'border-l-violet-400', dotColor: 'bg-violet-400',
+  },
+  {
+    // Approval inbox for project managers, HR, and admins. Plain employees
+    // see an empty list — visibility is gated below by `pendingCount > 0
+    // || isHr || isAdmin` so the entry simply doesn't appear for users
+    // who have nothing to act on.
+    label: 'My Approvals', href: '/task-approvals', icon: ClipboardCheck,
+    iconColor: 'text-blue-400', iconBg: 'bg-blue-500/20',
+    activeBg: 'bg-blue-500/20', hoverBg: 'hover:bg-blue-500/10',
+    borderColor: 'border-l-blue-400', dotColor: 'bg-blue-400',
   },
   {
     label: 'Expenses', href: '/expenses', icon: Receipt,
@@ -204,6 +217,20 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isCli
   const router = useRouter();
   const { selectedCompany, clearCompany, isSuperAdmin } = useCompany();
   const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') ?? 'http://localhost:3001';
+
+  // Pending-approval count for the "My Approvals" entry. Skipped for
+  // clients (no access) and the super-admin platform view (no company
+  // context). Cheap query — backend returns an empty list for users
+  // who aren't a PM and aren't HR/admin.
+  const approvalsEnabled = !isClient && !(isSuperAdmin && !selectedCompany);
+  const { data: pendingApprovalRows } = useQuery({
+    queryKey: ['sidebar-pending-approvals', selectedCompany?.id ?? null],
+    queryFn: () => pmTaskApprovalsApi.list('pending').then((r) => r.data.data),
+    enabled: approvalsEnabled,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+  const pendingApprovalsCount = pendingApprovalRows?.length ?? 0;
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     Reports: pathname.startsWith('/reports'),
     'Leave Management': pathname.startsWith('/leave-r') || pathname.startsWith('/holidays'),
@@ -221,6 +248,14 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isCli
 
   const clientAllowedLabels = ['Dashboard', 'Projects', 'Ticket Log', 'My Ticket'];
 
+  // "My Approvals" stays hidden for plain employees who have nothing to
+  // act on — they aren't a PM of any project and aren't HR/admin, so the
+  // page would just be empty. HR sees the null-project bucket and admins
+  // see everything, so both always get the entry. PMs get it as soon as
+  // a sheet is waiting on them (count > 0).
+  const showApprovalsEntry =
+    !isClient && (!isEmployee || isHr || pendingApprovalsCount > 0);
+
   const visibleItems = (() => {
     if (isClient) return baseItems.filter((item) => clientAllowedLabels.includes(item.label));
     if (isEmployee) {
@@ -230,10 +265,13 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isCli
       return baseItems.filter((item) => {
         if (item.adminOnly) return false;
         if (item.managerOnly && !canSeeManagerItems) return false;
+        if (item.label === 'My Approvals' && !showApprovalsEntry) return false;
         return true;
       });
     }
-    return baseItems;
+    return baseItems.filter(
+      (item) => item.label !== 'My Approvals' || showApprovalsEntry,
+    );
   })()
     .map((item) => {
       if (!item.children) return item;
@@ -336,6 +374,8 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isCli
         }
 
         const isActive = pathname === item.href;
+        const showApprovalsBadge =
+          item.label === 'My Approvals' && pendingApprovalsCount > 0;
 
         if (collapsed) {
           return (
@@ -343,9 +383,9 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isCli
               key={item.href}
               href={item.href!}
               onClick={onNavigate}
-              title={item.label}
+              title={showApprovalsBadge ? `${item.label} (${pendingApprovalsCount})` : item.label}
               className={cn(
-                'flex items-center justify-center rounded-lg p-2 transition-all',
+                'relative flex items-center justify-center rounded-lg p-2 transition-all',
                 item.hoverBg, 'hover:text-gray-900 dark:hover:text-white',
                 isActive ? `${item.activeBg} text-gray-900 dark:text-white border-l-2 ${item.borderColor}` : 'text-gray-500 dark:text-slate-400',
               )}
@@ -356,6 +396,9 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isCli
               )}>
                 <item.icon className={cn('h-4 w-4 transition-colors', isActive ? item.iconColor : 'text-gray-400 dark:text-slate-500')} />
               </div>
+              {showApprovalsBadge && (
+                <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-sidebar" />
+              )}
             </Link>
           );
         }
@@ -380,7 +423,14 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isCli
               <item.icon className={cn('h-4 w-4 transition-colors', isActive ? item.iconColor : 'text-gray-400 dark:text-slate-500')} />
             </div>
             {item.label}
-            {isActive && <div className={cn('ml-auto h-1.5 w-1.5 rounded-full', item.dotColor)} />}
+            {showApprovalsBadge && (
+              <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-semibold leading-none text-white">
+                {pendingApprovalsCount > 99 ? '99+' : pendingApprovalsCount}
+              </span>
+            )}
+            {isActive && !showApprovalsBadge && (
+              <div className={cn('ml-auto h-1.5 w-1.5 rounded-full', item.dotColor)} />
+            )}
           </Link>
         );
       })}

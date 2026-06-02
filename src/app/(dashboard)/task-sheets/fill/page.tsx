@@ -257,11 +257,30 @@ function FillTaskSheetPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingEntry, setEditingEntry] = useState<TaskEntry | null>(null);
   const [form, setForm] = useState(emptyForm);
+  // Snapshot of the form values at the moment we opened the Edit
+  // dialog — used to gate the "Update Entry" button until the user
+  // actually changes something. Null while adding a new entry (the
+  // Add Entry button isn't gated on this).
+  const [editInitialForm, setEditInitialForm] =
+    useState<typeof emptyForm | null>(null);
   // Per-field validation flags (highlight + inline message). Cleared as
   // each field is fixed, and reset whenever the dialog opens.
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const clearError = (key: string) =>
     setErrors((e) => (e[key] ? { ...e, [key]: false } : e));
+
+  // Tracks whether the user has made any entry-level change since the
+  // last submit on a sheet that's already submitted. The "Update Sheet"
+  // button is gated on this so a PM can't be spammed with a no-op
+  // re-submission (which would otherwise re-create the same approval
+  // rows and re-notify). Reset on submit and on date switch.
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Switching to a different day (or to a different user context)
+  // discards any dirty flag from the previous sheet.
+  useEffect(() => {
+    setHasUnsavedChanges(false);
+  }, [sheetDate, user?._type]);
 
   // Sheet for the selected date (auto-created by backend)
   const { data: sheet, isLoading: sheetLoading, refetch, error: sheetError } = useQuery({
@@ -316,6 +335,7 @@ function FillTaskSheetPage() {
     },
     onSuccess: () => {
       toast.success('Task entry added');
+      setHasUnsavedChanges(true);
       closeForm();
       refetch();
     },
@@ -345,6 +365,7 @@ function FillTaskSheetPage() {
     },
     onSuccess: () => {
       toast.success('Task entry updated');
+      setHasUnsavedChanges(true);
       closeForm();
       refetch();
     },
@@ -359,6 +380,7 @@ function FillTaskSheetPage() {
       taskSheetsApi.deleteEntry(sheet!.id, entryId),
     onSuccess: () => {
       toast.success('Task entry removed');
+      setHasUnsavedChanges(true);
       refetch();
     },
     onError: (err: AxiosError<{ message?: string }>) => {
@@ -371,6 +393,9 @@ function FillTaskSheetPage() {
     mutationFn: () => taskSheetsApi.submit(sheet!.id),
     onSuccess: () => {
       toast.success('Task sheet submitted successfully!');
+      // Re-submission is now committed; the next "Update Sheet" stays
+      // disabled until the user makes another entry change.
+      setHasUnsavedChanges(false);
       queryClient.invalidateQueries({ queryKey: ['my-task-sheets'] });
       refetch();
     },
@@ -388,10 +413,12 @@ function FillTaskSheetPage() {
     setFormOpen(false);
     setEditingEntry(null);
     setForm(emptyForm);
+    setEditInitialForm(null);
   };
 
   const openAddForm = () => {
     setEditingEntry(null);
+    setEditInitialForm(null);
     setErrors({});
     // Pre-fill fromTime with the suggested next slot so the user only
     // has to pick an end time (or override the start).
@@ -409,7 +436,7 @@ function FillTaskSheetPage() {
     const ticketRef = entry.ticketId
       ? String(entry.ticketId)
       : (entry.activityType ?? '');
-    setForm({
+    const seeded = {
       projectId: entry.projectId ? String(entry.projectId) : 'other',
       otherProjectName: entry.otherProjectName ?? '',
       ticketId: ticketRef,
@@ -418,9 +445,27 @@ function FillTaskSheetPage() {
       taskDescription: entry.taskDescription,
       blockers: entry.blockers ?? '',
       status: entry.status,
-    });
+    };
+    setForm(seeded);
+    // Snapshot the seeded values — every field is a primitive string
+    // so a shallow key compare against `form` is enough to tell if the
+    // user has actually edited anything.
+    setEditInitialForm(seeded);
     setFormOpen(true);
   };
+
+  // True when the user has changed at least one field since the Edit
+  // dialog opened. Null `editInitialForm` (Add mode or dialog closed)
+  // resolves to false — the Add Entry button isn't gated on this.
+  const editHasChanges = (() => {
+    if (!editInitialForm) return false;
+    for (const k of Object.keys(editInitialForm) as Array<
+      keyof typeof emptyForm
+    >) {
+      if (form[k] !== editInitialForm[k]) return true;
+    }
+    return false;
+  })();
 
   const computedHours = diffHours(form.fromTime, form.toTime);
 
@@ -591,18 +636,36 @@ function FillTaskSheetPage() {
           <Plus className="mr-1.5 h-4 w-4" />
           Add Entry
         </Button>
-        {entries.length > 0 && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
-            disabled={submitMutation.isPending}
-            onClick={() => submitMutation.mutate()}
-          >
-            <Send className="mr-1.5 h-4 w-4" />
-            {submitMutation.isPending ? 'Saving...' : sheet.isSubmitted ? 'Update Sheet' : 'Submit Sheet'}
-          </Button>
-        )}
+        {entries.length > 0 && (() => {
+          // "Update Sheet" (re-submit of an already-submitted sheet)
+          // stays disabled until the user makes at least one entry
+          // change — otherwise repeated clicks would re-fan the same
+          // approval rows to the PM with no work to review. First-time
+          // "Submit Sheet" is always enabled.
+          const isReSubmit = sheet.isSubmitted;
+          const reSubmitGated = isReSubmit && !hasUnsavedChanges;
+          return (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
+              disabled={submitMutation.isPending || reSubmitGated}
+              title={
+                reSubmitGated
+                  ? 'No changes to update — edit an entry first'
+                  : undefined
+              }
+              onClick={() => submitMutation.mutate()}
+            >
+              <Send className="mr-1.5 h-4 w-4" />
+              {submitMutation.isPending
+                ? 'Saving...'
+                : isReSubmit
+                  ? 'Update Sheet'
+                  : 'Submit Sheet'}
+            </Button>
+          );
+        })()}
       </div>
 
       {/* Entries table */}
@@ -636,10 +699,39 @@ function FillTaskSheetPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              entries.map((entry, i) => (
+              entries.map((entry, i) => {
+                // "Not submitted" badge — only meaningful on an already-
+                // submitted sheet, where it flags rows the user has
+                // added or edited since the last submit (i.e. work
+                // that won't reach the PM until they click Update
+                // Sheet). On a draft sheet every row is obviously
+                // unsubmitted; the sheet-level Draft chip covers that.
+                const submittedAtMs = sheet.submittedAt
+                  ? new Date(sheet.submittedAt).getTime()
+                  : 0;
+                const updatedAtMs = entry.updatedAt
+                  ? new Date(entry.updatedAt).getTime()
+                  : 0;
+                const needsResubmit =
+                  sheet.isSubmitted &&
+                  submittedAtMs > 0 &&
+                  updatedAtMs > submittedAtMs;
+                return (
                 <TableRow key={entry.id}>
                   <TableCell className="text-muted-foreground">{i + 1}</TableCell>
-                  <TableCell className="font-medium text-sm">{entry.project?.projectName ?? entry.otherProjectName ?? '—'}</TableCell>
+                  <TableCell className="font-medium text-sm">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span>{entry.project?.projectName ?? entry.otherProjectName ?? '—'}</span>
+                      {needsResubmit && (
+                        <span
+                          className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1 bg-amber-500/15 text-amber-700 ring-amber-500/30 dark:text-amber-400"
+                          title="Added or edited since the last submit — not yet sent to the PM"
+                        >
+                          Not submitted
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {projectTypeLabels[(entry.project as any)?.projectType] ?? (entry.project as any)?.projectType ?? '—'}
                   </TableCell>
@@ -686,7 +778,8 @@ function FillTaskSheetPage() {
                       </div>
                     </TableCell>
                 </TableRow>
-              ))
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -862,7 +955,15 @@ function FillTaskSheetPage() {
               <Button
                 size="sm"
                 className="bg-linear-to-r from-blue-600 to-blue-800 text-white hover:opacity-90 shadow-sm shadow-blue-500/25 border-0"
-                disabled={isSaving}
+                // Same idea as the "Update Sheet" gate: in Edit mode
+                // the button stays disabled until the user actually
+                // changes a field. Add mode is never gated this way.
+                disabled={isSaving || (!!editingEntry && !editHasChanges)}
+                title={
+                  editingEntry && !editHasChanges
+                    ? 'No changes to update'
+                    : undefined
+                }
                 onClick={handleSave}
               >
                 {isSaving ? 'Saving...' : editingEntry ? 'Update Entry' : 'Add Entry'}

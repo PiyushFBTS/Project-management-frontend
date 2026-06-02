@@ -1,6 +1,6 @@
 import { api } from './axios-instance';
 import { tokenStorage } from '@/lib/auth/token-storage';
-import { ApiResponse, DailyTaskSheet, TaskEntry, TaskStatus, PaginationParams, Project } from '@/types';
+import { ApiResponse, DailyTaskSheet, TaskEntry, TaskStatus, PaginationParams, Project, TaskSheetApproval } from '@/types';
 
 // Auto-route "my task sheet" endpoints based on login type.
 // Admin → /admin/task-sheets/my/* (bridged via email to an employee record)
@@ -36,6 +36,14 @@ export const taskSheetsApi = {
 
   submit: (id: number) =>
     api.post<ApiResponse<DailyTaskSheet>>(`${base()}/${id}/submit`),
+
+  /**
+   * Full PM-approval audit history for the sheet — every project segment,
+   * every round, newest round first. Backend mounts the read on the
+   * employee controller so admins also see it via the same path.
+   */
+  getApprovals: (id: number) =>
+    api.get<ApiResponse<TaskSheetApproval[]>>(`/task-sheets/${id}/approvals`),
 
   addEntry: (sheetId: number, data: {
     projectId?: number;
@@ -91,4 +99,30 @@ export const taskSheetsApi = {
     const isAdmin = tokenStorage.getLoginType() === 'admin';
     return api.get<ApiResponse<Project[]>>(isAdmin ? '/projects/all-active' : '/employee/projects/all-active');
   },
+};
+
+// ── PM approval inbox ─────────────────────────────────────────────────────
+// Endpoints sit on /pm/task-approvals (employee JWT). A user with no PM
+// assignments simply sees an empty list; admins/HR also see null-project
+// rows (the "no project" bucket).
+export const pmTaskApprovalsApi = {
+  list: (status?: 'pending' | 'approved' | 'rejected') =>
+    api.get<ApiResponse<TaskSheetApproval[]>>('/pm/task-approvals', {
+      params: status ? { status } : undefined,
+    }),
+
+  getOne: (id: number) =>
+    api.get<ApiResponse<TaskSheetApproval>>(`/pm/task-approvals/${id}`),
+
+  approve: (id: number, notes?: string) =>
+    api.post<ApiResponse<TaskSheetApproval>>(
+      `/pm/task-approvals/${id}/approve`,
+      { notes },
+    ),
+
+  reject: (id: number, notes: string) =>
+    api.post<ApiResponse<TaskSheetApproval>>(
+      `/pm/task-approvals/${id}/reject`,
+      { notes },
+    ),
 };
