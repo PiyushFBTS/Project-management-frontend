@@ -33,8 +33,16 @@ const typeLabels: Record<string, string> = {
   project_manager: 'Project Manager',
   functional: 'Functional',
   technical: 'Technical',
-  management: 'Management',
-  core_team: 'Core Team',
+  senior_project_manager: 'Senior Project Manager',
+  senior_functional: 'Senior Functional',
+  senior_technical: 'Senior Technical',
+  ceo: 'CEO',
+  coo: 'COO',
+  cto: 'CTO',
+  full_stack_developer: 'Full Stack Developer',
+  account_manager: 'Account Manager',
+  human_resource_manager: 'Human Resource Manager',
+  brand_manager: 'Brand Manager',
   admin: 'Admin',
 };
 

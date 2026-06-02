@@ -17,14 +17,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SearchableSelect } from '@/components/ui/searchable-select';
 
 const consultantTypes = [
+  // C-suite first — these are typically the most senior roles.
+  { value: 'ceo', label: 'CEO' },
+  { value: 'coo', label: 'COO' },
+  { value: 'cto', label: 'CTO' },
+  // Senior tier next to their base counterparts so the picker reads
+  // top-down by seniority within each track.
+  { value: 'senior_project_manager', label: 'Senior Project Manager' },
   { value: 'project_manager', label: 'Project Manager' },
+  { value: 'senior_functional', label: 'Senior Functional Consultant' },
   { value: 'functional', label: 'Functional Consultant' },
+  { value: 'senior_technical', label: 'Senior Technical Consultant' },
   { value: 'technical', label: 'Technical Consultant' },
   { value: 'full_stack_developer', label: 'Full Stack Developer' },
   { value: 'account_manager', label: 'Account Manager' },
   { value: 'human_resource_manager', label: 'Human Resource Manager' },
-  { value: 'management', label: 'Management' },
-  { value: 'core_team', label: 'Core Team' },
+  { value: 'brand_manager', label: 'Brand Manager' },
 ];
 
 const bloodGroups = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];

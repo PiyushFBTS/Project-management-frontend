@@ -62,7 +62,11 @@ const TYPE_LABELS: Record<string, string> = {
   technical: 'Technical Consultant', full_stack_developer: 'Full Stack Developer',
   account_manager: 'Account Manager',
   human_resource_manager: 'Human Resource Manager',
-  management: 'Management', core_team: 'Core Team',
+  senior_project_manager: 'Senior Project Manager',
+  senior_functional: 'Senior Functional Consultant',
+  senior_technical: 'Senior Technical Consultant',
+  ceo: 'CEO', coo: 'COO', cto: 'CTO',
+  brand_manager: 'Brand Manager',
 };
 
 const CATEGORY_LABELS: Record<string, string> = {

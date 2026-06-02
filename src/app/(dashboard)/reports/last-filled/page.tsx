@@ -18,8 +18,16 @@ const typeLabels: Record<string, string> = {
   project_manager: 'PM',
   functional: 'Functional',
   technical: 'Technical',
-  management: 'Management',
-  core_team: 'Core',
+  senior_project_manager: 'Senior PM',
+  senior_functional: 'Senior Functional',
+  senior_technical: 'Senior Technical',
+  ceo: 'CEO',
+  coo: 'COO',
+  cto: 'CTO',
+  full_stack_developer: 'Full Stack',
+  account_manager: 'Account Manager',
+  human_resource_manager: 'HR',
+  brand_manager: 'Brand Manager',
 };
 
 function formatDate(dateStr: string | null): string {

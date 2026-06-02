@@ -15,15 +15,32 @@ import {
 } from '@/components/ui/table';
 
 const TYPE_META: Record<string, { label: string; color: string }> = {
-  project_manager: { label: 'PM',         color: 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 ring-indigo-500/30' },
-  functional:      { label: 'Functional', color: 'bg-teal-500/15 text-teal-700 dark:text-teal-400 ring-teal-500/30' },
-  technical:       { label: 'Technical',  color: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-400 ring-cyan-500/30' },
-  management:      { label: 'Management', color: 'bg-purple-500/15 text-purple-700 dark:text-purple-400 ring-purple-500/30' },
-  core_team:       { label: 'Core',       color: 'bg-pink-500/15 text-pink-700 dark:text-pink-400 ring-pink-500/30' },
+  ceo:                     { label: 'CEO',                 color: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 ring-amber-500/30' },
+  coo:                     { label: 'COO',                 color: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 ring-amber-500/30' },
+  cto:                     { label: 'CTO',                 color: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 ring-amber-500/30' },
+  senior_project_manager:  { label: 'Senior PM',           color: 'bg-violet-500/15 text-violet-700 dark:text-violet-400 ring-violet-500/30' },
+  project_manager:         { label: 'PM',                  color: 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 ring-indigo-500/30' },
+  senior_functional:       { label: 'Senior Functional',   color: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 ring-emerald-500/30' },
+  functional:              { label: 'Functional',          color: 'bg-teal-500/15 text-teal-700 dark:text-teal-400 ring-teal-500/30' },
+  senior_technical:        { label: 'Senior Technical',    color: 'bg-sky-500/15 text-sky-700 dark:text-sky-400 ring-sky-500/30' },
+  technical:               { label: 'Technical',           color: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-400 ring-cyan-500/30' },
+  full_stack_developer:    { label: 'Full Stack',          color: 'bg-blue-500/15 text-blue-700 dark:text-blue-400 ring-blue-500/30' },
+  account_manager:         { label: 'Account Manager',     color: 'bg-orange-500/15 text-orange-700 dark:text-orange-400 ring-orange-500/30' },
+  human_resource_manager:  { label: 'HR',                  color: 'bg-rose-500/15 text-rose-700 dark:text-rose-400 ring-rose-500/30' },
+  brand_manager:           { label: 'Brand Manager',       color: 'bg-pink-500/15 text-pink-700 dark:text-pink-400 ring-pink-500/30' },
 };
 
 // Render order — matches the summary columns on the parent page.
-const TYPE_ORDER = ['project_manager', 'functional', 'technical', 'management', 'core_team'];
+const TYPE_ORDER = [
+  'ceo', 'coo', 'cto',
+  'senior_project_manager', 'project_manager',
+  'senior_functional', 'functional',
+  'senior_technical', 'technical',
+  'full_stack_developer',
+  'account_manager',
+  'human_resource_manager',
+  'brand_manager',
+];
 
 function typeMeta(t: string | null | undefined) {
   return TYPE_META[t ?? ''] ?? { label: t ?? 'Other', color: 'bg-slate-500/15 text-slate-700 dark:text-slate-400 ring-slate-500/30' };
