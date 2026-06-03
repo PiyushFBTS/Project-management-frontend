@@ -320,24 +320,36 @@ function NewProjectPage() {
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-orange-600 dark:text-orange-400 mb-1.5">
             <Clock className="h-3 w-3" /> Status
           </div>
-          <Select value={form.status} onValueChange={(v) => setForm((p) => ({ ...p, status: v }))}>
-            <SelectTrigger className="h-8 text-sm w-full"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {statusOptions.map((s) => <SelectItem key={s} value={s} className="capitalize">{s.replace('_', ' ')}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          {/* Searchable so the field is consistent with Manager / Group /
+              Type below; ignore the clear (`''`) — Status is required
+              and defaults to 'active'. */}
+          <SearchableSelect
+            value={form.status}
+            onValueChange={(v) => { if (v) setForm((p) => ({ ...p, status: v })); }}
+            placeholder="Search status..."
+            options={statusOptions.map((s) => ({
+              value: s,
+              label: s.charAt(0).toUpperCase() + s.slice(1).replace('_', ' '),
+            }))}
+            className="text-sm"
+          />
         </div>
 
         <div className="rounded-xl border bg-card p-4">
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-violet-600 dark:text-violet-400 mb-1.5">
             <FolderKanban className="h-3 w-3" /> Type <span className="text-red-500">*</span>
           </div>
-          <Select value={form.projectType} onValueChange={(v) => { setForm((p) => ({ ...p, projectType: v })); clearError('projectType'); }}>
-            <SelectTrigger className={`h-8 text-sm w-full ${errors.projectType ? 'border-red-500 ring-1 ring-red-500' : ''}`}><SelectValue placeholder="Select type" /></SelectTrigger>
-            <SelectContent>
-              {typeOptions.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          {/* Red ring wrapper on error — SearchableSelect's inner button
+              owns its own border class so we tint it from the outside. */}
+          <div className={errors.projectType ? 'rounded-md ring-1 ring-red-500' : ''}>
+            <SearchableSelect
+              value={form.projectType}
+              onValueChange={(v) => { setForm((p) => ({ ...p, projectType: v })); clearError('projectType'); }}
+              placeholder="Search type..."
+              options={typeOptions}
+              className="text-sm"
+            />
+          </div>
           {errors.projectType && <p className="text-[10px] text-red-500 mt-1">Type is required</p>}
         </div>
 

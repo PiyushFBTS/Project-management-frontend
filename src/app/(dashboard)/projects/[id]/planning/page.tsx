@@ -901,15 +901,19 @@ export default function ProjectPlanningPage() {
                   <FormField control={taskForm.control} name="phaseId" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Phase</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl><SelectTrigger className="w-full"><SelectValue placeholder="None" /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          <SelectItem value="__none__">None</SelectItem>
-                          {phaseList.map((p) => (
-                            <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value}
+                          onValueChange={(v) => field.onChange(v || '__none__')}
+                          placeholder={phaseList.length === 0 ? 'No phases yet' : 'Search phase…'}
+                          options={[
+                            { value: '__none__', label: 'None' },
+                            ...phaseList.map((p) => ({ value: String(p.id), label: p.name })),
+                          ]}
+                          disabled={phaseList.length === 0}
+                          className="w-full"
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -934,15 +938,20 @@ export default function ProjectPlanningPage() {
                 <FormField control={taskForm.control} name="priority" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Priority</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl><SelectTrigger className="w-full"><SelectValue /></SelectTrigger></FormControl>
-                      <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                        <SelectItem value="critical">Critical</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <FormControl>
+                      <SearchableSelect
+                        value={field.value}
+                        onValueChange={(v) => { if (v) field.onChange(v); }}
+                        placeholder="Search priority…"
+                        options={[
+                          { value: 'low', label: 'Low' },
+                          { value: 'medium', label: 'Medium' },
+                          { value: 'high', label: 'High' },
+                          { value: 'critical', label: 'Critical' },
+                        ]}
+                        className="w-full"
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )} />
@@ -959,16 +968,21 @@ export default function ProjectPlanningPage() {
                   <FormField control={taskForm.control} name="status" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Status</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl><SelectTrigger className="w-full"><SelectValue /></SelectTrigger></FormControl>
-                        <SelectContent>
-                          <SelectItem value="todo">To Do</SelectItem>
-                          <SelectItem value="in_progress">In Progress</SelectItem>
-                          <SelectItem value="in_review">In Review</SelectItem>
-                          <SelectItem value="done">Done</SelectItem>
-                          <SelectItem value="closed">Closed</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <FormControl>
+                        <SearchableSelect
+                          value={field.value}
+                          onValueChange={(v) => { if (v) field.onChange(v); }}
+                          placeholder="Search status…"
+                          options={[
+                            { value: 'todo', label: 'To Do' },
+                            { value: 'in_progress', label: 'In Progress' },
+                            { value: 'in_review', label: 'In Review' },
+                            { value: 'done', label: 'Done' },
+                            { value: 'closed', label: 'Closed' },
+                          ]}
+                          className="w-full"
+                        />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />

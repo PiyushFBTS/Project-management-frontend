@@ -31,11 +31,11 @@ function getInitials(name: string) {
 
 const typeLabels: Record<string, string> = {
   project_manager: 'Project Manager',
-  functional: 'Functional',
-  technical: 'Technical',
+  functional: 'Functional Consultant',
+  technical: 'Technical Consultant',
   senior_project_manager: 'Senior Project Manager',
-  senior_functional: 'Senior Functional',
-  senior_technical: 'Senior Technical',
+  senior_functional: 'Senior Functional Consultant',
+  senior_technical: 'Senior Technical Consultant',
   ceo: 'CEO',
   coo: 'COO',
   cto: 'CTO',

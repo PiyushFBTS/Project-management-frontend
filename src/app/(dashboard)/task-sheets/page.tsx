@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
-import { Eye, Plus, ClipboardList, Pencil } from 'lucide-react';
+import { Plus, ClipboardList, Pencil } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { taskSheetsApi } from '@/lib/api/task-sheets';
 import { employeesApi } from '@/lib/api/employees';
@@ -31,6 +32,7 @@ function isEditable(sheetDate: string, windowDays: number): boolean {
 }
 
 export default function TaskSheetsPage() {
+  const router = useRouter();
   const { user } = useAuth();
   const isEmployee = user?._type === 'employee';
   const isAdmin = user?._type === 'admin';
@@ -200,7 +202,14 @@ export default function TaskSheetsPage() {
                   </TableRow>
                 )
               : (data ?? []).map((s) => (
-                  <TableRow key={s.id}>
+                  <TableRow
+                    key={s.id}
+                    // Whole-row click opens the sheet detail — replaces
+                    // the dedicated eye button. The Edit cell stops
+                    // propagation so its own link doesn't double-fire.
+                    className="cursor-pointer hover:bg-muted/40"
+                    onClick={() => router.push(`/task-sheets/${s.id}`)}
+                  >
                     {activeTab === 'team' && (
                       <TableCell className="font-medium">{s.employee?.name ?? `#${s.employeeId}`}</TableCell>
                     )}
@@ -215,13 +224,8 @@ export default function TaskSheetsPage() {
                     <TableCell className="text-slate-500 text-xs">
                       {s.submittedAt ? format(new Date(s.submittedAt), 'MMM d, HH:mm') : '—'}
                     </TableCell>
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex gap-1">
-                        <Link href={`/task-sheets/${s.id}`}>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" title="View">
-                            <Eye className="h-3.5 w-3.5" />
-                          </Button>
-                        </Link>
                         {activeTab === 'my' && canFillOwn && isEditable(s.sheetDate, fillWindowDays) && (
                           <Link href={`/task-sheets/fill?date=${s.sheetDate?.slice(0, 10)}`}>
                             <Button variant="ghost" size="icon" className="h-7 w-7 text-violet-600 hover:text-violet-700 hover:bg-violet-500/10" title="Edit">

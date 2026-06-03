@@ -28,6 +28,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 const statusColors: Record<string, string> = {
   active: 'bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/30',
@@ -583,12 +584,19 @@ export default function ProjectDetailPage() {
             <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-orange-600 dark:text-orange-400 mb-1.5">
               <Clock className="h-3 w-3" /> Status
             </div>
-            <Select value={form.status}  onValueChange={(v) => setForm((p) => ({ ...p, status: v }))}>
-              <SelectTrigger className="h-8 text-sm Edit Project w-full"><SelectValue /></SelectTrigger>
-              <SelectContent className="Edit Project">
-                {statusOptions.map((s) => <SelectItem key={s} value={s} className="capitalize">{s.replace('_', ' ')}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            {/* Searchable so the field matches Type below. Ignore the
+                clear (`''`) — status is required and the backend rejects
+                an empty value. */}
+            <SearchableSelect
+              value={form.status}
+              onValueChange={(v) => { if (v) setForm((p) => ({ ...p, status: v })); }}
+              placeholder="Search status..."
+              options={statusOptions.map((s) => ({
+                value: s,
+                label: s.charAt(0).toUpperCase() + s.slice(1).replace('_', ' '),
+              }))}
+              className="text-sm"
+            />
           </div>
         ) : null}
 
@@ -599,12 +607,13 @@ export default function ProjectDetailPage() {
           {!editMode ? (
             <p className="text-sm font-medium">{typeLabel(project.projectType)}</p>
           ) : (
-            <Select value={form.projectType} onValueChange={(v) => setForm((p) => ({ ...p, projectType: v }))}>
-              <SelectTrigger className="h-8 text-sm  w-full"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {(dynamicTypeOptions.length ? dynamicTypeOptions : typeOptions).map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={form.projectType}
+              onValueChange={(v) => { if (v) setForm((p) => ({ ...p, projectType: v })); }}
+              placeholder="Search type..."
+              options={dynamicTypeOptions.length ? dynamicTypeOptions : typeOptions}
+              className="text-sm"
+            />
           )}
         </div>
 
@@ -615,13 +624,16 @@ export default function ProjectDetailPage() {
           {!editMode ? (
             <p className="text-sm font-medium">{project.group?.name ?? '—'}</p>
           ) : (
-            <Select value={form.groupId} onValueChange={(v) => setForm((p) => ({ ...p, groupId: v }))}>
-              <SelectTrigger className="h-8 text-sm w-full"><SelectValue placeholder="Select group" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No group (standalone)</SelectItem>
-                {groups.map((g: any) => <SelectItem key={g.id} value={String(g.id)}>{g.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={form.groupId}
+              onValueChange={(v) => setForm((p) => ({ ...p, groupId: v || 'none' }))}
+              placeholder="Search group..."
+              options={[
+                { value: 'none', label: 'No group (standalone)' },
+                ...groups.map((g: any) => ({ value: String(g.id), label: g.name })),
+              ]}
+              className="text-sm"
+            />
           )}
         </div>
 
@@ -643,15 +655,16 @@ export default function ProjectDetailPage() {
           {!editMode ? (
             <p className="text-sm font-medium">{project.projectManager?.name ?? '—'}</p>
           ) : (
-            <Select value={form.projectManagerId} onValueChange={(v) => setForm((p) => ({ ...p, projectManagerId: v }))}>
-              <SelectTrigger className="h-8 text-sm  w-full"><SelectValue placeholder="Select manager" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">None</SelectItem>
-                {(managers ?? []).map((m: any) => (
-                  <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={form.projectManagerId}
+              onValueChange={(v) => setForm((p) => ({ ...p, projectManagerId: v || 'none' }))}
+              placeholder="Search manager..."
+              options={[
+                { value: 'none', label: 'None' },
+                ...(managers ?? []).map((m: any) => ({ value: String(m.id), label: m.name })),
+              ]}
+              className="text-sm"
+            />
           )}
         </div>
 

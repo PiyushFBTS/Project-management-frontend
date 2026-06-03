@@ -256,30 +256,38 @@ export default function NewTaskPage({ params: paramsPromise }: { params: Promise
                 <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
                   <FolderKanban className="h-3 w-3" /> Status
                 </label>
-                <Select value={status} onValueChange={setStatus}>
-                  <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todo">To Do</SelectItem>
-                    <SelectItem value="in_progress">In Progress</SelectItem>
-                    <SelectItem value="in_review">In Review</SelectItem>
-                    <SelectItem value="done">Done</SelectItem>
-                  </SelectContent>
-                </Select>
+                {/* Required + defaulted — intercept the ✕ clear and keep
+                    the previous value so the field can't become empty. */}
+                <SearchableSelect
+                  value={status}
+                  onValueChange={(v) => { if (v) setStatus(v); }}
+                  placeholder="Search status…"
+                  options={[
+                    { value: 'todo', label: 'To Do' },
+                    { value: 'in_progress', label: 'In Progress' },
+                    { value: 'in_review', label: 'In Review' },
+                    { value: 'done', label: 'Done' },
+                  ]}
+                  className="w-full"
+                />
               </div>
             )}
             <div>
               <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
                 <Flag className="h-3 w-3" /> Priority
               </label>
-              <Select value={priority} onValueChange={setPriority}>
-                <SelectTrigger className="w-full h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="critical">Critical</SelectItem>
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                value={priority}
+                onValueChange={(v) => { if (v) setPriority(v); }}
+                placeholder="Search priority…"
+                options={[
+                  { value: 'low', label: 'Low' },
+                  { value: 'medium', label: 'Medium' },
+                  { value: 'high', label: 'High' },
+                  { value: 'critical', label: 'Critical' },
+                ]}
+                className="w-full"
+              />
             </div>
           </div>
 
@@ -291,17 +299,22 @@ export default function NewTaskPage({ params: paramsPromise }: { params: Promise
                   <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">
                     <Layers className="h-3 w-3" /> Phase
                   </label>
-                  <Select value={phaseId} onValueChange={setPhaseId}>
-                    <SelectTrigger className="w-full h-9"><SelectValue placeholder="None" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">None</SelectItem>
-                      {(phases as any[]).length === 0 ? (
-                        <div className="px-2 py-1.5 text-xs text-muted-foreground italic">No phases yet</div>
-                      ) : (phases as any[]).map((p: any) => (
-                        <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {/* Phase is optional — the ✕ clear maps back to the
+                      sentinel "__none__" so submit keeps the same shape. */}
+                  <SearchableSelect
+                    value={phaseId}
+                    onValueChange={(v) => setPhaseId(v || '__none__')}
+                    placeholder={(phases as any[]).length === 0 ? 'No phases yet' : 'Search phase…'}
+                    options={[
+                      { value: '__none__', label: 'None' },
+                      ...(phases as any[]).map((p: any) => ({
+                        value: String(p.id),
+                        label: p.name,
+                      })),
+                    ]}
+                    disabled={(phases as any[]).length === 0}
+                    className="w-full"
+                  />
                 </div>
                 <div>
                   <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1.5 flex items-center gap-1">

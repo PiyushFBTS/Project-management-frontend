@@ -236,8 +236,13 @@ export default function TaskSheetDetailPage() {
             >();
             for (const e of entries) {
               const pid = e.project?.id ?? null;
-              const key = pid !== null ? `p:${pid}` : `o:${e.otherProjectName ?? 'Other'}`;
-              const name = e.project?.projectName ?? e.otherProjectName ?? 'Other';
+              const otherName = e.otherProjectName?.trim() ?? '';
+              const key = pid !== null ? `p:${pid}` : `o:${otherName.toLowerCase()}`;
+              // "Other — <typed name>" when the user filled the Other
+              // field; bare "Other" when they didn't; project name for
+              // real projects.
+              const name = e.project?.projectName
+                ?? (otherName ? `Other — ${otherName}` : 'Other');
               if (!groups.has(key)) {
                 groups.set(key, { name, projectId: pid, entries: [], total: 0 });
               }
@@ -653,6 +658,7 @@ function ApprovalHistoryCard({ approvals }: { approvals: TaskSheetApproval[] }) 
                 desc.length > 50
                   ? `${desc.slice(0, 50).replace(/\s+/g, ' ').trim()}…`
                   : desc;
+              const otherName = entry?.otherProjectName?.trim() ?? '';
               return (
                 <TableRow key={a.id}>
                   <TableCell className="text-sm">
@@ -660,7 +666,7 @@ function ApprovalHistoryCard({ approvals }: { approvals: TaskSheetApproval[] }) 
                       <span className="font-medium">
                         {a.project?.projectName ?? (
                           <span className="text-muted-foreground italic">
-                            No project
+                            {otherName ? `Other — ${otherName}` : 'Other'}
                           </span>
                         )}
                       </span>

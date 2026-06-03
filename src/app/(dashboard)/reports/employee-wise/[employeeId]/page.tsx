@@ -5,7 +5,7 @@ import { use, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { format } from 'date-fns';
-import { ArrowLeft, BarChart3, FolderKanban, Ticket as TicketIcon, Download, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowLeft, BarChart3, FolderKanban, Ticket as TicketIcon, Download, ChevronDown, ChevronRight, CalendarDays } from 'lucide-react';
 import { toast } from 'sonner';
 import { reportsApi } from '@/lib/api/reports';
 import { downloadBlob } from '@/lib/utils/download';
@@ -81,6 +81,10 @@ export default function EmployeeBreakdownPage({
       status: string | null;
       hours: number;
       man_days: number;
+      // Distinct sheet dates this work was logged on (ISO `yyyy-MM-dd`,
+      // ascending). Lets the report show "1 Jun · 2 Jun" badges next
+      // to each row so the user can see WHEN each task was done.
+      dates?: string[];
     }>;
   }>;
   const totals = (data?.totals ?? { total_hours: 0, total_man_days: 0 }) as {
@@ -256,6 +260,13 @@ export default function EmployeeBreakdownPage({
                         </Badge>
                       )}
                       <ExpandableDesc text={t.title} />
+                      {/* Dates this row was logged on — small slate
+                          badges, comma-separated. Hidden when the
+                          backend (an older deployment) doesn't include
+                          the `dates` field. */}
+                      {t.dates && t.dates.length > 0 && (
+                        <DateChips dates={t.dates} />
+                      )}
                       <span className="text-sm font-semibold shrink-0">{t.hours.toFixed(1)} hrs</span>
                     </li>
                   );
@@ -314,6 +325,56 @@ function ExpandableDesc({ text }: { text: string }) {
       >
         See more
       </button>
+    </span>
+  );
+}
+
+/// Compact date strip showing every distinct day the row was logged on.
+/// Single-date rows render as one chip; multi-date rows wrap. Blue tint
+/// + calendar icon so the dates read as data, not as a layout artifact.
+/// The `title` carries the year for accessibility / hover.
+function DateChips({ dates }: { dates: string[] }) {
+  if (dates.length === 1) {
+    // Single date — one chip with the calendar icon.
+    const d = dates[0];
+    let label = d;
+    let title = d;
+    try {
+      const parsed = new Date(`${d}T00:00:00`);
+      label = format(parsed, 'd MMM');
+      title = format(parsed, 'd MMM yyyy');
+    } catch { /* fall back to raw ISO */ }
+    return (
+      <span
+        title={title}
+        className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 dark:text-blue-400 bg-blue-500/10 ring-1 ring-blue-500/20 px-2 py-0.5 rounded shrink-0"
+      >
+        <CalendarDays className="h-3 w-3" />
+        {label}
+      </span>
+    );
+  }
+
+  // Multi-date — calendar icon once, then comma-separated dates.
+  return (
+    <span
+      title={dates.join(', ')}
+      className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 dark:text-blue-400 bg-blue-500/10 ring-1 ring-blue-500/20 px-2 py-0.5 rounded shrink-0 flex-wrap max-w-[14rem]"
+    >
+      <CalendarDays className="h-3 w-3 shrink-0" />
+      {dates.map((d, i) => {
+        let label = d;
+        try {
+          const parsed = new Date(`${d}T00:00:00`);
+          label = format(parsed, 'd MMM');
+        } catch { /* fall back to raw ISO */ }
+        return (
+          <span key={d} className="whitespace-nowrap">
+            {label}
+            {i < dates.length - 1 ? ',' : ''}
+          </span>
+        );
+      })}
     </span>
   );
 }
