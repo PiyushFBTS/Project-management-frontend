@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import Link from 'next/link';
@@ -13,16 +13,11 @@ import { downloadBlob } from '@/lib/utils/download';
 import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Dialog, DialogContent, DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
 
 const statusColors: Record<string, string> = {
   todo: 'bg-slate-500/15 text-slate-600',
@@ -48,13 +43,15 @@ function monthStartIso() {
   return format(new Date(n.getFullYear(), n.getMonth(), 1), 'yyyy-MM-dd');
 }
 
+// Match the labels used on the /employees page so role display stays
+// consistent across the app.
 const typeLabels: Record<string, string> = {
   project_manager: 'Project Manager',
-  functional: 'Functional',
-  technical: 'Technical',
+  functional: 'Functional Consultant',
+  technical: 'Technical Consultant',
   senior_project_manager: 'Senior Project Manager',
-  senior_functional: 'Senior Functional',
-  senior_technical: 'Senior Technical',
+  senior_functional: 'Senior Functional Consultant',
+  senior_technical: 'Senior Technical Consultant',
   ceo: 'CEO',
   coo: 'COO',
   cto: 'CTO',
@@ -74,12 +71,9 @@ export default function EmployeeWiseReportPage() {
 
   const [fromDate, setFromDate] = useState(monthStartIso);
   const [toDate, setToDate] = useState(todayIso);
-  const [consultantType, setConsultantType] = useState('');
-  // Auto-fire the report on first paint so the user doesn't have to
-  // click "Run Report" before seeing data. They can still narrow the
-  // range and re-run. Skip for non-admins to avoid spamming a wider
-  // query than the page needs.
-  const [autoFetch, setAutoFetch] = useState(true);
+  // Client-side search across employee name + emp_code. Filtering server-
+  // side would require an extra param the backend doesn't expose yet.
+  const [searchQuery, setSearchQuery] = useState('');
   const [downloading, setDownloading] = useState(false);
 
   // Ticket list dialog
@@ -87,15 +81,27 @@ export default function EmployeeWiseReportPage() {
   const [ticketEmpName, setTicketEmpName] = useState('');
   const [ticketDialogOpen, setTicketDialogOpen] = useState(false);
 
+  // Auto-run on mount and refetch whenever the date range changes. No
+  // explicit "Run Report" button needed.
   const { data, isLoading } = useQuery({
-    queryKey: ['report-emp-wise', fromDate, toDate, consultantType, isEmployee],
+    queryKey: ['report-emp-wise', fromDate, toDate, isEmployee],
     queryFn: () =>
       (isEmployee
-        ? reportsApi.employeeGetEmployeeWise(fromDate, toDate, consultantType || undefined)
-        : reportsApi.getEmployeeWise(fromDate, toDate, consultantType || undefined)
+        ? reportsApi.employeeGetEmployeeWise(fromDate, toDate)
+        : reportsApi.getEmployeeWise(fromDate, toDate)
       ).then((r) => r.data.data),
-    enabled: autoFetch,
+    enabled: !!user,
   });
+
+  const filteredData = useMemo(() => {
+    const rows = (data ?? []) as any[];
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) =>
+      (r.name ?? '').toLowerCase().includes(q)
+      || (r.emp_code ?? '').toLowerCase().includes(q),
+    );
+  }, [data, searchQuery]);
 
   const { data: empTickets, isLoading: ticketsLoading } = useQuery({
     queryKey: ['employee-contributed-tickets', ticketEmpId],
@@ -144,6 +150,18 @@ export default function EmployeeWiseReportPage() {
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
+        {canSeeAll && (
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              type="search"
+              placeholder="Search name or code…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 w-60"
+            />
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <label className="text-xs text-muted-foreground">From</label>
           <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-36" />
@@ -152,89 +170,96 @@ export default function EmployeeWiseReportPage() {
           <label className="text-xs text-muted-foreground">To</label>
           <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-36" />
         </div>
-        {canSeeAll && (
-          <Select value={consultantType || 'all'} onValueChange={(v) => setConsultantType(v === 'all' ? '' : v)}>
-            <SelectTrigger className="w-44">
-              <SelectValue placeholder="All types" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              {Object.entries(typeLabels).map(([v, l]) => (
-                <SelectItem key={v} value={v}>{l}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        <Button size="sm" onClick={() => setAutoFetch(true)} className="bg-linear-to-r from-blue-600 to-blue-800 text-white hover:opacity-90 shadow-sm shadow-blue-500/25 border-0">
-          <Search className="mr-1.5 h-4 w-4" /> Run Report
-        </Button>
       </div>
 
-      {!autoFetch ? (
-        <div className="flex h-40 items-center justify-center rounded-lg border bg-card text-muted-foreground text-sm">
-          Select filters and click Run Report
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          {Array.from({ length: canSeeAll ? 8 : 1 }).map((_, i) => (
+            <Card key={i}><CardContent className="p-4 space-y-3">
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-10 w-10 rounded-full" />
+                <div className="flex-1 space-y-1.5">
+                  <Skeleton className="h-3 w-32" />
+                  <Skeleton className="h-2.5 w-24" />
+                </div>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {Array.from({ length: 4 }).map((__, j) => <Skeleton key={j} className="h-10" />)}
+              </div>
+            </CardContent></Card>
+          ))}
         </div>
+      ) : filteredData.length === 0 ? (
+        <Card><CardContent className="p-8 text-center text-muted-foreground text-sm">
+          {searchQuery ? 'No employees match your search' : 'No employees match this filter'}
+        </CardContent></Card>
       ) : (
-        <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
-          <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-blue-500 to-blue-700" />
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Code</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Project</TableHead>
-                <TableHead className="text-right">Days Filled</TableHead>
-                <TableHead className="text-right">Total Hours</TableHead>
-                <TableHead className="text-right">Avg Hrs/Day</TableHead>
-                <TableHead className="text-right">Ticket Count</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading
-                ? [...Array(canSeeAll ? 6 : 1)].map((_, i) => (
-                    <TableRow key={i}>
-                      {[...Array(8)].map((__, j) => <TableCell key={j}><Skeleton className="h-5 w-16" /></TableCell>)}
-                    </TableRow>
-                  ))
-                : (data ?? []).map((row: any) => (
-                    <TableRow
-                      key={row.id}
-                      className="cursor-pointer hover:bg-muted/40"
-                      onClick={() =>
-                        router.push(
-                          `/reports/employee-wise/${row.id}?from_date=${fromDate}&to_date=${toDate}`,
-                        )
-                      }
-                      title="Open per-project / per-ticket breakdown"
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          {filteredData.map((row: any) => (
+            <Card
+              key={row.id}
+              onClick={() =>
+                router.push(
+                  `/reports/employee-wise/${row.id}?from_date=${fromDate}&to_date=${toDate}`,
+                )
+              }
+              title="Open per-project / per-ticket breakdown"
+              className="cursor-pointer transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-lg hover:border-primary/50 hover:ring-2 hover:ring-primary/15"
+            >
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary shrink-0">
+                    {(row.name ?? '?').charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    {/* Name links to the employee profile; stop propagation
+                        so the click doesn't trigger the card-level drill. */}
+                    <Link
+                      href={`/employees/${row.id}?type=admin`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="font-semibold text-sm truncate block hover:text-primary hover:underline"
+                      title="Open employee profile"
                     >
-                      <TableCell className="font-mono text-xs">{row.emp_code}</TableCell>
-                      <TableCell className="font-medium" onClick={(e) => e.stopPropagation()}>
-                        <Link
-                          href={`/employees/${row.id}?type=admin`}
-                          className="text-blue-600 dark:text-blue-400 hover:underline"
-                          title="Open employee profile"
-                        >
-                          {row.name}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="text-xs">{typeLabels[row.consultant_type] ?? row.consultant_type}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{row.assigned_project ?? '—'}</TableCell>
-                      <TableCell className="text-right">{row.days_filled}</TableCell>
-                      <TableCell className="text-right">{Number(row.total_hours).toFixed(1)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{Number(row.avg_hours_per_day).toFixed(2)}</TableCell>
-                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          className="font-medium text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
-                          onClick={() => { setTicketEmpId(row.id); setTicketEmpName(row.name); setTicketDialogOpen(true); }}
-                        >
-                          {Number(row.ticket_count ?? 0).toFixed(2)}
-                        </button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-            </TableBody>
-          </Table>
+                      {row.name}
+                    </Link>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {row.emp_code} · {typeLabels[row.consultant_type] ?? row.consultant_type ?? '—'}
+                    </p>
+                    {row.assigned_project && (
+                      <p className="text-[11px] text-muted-foreground/80 truncate mt-0.5">
+                        {row.assigned_project}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-4 gap-2 text-center">
+                  <div>
+                    <p className="text-base font-bold text-primary">{Number(row.total_hours ?? 0).toFixed(2)}</p>
+                    <p className="text-[10px] text-muted-foreground">Hours</p>
+                  </div>
+                  <div>
+                    <p className="text-base font-bold text-emerald-600">{row.days_filled ?? 0}</p>
+                    <p className="text-[10px] text-muted-foreground">Days</p>
+                  </div>
+                  <div>
+                    <p className="text-base font-bold text-amber-600">{Number(row.avg_hours_per_day ?? 0).toFixed(2)}</p>
+                    <p className="text-[10px] text-muted-foreground">Avg/Day</p>
+                  </div>
+                  <div onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => { setTicketEmpId(row.id); setTicketEmpName(row.name); setTicketDialogOpen(true); }}
+                      className="font-bold text-base text-blue-600 dark:text-blue-400 hover:underline"
+                      title="View contributed tickets"
+                    >
+                      {Number(row.ticket_count ?? 0).toFixed(2)}
+                    </button>
+                    <p className="text-[10px] text-muted-foreground">Tickets</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
 

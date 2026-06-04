@@ -191,18 +191,19 @@ export default function TaskApprovalsPage() {
   };
 
   return (
-    <div className="space-y-4">
-      {/* Gradient Header */}
+    <div className="w-full space-y-4">
+      {/* Gradient Header — tighter padding on phones, wraps if both
+          rows can't sit side-by-side. */}
       <div className="relative overflow-hidden rounded-2xl shadow-lg">
         <div className="absolute inset-0 bg-linear-to-r from-blue-600 to-blue-800" />
-        <div className="relative px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
-              <ClipboardCheck className="h-5 w-5 text-white" />
+        <div className="relative px-4 py-4 sm:px-6 sm:py-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+              <ClipboardCheck className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">My Approvals</h1>
-              <p className="text-sm text-white/60">
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl font-bold text-white truncate">My Approvals</h1>
+              <p className="text-xs sm:text-sm text-white/60 truncate">
                 Task sheets waiting on your decision
               </p>
             </div>
@@ -210,12 +211,13 @@ export default function TaskApprovalsPage() {
           {filter === 'pending' && selected.size > 0 && (
             <Button
               size="sm"
-              className="bg-white text-blue-700 hover:bg-white/90 shadow-lg"
+              className="bg-white text-blue-700 hover:bg-white/90 shadow-lg shrink-0"
               disabled={approveBulk.isPending}
               onClick={() => approveBulk.mutate([...selected])}
             >
               <Check className="mr-1.5 h-4 w-4" />
-              Approve Selected ({selected.size})
+              <span className="hidden sm:inline">Approve Selected ({selected.size})</span>
+              <span className="sm:hidden">Approve ({selected.size})</span>
             </Button>
           )}
         </div>
@@ -260,7 +262,110 @@ export default function TaskApprovalsPage() {
           router={router}
         />
       ) : (
-      <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
+      <>
+      {/* ── Mobile / tablet card list for Approved & Rejected ─────────
+          The desktop table has 8 columns — too wide for phones. Below
+          md (< 768 px) we render the same data as a stacked card list. */}
+      <div className="md:hidden space-y-2">
+        {isLoading ? (
+          [...Array(4)].map((_, i) => (
+            <div key={i} className="rounded-xl border bg-card p-3">
+              <Skeleton className="h-4 w-32 mb-2" />
+              <Skeleton className="h-3 w-48" />
+            </div>
+          ))
+        ) : rows.length === 0 ? (
+          <div className="rounded-xl border bg-card py-10 text-center">
+            <div className="flex h-12 w-12 mx-auto items-center justify-center rounded-full bg-blue-500/10 mb-3">
+              <ClipboardCheck className="h-6 w-6 text-blue-500" />
+            </div>
+            <p className="text-sm font-medium">No {filter} approvals</p>
+            <p className="text-xs text-muted-foreground mt-1">No sheets have been {filter} yet.</p>
+          </div>
+        ) : (
+          rows.map((row) => {
+            const sheet = row.taskSheet;
+            const entry = row.taskEntry;
+            const otherName = entry?.otherProjectName?.trim() ?? '';
+            const projectLabel = row.project
+              ? row.project.projectName
+              : row.projectId !== null
+                ? `Project #${row.projectId}`
+                : otherName
+                  ? `Other — ${otherName}`
+                  : 'Other';
+            const rawAct = (entry?.activityType ?? '').toLowerCase();
+            const activityLabel =
+              rawAct === 'internal_meeting' ? 'Internal Meeting'
+              : rawAct === 'client_meeting' ? 'Client Meeting'
+              : 'Other';
+            const desc = entry?.taskDescription?.trim() ?? '';
+            const preview = desc.length > 80 ? `${desc.slice(0, 80).replace(/\s+/g, ' ').trim()}…` : desc;
+            const hrs = entry?.durationHours !== undefined && entry?.durationHours !== null
+              ? `${Number(entry.durationHours).toFixed(2)}h`
+              : '—';
+            return (
+              <div
+                key={row.id}
+                role={sheet?.id ? 'button' : undefined}
+                tabIndex={sheet?.id ? 0 : undefined}
+                onClick={sheet?.id ? () => router.push(`/task-sheets/${sheet.id}`) : undefined}
+                onKeyDown={sheet?.id ? (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/task-sheets/${sheet.id}`); }
+                } : undefined}
+                className={`rounded-xl border bg-card p-3 shadow-sm ${sheet?.id ? 'cursor-pointer hover:border-primary/40 hover:shadow-md transition-all' : ''}`}
+              >
+                {/* Row 1: employee + status pill */}
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold truncate">
+                    {sheet?.employee?.name ?? `Employee #${sheet?.employeeId ?? '—'}`}
+                  </span>
+                  {statusPill(row.status)}
+                </div>
+                {/* Row 2: project line + sheet date */}
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <span className="inline-flex items-center gap-1.5 min-w-0">
+                    {row.project
+                      ? <FolderKanban className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                      : <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />}
+                    <span className={`text-xs truncate ${row.project ? '' : 'italic text-muted-foreground'}`}>
+                      {projectLabel}
+                    </span>
+                  </span>
+                  <span className="text-[10px] text-muted-foreground shrink-0">
+                    {sheet?.sheetDate?.slice(0, 10) ?? '—'}
+                  </span>
+                </div>
+                {/* Row 3: entry label + title */}
+                <div className="mt-2 flex items-center gap-2 flex-wrap">
+                  {entry?.ticket?.ticketNumber ? (
+                    <span className="font-mono text-[10px] text-blue-700 dark:text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">
+                      {entry.ticket.ticketNumber}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded">
+                      {activityLabel}
+                    </span>
+                  )}
+                  {entry?.ticket?.title && (
+                    <span className="text-xs font-medium truncate">{entry.ticket.title}</span>
+                  )}
+                </div>
+                {preview && (
+                  <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{preview}</p>
+                )}
+                {/* Row 4: hours + round */}
+                <div className="mt-2 flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Round #{row.round}</span>
+                  <span className="font-semibold tabular-nums">{hrs}</span>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div className="hidden md:block rounded-lg border bg-card overflow-x-auto shadow-sm">
         <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-blue-500 to-blue-700" />
         <Table>
           <TableHeader>
@@ -400,6 +505,7 @@ export default function TaskApprovalsPage() {
           </TableBody>
         </Table>
       </div>
+      </>
       )}
 
       {/* Reject dialog — notes required (backend also rejects empty). */}
@@ -644,66 +750,75 @@ function PendingGroups({
                 return (
                   <div
                     key={row.id}
-                    className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-muted/30"
+                    className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 hover:bg-muted/30"
                   >
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 cursor-pointer rounded border-input accent-blue-600 shrink-0"
-                      checked={selected.has(row.id)}
-                      onChange={() => onToggleRow(row.id)}
-                      aria-label={`Select approval #${row.id}`}
-                    />
-                    <div className="flex flex-col gap-0.5 min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {entry?.ticket?.ticketNumber ? (
-                          <span className="font-mono text-[10px] text-blue-700 dark:text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">
-                            {entry.ticket.ticketNumber}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded">
-                            {activityLabel}
-                          </span>
-                        )}
-                        {entry?.ticket?.title && (
-                          <span className="text-sm font-medium truncate">
-                            {entry.ticket.title}
-                          </span>
-                        )}
-                        {row.round > 1 && (
-                          <span className="text-[10px] text-muted-foreground">
-                            r{row.round}
+                    {/* Top section: checkbox + content */}
+                    <div className="flex items-start gap-3 min-w-0 flex-1">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 mt-0.5 cursor-pointer rounded border-input accent-blue-600 shrink-0"
+                        checked={selected.has(row.id)}
+                        onChange={() => onToggleRow(row.id)}
+                        aria-label={`Select approval #${row.id}`}
+                      />
+                      <div className="flex flex-col gap-0.5 min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {entry?.ticket?.ticketNumber ? (
+                            <span className="font-mono text-[10px] text-blue-700 dark:text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">
+                              {entry.ticket.ticketNumber}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-purple-700 dark:text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded">
+                              {activityLabel}
+                            </span>
+                          )}
+                          {entry?.ticket?.title && (
+                            <span className="text-sm font-medium truncate">
+                              {entry.ticket.title}
+                            </span>
+                          )}
+                          {row.round > 1 && (
+                            <span className="text-[10px] text-muted-foreground">
+                              r{row.round}
+                            </span>
+                          )}
+                        </div>
+                        {preview && (
+                          <span className="text-xs text-muted-foreground truncate">
+                            {preview}
                           </span>
                         )}
                       </div>
-                      {preview && (
-                        <span className="text-xs text-muted-foreground truncate">
-                          {preview}
-                        </span>
-                      )}
                     </div>
-                    <span className="text-sm font-semibold tabular-nums shrink-0">
-                      {hrs}
-                    </span>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="border-rose-500/40 text-rose-600 hover:text-rose-700 hover:bg-rose-500/10"
-                        disabled={rejectOne.isPending || approveOne.isPending}
-                        onClick={() => openReject(row)}
-                      >
-                        <X className="mr-1 h-4 w-4" />
-                        Reject
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="bg-emerald-600 text-white hover:bg-emerald-700"
-                        disabled={rejectOne.isPending || approveOne.isPending}
-                        onClick={() => approveOne.mutate(row.id)}
-                      >
-                        <Check className="mr-1 h-4 w-4" />
-                        Approve
-                      </Button>
+                    {/* Trailing cluster: hours + action buttons.
+                        Phones: full-width row below the content (offset
+                        to align with the text, not the checkbox).
+                        sm+   : sits at the row's right edge.            */}
+                    <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 pl-7 sm:pl-0">
+                      <span className="text-sm font-semibold tabular-nums shrink-0">
+                        {hrs}
+                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-rose-500/40 text-rose-600 hover:text-rose-700 hover:bg-rose-500/10"
+                          disabled={rejectOne.isPending || approveOne.isPending}
+                          onClick={() => openReject(row)}
+                        >
+                          <X className="h-4 w-4 sm:mr-1" />
+                          <span className="hidden sm:inline">Reject</span>
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="bg-emerald-600 text-white hover:bg-emerald-700"
+                          disabled={rejectOne.isPending || approveOne.isPending}
+                          onClick={() => approveOne.mutate(row.id)}
+                        >
+                          <Check className="h-4 w-4 sm:mr-1" />
+                          <span className="hidden sm:inline">Approve</span>
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 );

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Download, Search, FolderKanban } from 'lucide-react';
+import { Download, FolderKanban } from 'lucide-react';
 import { toast } from 'sonner';
 import { reportsApi } from '@/lib/api/reports';
 import { downloadBlob } from '@/lib/utils/download';
@@ -31,9 +31,11 @@ export default function ProjectWiseReportPage() {
   void router; // suppress unused-router warning when no redirect runs
 
   const [month, setMonth] = useState(thisMonth);
-  const [autoFetch, setAutoFetch] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
+  // Auto-run on mount and refetch whenever `month` changes (React Query
+  // re-fires when any queryKey value changes). No explicit "Run Report"
+  // button needed.
   const { data, isLoading } = useQuery({
     queryKey: ['report-proj-wise', month, isEmployee],
     queryFn: () =>
@@ -41,7 +43,7 @@ export default function ProjectWiseReportPage() {
         ? reportsApi.employeeGetProjectWise(month)
         : reportsApi.getProjectWise(month)
       ).then((r) => r.data.data),
-    enabled: autoFetch,
+    enabled: !!user,
   });
 
   const handleExport = async () => {
@@ -90,19 +92,11 @@ export default function ProjectWiseReportPage() {
           <label className="text-xs text-muted-foreground">Month</label>
           <Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-40" />
         </div>
-        <Button size="sm" onClick={() => setAutoFetch(true)} className="bg-linear-to-r from-blue-600 to-blue-800 text-white hover:opacity-90 shadow-sm shadow-blue-500/25 border-0">
-          <Search className="mr-1.5 h-4 w-4" /> Run Report
-        </Button>
       </div>
 
-      {!autoFetch ? (
-        <div className="flex h-40 items-center justify-center rounded-lg border bg-card text-muted-foreground text-sm">
-          Select a month and click Run Report
-        </div>
-      ) : (
-        <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
-          <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-blue-500 to-blue-700" />
-          <Table>
+      <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
+        <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-blue-500 to-blue-700" />
+        <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Code</TableHead>
@@ -147,10 +141,9 @@ export default function ProjectWiseReportPage() {
                       <TableCell className="text-right">{row.employee_count}</TableCell>
                     </TableRow>
                   ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

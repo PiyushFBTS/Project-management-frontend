@@ -90,26 +90,27 @@ export default function TaskSheetsPage() {
   const fillWindowDays = (user as any)?.fillDaysOverride ?? defaultFillDays;
 
   return (
-    <div className="space-y-4">
-      {/* Gradient Header */}
+    <div className="w-full space-y-4">
+      {/* Gradient Header — tighter padding & smaller text on phones. */}
       <div className="relative overflow-hidden rounded-2xl shadow-lg">
         <div className="absolute inset-0 bg-linear-to-r from-blue-600 to-blue-800" />
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djZoLTZWMzRoNnptMC0zMHY2aC02VjRoNnptMCAzMHY2aC02di02aDZ6Ii8+PC9nPjwvZz48L3N2Zz4=')] opacity-30" />
-        <div className="relative px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
-              <ClipboardList className="h-5 w-5 text-white" />
+        <div className="relative px-4 py-4 sm:px-6 sm:py-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+              <ClipboardList className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-white">Task Sheets</h1>
-              <p className="text-sm text-white/60">Task sheet submissions</p>
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-xl font-bold text-white truncate">Task Sheets</h1>
+              <p className="text-xs sm:text-sm text-white/60 truncate">Task sheet submissions</p>
             </div>
           </div>
           {canFillOwn && (
-            <Link href="/task-sheets/fill">
+            <Link href="/task-sheets/fill" className="shrink-0">
               <Button size="sm" className="bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg">
                 <Plus className="mr-1.5 h-4 w-4" />
-                Daily Log Sheet
+                <span className="hidden sm:inline">Daily Log Sheet</span>
+                <span className="sm:hidden">Log Sheet</span>
               </Button>
             </Link>
           )}
@@ -132,21 +133,20 @@ export default function TaskSheetsPage() {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-muted-foreground">From</label>
-          <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-36" />
+      {/* Filter row — inputs grow to fill on phones, fixed-width on sm+. */}
+      <div className="flex flex-wrap gap-2 sm:gap-3">
+        <div className="flex flex-1 sm:flex-none items-center gap-2 min-w-[160px]">
+          <label className="text-xs text-muted-foreground shrink-0">From</label>
+          <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="flex-1 sm:w-36" />
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-muted-foreground">To</label>
-          <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-36" />
+        <div className="flex flex-1 sm:flex-none items-center gap-2 min-w-[160px]">
+          <label className="text-xs text-muted-foreground shrink-0">To</label>
+          <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="flex-1 sm:w-36" />
         </div>
         {isAdmin && activeTab === 'team' && (
           <>
             <Select value={empId || 'all'} onValueChange={(v) => setEmpId(v === 'all' ? '' : v)}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="All employees" />
-              </SelectTrigger>
+              <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="All employees" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Employees</SelectItem>
                 {(employees ?? []).map((e) => (
@@ -155,9 +155,7 @@ export default function TaskSheetsPage() {
               </SelectContent>
             </Select>
             <Select value={submitted || 'all'} onValueChange={(v) => setSubmitted(v === 'all' ? '' : v)}>
-              <SelectTrigger className="w-36">
-                <SelectValue placeholder="All status" />
-              </SelectTrigger>
+              <SelectTrigger className="w-full sm:w-36"><SelectValue placeholder="All status" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All</SelectItem>
                 <SelectItem value="true">Submitted</SelectItem>
@@ -167,7 +165,81 @@ export default function TaskSheetsPage() {
         )}
       </div>
 
-      <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
+      {/* ── Mobile / Tablet card list ────────────────────────────────
+          Renders below md (< 768 px). Same data, vertical card layout
+          so the table doesn't need to scroll horizontally on phones. */}
+      <div className="md:hidden space-y-2">
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="rounded-xl border bg-card p-3">
+              <Skeleton className="h-4 w-24 mb-2" />
+              <Skeleton className="h-3 w-40" />
+            </div>
+          ))
+        ) : (data ?? []).length === 0 ? (
+          <div className="rounded-xl border bg-card py-10 text-center">
+            <div className="flex h-12 w-12 mx-auto items-center justify-center rounded-full bg-violet-500/10 mb-3">
+              <ClipboardList className="h-6 w-6 text-violet-500" />
+            </div>
+            <p className="text-sm font-medium">No task sheets found</p>
+            <p className="text-xs text-muted-foreground mt-1">Try adjusting your date range or filters</p>
+          </div>
+        ) : (
+          (data ?? []).map((s) => {
+            const dateStr = s.sheetDate?.slice(0, 10) ?? '';
+            const showEdit = activeTab === 'my' && canFillOwn && isEditable(s.sheetDate, fillWindowDays);
+            return (
+              <div
+                key={s.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => router.push(`/task-sheets/${s.id}`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/task-sheets/${s.id}`); }
+                }}
+                className="rounded-xl border bg-card p-3 shadow-sm cursor-pointer hover:border-primary/40 hover:shadow-md transition-all"
+              >
+                {/* Row 1: date + status pill + edit (my) */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-sm font-semibold truncate">{dateStr}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${s.isSubmitted ? 'bg-emerald-500/15 text-emerald-600 ring-emerald-500/30 dark:text-emerald-400' : 'bg-slate-500/15 text-slate-500 ring-slate-500/30'}`}>
+                      {s.isSubmitted ? 'Submitted' : 'Draft'}
+                    </span>
+                  </div>
+                  {showEdit && (
+                    <Link href={`/task-sheets/fill?date=${dateStr}`} onClick={(e) => e.stopPropagation()} className="shrink-0">
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-violet-600 hover:text-violet-700 hover:bg-violet-500/10" title="Edit">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+                {/* Row 2: employee (team tab only) */}
+                {activeTab === 'team' && (
+                  <p className="mt-1 text-xs font-medium text-foreground/90 truncate">
+                    {s.employee?.name ?? `#${s.employeeId}`}
+                  </p>
+                )}
+                {/* Row 3: stats */}
+                <div className="mt-2 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex gap-3">
+                    <span><span className="font-semibold">{Number(s.totalHours).toFixed(1)}</span><span className="text-muted-foreground">h</span></span>
+                    <span><span className="font-semibold">{Number(s.manDays).toFixed(2)}</span><span className="text-muted-foreground"> MD</span></span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground">
+                    {s.submittedAt ? format(new Date(s.submittedAt), 'MMM d, HH:mm') : '—'}
+                  </span>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* ── Desktop table ────────────────────────────────────────────
+          Kept on md+ where there's room for all 6/7 columns side-by-side. */}
+      <div className="hidden md:block rounded-lg border bg-card overflow-x-auto shadow-sm">
         <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-blue-500 to-blue-700" />
         <Table>
           <TableHeader>

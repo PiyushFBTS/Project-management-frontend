@@ -242,17 +242,21 @@ function NewProjectPage() {
   }
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
+    // Full-bleed form, edge-to-edge on every breakpoint.
+    <div className="w-full space-y-4 sm:space-y-5">
+      {/* ── Header ─────────────────────────────────────────────────────
+          < lg : back + title only (Milestones / Cancel / Create move to
+                  a bottom action bar so the top stays uncluttered)
+          ≥ lg : back + title + Milestones + Cancel + Create inline.    */}
+      <div className="flex items-start gap-2 lg:items-center lg:gap-3">
+        <Button variant="ghost" size="icon" onClick={() => router.back()} className="shrink-0 -ml-2 lg:ml-0">
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold">New Project</h1>
-          <p className="text-sm text-muted-foreground">Fill in the details to create a new project</p>
+          <h1 className="text-lg sm:text-xl font-bold truncate">New Project</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">Fill in the details to create a new project</p>
         </div>
-        <div className="flex gap-2">
+        <div className="hidden lg:flex gap-2 shrink-0">
           {selectedTypeIsRecurring ? (
             <span className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30 px-2.5 py-1 text-xs font-semibold">
               <Repeat className="h-3 w-3" /> Recurring
@@ -288,8 +292,8 @@ function NewProjectPage() {
         </div>
       </div>
 
-      {/* Info Cards */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+      {/* Info Cards — 1/2/3 cols across breakpoints. */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div className="rounded-xl border bg-card p-4">
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-pink-600 dark:text-pink-400 mb-1.5">
             <FolderKanban className="h-3 w-3" /> Project Code <span className="text-red-500">*</span>
@@ -514,12 +518,12 @@ function NewProjectPage() {
       </div>
 
       {/* Documents */}
-      <div className="rounded-xl border bg-card p-4">
-        <div className="flex items-center justify-between mb-3">
+      <div className="rounded-xl border bg-card p-3 sm:p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
             <File className="h-3 w-3" /> Documents
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 ml-auto">
             <Select value={docCategory} onValueChange={setDocCategory}>
               <SelectTrigger className="h-7 text-xs w-32"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -574,6 +578,44 @@ function NewProjectPage() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* ── Bottom action bar (mobile / tablet only) ─────────────────
+          Row 1: Milestones (or Recurring badge) — full width.
+          Row 2: Cancel + Create — split 50 / 50.                       */}
+      <div className="space-y-2 pt-1 lg:hidden">
+        {selectedTypeIsRecurring ? (
+          <span className="flex w-full items-center justify-center gap-1 rounded-md border border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400 dark:border-emerald-500/30 px-2.5 py-2 text-xs font-semibold">
+            <Repeat className="h-3.5 w-3.5" /> Recurring
+          </span>
+        ) : (
+          <Button
+            variant="outline"
+            onClick={() => setMilestoneDialogOpen(true)}
+            className="relative w-full h-10"
+          >
+            <Milestone className="mr-1 h-3.5 w-3.5" />
+            Milestones
+            {milestones.length > 0 && (
+              <span className="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-600 text-[10px] font-bold text-white px-1">
+                {milestones.length}
+              </span>
+            )}
+          </Button>
+        )}
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="outline" onClick={() => router.back()} className="w-full h-10">
+            <X className="mr-1 h-3.5 w-3.5" /> Cancel
+          </Button>
+          <Button
+            disabled={createMutation.isPending}
+            onClick={handleSave}
+            className="w-full h-10 bg-linear-to-r from-emerald-500 to-teal-600 text-white hover:opacity-90 border-0"
+          >
+            {createMutation.isPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
+            Create
+          </Button>
+        </div>
       </div>
 
       {/* ── New Group Dialog ──────────────────────────────────────────── */}

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -9,6 +9,7 @@ import { format } from 'date-fns';
 import {
   Plus, Trash2, Loader2, Download, Check, X, Upload, Paperclip,
   Receipt, Filter, FileText, Image as ImageIcon, FileSpreadsheet,
+  User as UserIcon,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { expensesApi, adminExpensesApi, hrExpensesApi } from '@/lib/api/expenses';
@@ -119,6 +120,48 @@ export default function ExpensesPage() {
       || (exp.expenseType ?? '').toLowerCase().includes(q)
       || (exp.project?.projectName ?? '').toLowerCase().includes(q);
   });
+
+  // Group expenses by employee for the Team tab. Admin-bridged expenses
+  // get their own bucket per admin so we don't merge admin self-expenses
+  // with employee rows that happen to share a name.
+  type ExpenseGroup = {
+    key: string;
+    name: string;
+    isAdminBucket: boolean;
+    expenses: any[];
+    total: number;
+    pendingCount: number;
+  };
+  const groupedExpenses = useMemo<ExpenseGroup[]>(() => {
+    if (!(canApprove && activeTab === 'team')) return [];
+    const map = new Map<string, ExpenseGroup>();
+    for (const exp of expenses) {
+      const isAdminRow = exp.submitterType === 'admin';
+      const key = isAdminRow
+        ? `admin-${exp.submitterAdminId ?? exp.submitterName ?? 'unknown'}`
+        : `emp-${exp.employeeId ?? exp.employee?.id ?? exp.employee?.name ?? 'unknown'}`;
+      let g = map.get(key);
+      if (!g) {
+        g = {
+          key,
+          name: exp.employee?.name ?? exp.submitterName ?? '—',
+          isAdminBucket: isAdminRow,
+          expenses: [],
+          total: 0,
+          pendingCount: 0,
+        };
+        map.set(key, g);
+      }
+      g.expenses.push(exp);
+      g.total += Number(exp.amount || 0);
+      if (exp.status === 'pending') g.pendingCount += 1;
+    }
+    // Sort: most pending first, then by name.
+    return Array.from(map.values()).sort((a, b) => {
+      if (b.pendingCount !== a.pendingCount) return b.pendingCount - a.pendingCount;
+      return a.name.localeCompare(b.name);
+    });
+  }, [expenses, canApprove, activeTab]);
 
   // Projects for dropdown
   const { data: projectsRaw } = useQuery({
@@ -324,20 +367,145 @@ export default function ExpensesPage() {
     }
   };
 
-  return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold flex items-center gap-2"><Receipt className="h-5 w-5 text-primary" /> Expenses</h1>
-          <p className="text-sm text-muted-foreground">{isAdmin ? 'Manage all employee expenses' : 'Track your expenses'}</p>
+  // Mobile / tablet expense card — used inside both the team-grouped
+  // layout and the my-tab flat list when the viewport is below md.
+  // Inline closure so it captures all the mutations / role flags.
+  const renderMobileExpenseCard = (exp: any, showTeamActions: boolean) => {
+    const myId = (user as any)?.id;
+    const isOwnAdminExpense = isAdmin && exp.submitterType === 'admin' && exp.submitterAdminId === myId;
+    const isOwnHrExpense = isHr && exp.employeeId != null && exp.employeeId === myId;
+    const canActionRow = showTeamActions && canApprove && exp.status === 'pending'
+      && !isOwnAdminExpense && !isOwnHrExpense;
+    const canDelete = isAdmin || (isEmployee && exp.status === 'pending');
+    const paid = !!exp.paid;
+    const paidCls = paid
+      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 ring-emerald-500/30'
+      : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-amber-500/30';
+    return (
+      <div
+        key={exp.id}
+        role="button"
+        tabIndex={0}
+        onClick={() => router.push(`/expenses/${exp.id}`)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            router.push(`/expenses/${exp.id}`);
+          }
+        }}
+        className="rounded-xl border bg-card p-3 shadow-sm cursor-pointer hover:border-primary/40 hover:shadow-md transition-all"
+      >
+        {/* Row 1: date + status pill */}
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-semibold">
+            {exp.expenseDate ? format(new Date(exp.expenseDate + 'T00:00:00'), 'dd MMM yyyy') : '—'}
+            {exp.expenseDateTo && exp.expenseDateTo !== exp.expenseDate
+              ? ` — ${format(new Date(exp.expenseDateTo + 'T00:00:00'), 'dd MMM')}`
+              : ''}
+          </span>
+          <Badge className={`text-[10px] border-0 shrink-0 ${STATUS_COLORS[exp.status] ?? ''}`}>{exp.status}</Badge>
         </div>
-        <div className="flex items-center gap-2">
+        {/* Row 2: type + project */}
+        <p className="mt-1 text-sm font-semibold truncate">{exp.expenseType}</p>
+        {exp.project?.projectName && (
+          <p className="text-[11px] text-muted-foreground truncate">{exp.project.projectName}</p>
+        )}
+        {/* Row 3: amount + paid pill + proof */}
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span className="text-base font-bold tabular-nums">{'₹'}{Number(exp.amount).toLocaleString('en-IN')}</span>
+          <div className="flex items-center gap-2" onClick={(ev) => ev.stopPropagation()}>
+            {exp.status === 'approved' && (
+              canMarkPaid ? (
+                <button
+                  type="button"
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 transition hover:opacity-80 ${paidCls}`}
+                  disabled={paidMut.isPending}
+                  onClick={() => paidMut.mutate({ id: exp.id, paid: !paid })}
+                >
+                  {paid ? 'Paid' : 'Unpaid'}
+                </button>
+              ) : (
+                <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${paidCls}`}>
+                  {paid ? 'Paid' : 'Unpaid'}
+                </span>
+              )
+            )}
+            {exp.attachmentPath && (
+              <a
+                href={`${apiBase}${exp.attachmentPath}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary hover:underline"
+                onClick={(ev) => ev.stopPropagation()}
+                title="Open attachment"
+              >
+                {exp.attachmentName?.match(/\.(jpg|jpeg|png|gif|webp)$/i)
+                  ? <ImageIcon className="h-4 w-4" />
+                  : <FileText className="h-4 w-4" />}
+              </a>
+            )}
+          </div>
+        </div>
+        {/* Row 4: actions (if any) */}
+        {(canActionRow || canDelete) && (
+          <div className="mt-3 flex items-center gap-2" onClick={(ev) => ev.stopPropagation()}>
+            {canActionRow && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1 border-emerald-500/40 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10"
+                  onClick={() => {
+                    setApproveId(exp.id);
+                    setApproveAmount(String(Number(exp.amount || 0)));
+                    setApproveRequestedAmt(Number(exp.amount || 0));
+                    setApproveRemarks('');
+                  }}
+                >
+                  <Check className="mr-1 h-3.5 w-3.5" /> Approve
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1 border-rose-500/40 text-rose-600 hover:text-rose-700 hover:bg-rose-500/10"
+                  onClick={() => { setRejectId(exp.id); setRejectReason(''); }}
+                >
+                  <X className="mr-1 h-3.5 w-3.5" /> Reject
+                </Button>
+              </>
+            )}
+            {canDelete && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className={`text-red-500 hover:text-red-600 ${canActionRow ? '' : 'ml-auto'}`}
+                onClick={() => deleteMut.mutate(exp.id)}
+                title="Delete"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="w-full space-y-4">
+      {/* Header — title row above; controls wrap on a second row when
+          the viewport can't hold the full action bar. */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-bold flex items-center gap-2"><Receipt className="h-5 w-5 text-primary shrink-0" /> Expenses</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">{isAdmin ? 'Manage all employee expenses' : 'Track your expenses'}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
           <Input
             placeholder="Search employee, type, project..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-8 w-[220px] text-xs"
+            className="h-8 flex-1 min-w-[160px] sm:w-[220px] sm:flex-none text-xs"
           />
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[130px] h-8 text-xs"><Filter className="h-3 w-3 mr-1" /><SelectValue /></SelectTrigger>
@@ -350,8 +518,8 @@ export default function ExpensesPage() {
           </Select>
           <Button size="sm" variant="outline" onClick={() => importInputRef.current?.click()} disabled={excelImporting}
             title="Select Excel + attachment files together. In Excel, put the filename (e.g. receipt.jpg) in the Attachment column. Embedded images in Excel cells are not supported.">
-            {excelImporting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Upload className="h-4 w-4 mr-1" />}
-            Import
+            {excelImporting ? <Loader2 className="h-4 w-4 sm:mr-1 animate-spin" /> : <Upload className="h-4 w-4 sm:mr-1" />}
+            <span className="hidden sm:inline">Import</span>
           </Button>
           <input
             ref={importInputRef}
@@ -362,10 +530,10 @@ export default function ExpensesPage() {
             onChange={(ev) => { if (ev.target.files?.length) handleImportFiles(ev.target.files); ev.target.value = ''; }}
           />
           <Button size="sm" variant="outline" onClick={exportToExcel} disabled={expenses.length === 0}>
-            <FileSpreadsheet className="h-4 w-4 mr-1" /> Export
+            <FileSpreadsheet className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Export</span>
           </Button>
-          <Button size="sm" onClick={() => router.push('/expenses/new')}>
-            <Plus className="h-4 w-4 mr-1" /> Add Expense
+          <Button size="sm" onClick={() => router.push('/expenses/new')} className="ml-auto sm:ml-0">
+            <Plus className="h-4 w-4 mr-1" /> <span className="hidden sm:inline">Add Expense</span><span className="sm:hidden">Add</span>
           </Button>
         </div>
       </div>
@@ -388,15 +556,154 @@ export default function ExpensesPage() {
         <Card><CardContent className="p-4 space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</CardContent></Card>
       ) : expenses.length === 0 ? (
         <Card><CardContent className="p-8 text-center text-muted-foreground">No expenses found</CardContent></Card>
+      ) : (canApprove && activeTab === 'team') ? (
+        // Team tab — one card per employee, expenses listed inside.
+        <div className="space-y-3">
+          {groupedExpenses.map((g) => (
+            <Card key={g.key}>
+              <CardContent className="p-0">
+                {/* Employee header */}
+                <div className="flex items-center justify-between gap-3 border-b bg-blue-500/5 px-4 py-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-blue-600 dark:text-blue-400">
+                      <UserIcon className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm truncate">
+                        {g.name}{g.isAdminBucket ? ' (Admin)' : ''}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {g.expenses.length} expense{g.expenses.length === 1 ? '' : 's'}
+                        {g.pendingCount > 0 ? ` · ${g.pendingCount} pending` : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Total</p>
+                    <p className="text-base font-bold">{'₹'}{g.total.toLocaleString('en-IN')}</p>
+                  </div>
+                </div>
+                {/* Mobile card list (< md) — one card per expense. */}
+                <div className="md:hidden p-3 space-y-2">
+                  {g.expenses.map((exp: any) => renderMobileExpenseCard(exp, true))}
+                </div>
+                {/* Desktop table (md+) — full column set. */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/30">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">Date</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">Project</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">Type</th>
+                        <th className="px-3 py-2 text-right text-xs font-semibold text-muted-foreground">Amount</th>
+                        <th className="px-3 py-2 text-center text-xs font-semibold text-muted-foreground">Proof</th>
+                        <th className="px-3 py-2 text-center text-xs font-semibold text-muted-foreground">Status</th>
+                        <th className="px-3 py-2 text-center text-xs font-semibold text-muted-foreground">Payment</th>
+                        <th className="px-3 py-2 text-center text-xs font-semibold text-muted-foreground">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {g.expenses.map((exp: any) => (
+                        <tr key={exp.id} className="border-t hover:bg-muted/30 cursor-pointer" onClick={() => router.push(`/expenses/${exp.id}`)}>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            {exp.expenseDate ? format(new Date(exp.expenseDate + 'T00:00:00'), 'dd MMM yyyy') : '—'}
+                            {exp.expenseDateTo && exp.expenseDateTo !== exp.expenseDate ? ` — ${format(new Date(exp.expenseDateTo + 'T00:00:00'), 'dd MMM')}` : ''}
+                          </td>
+                          <td className="px-3 py-2">{exp.project?.projectName ?? '—'}</td>
+                          <td className="px-3 py-2">{exp.expenseType}</td>
+                          <td className="px-3 py-2 text-right font-semibold">{'₹'}{Number(exp.amount).toLocaleString('en-IN')}</td>
+                          <td className="px-3 py-2 text-center">
+                            {exp.attachmentPath ? (
+                              <a href={`${apiBase}${exp.attachmentPath}`} target="_blank" rel="noreferrer" className="text-primary hover:underline" onClick={(ev) => ev.stopPropagation()}>
+                                {exp.attachmentName?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? <ImageIcon className="h-4 w-4 inline" /> : <FileText className="h-4 w-4 inline" />}
+                              </a>
+                            ) : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <Badge className={`text-[10px] border-0 ${STATUS_COLORS[exp.status] ?? ''}`}>{exp.status}</Badge>
+                          </td>
+                          <td className="px-3 py-2 text-center" onClick={(ev) => ev.stopPropagation()}>
+                            {(() => {
+                              if (exp.status !== 'approved') {
+                                return <span className="text-xs text-muted-foreground">—</span>;
+                              }
+                              const paid = !!exp.paid;
+                              const cls = paid
+                                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 ring-emerald-500/30'
+                                : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-amber-500/30';
+                              if (canMarkPaid) {
+                                return (
+                                  <button
+                                    type="button"
+                                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 transition hover:opacity-80 ${cls}`}
+                                    disabled={paidMut.isPending}
+                                    onClick={() => paidMut.mutate({ id: exp.id, paid: !paid })}
+                                    title={paid ? 'Click to mark unpaid' : 'Click to mark paid'}
+                                  >
+                                    {paid ? 'Paid' : 'Unpaid'}
+                                  </button>
+                                );
+                              }
+                              return (
+                                <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${cls}`}>
+                                  {paid ? 'Paid' : 'Unpaid'}
+                                </span>
+                              );
+                            })()}
+                          </td>
+                          <td className="px-3 py-2 text-center" onClick={(ev) => ev.stopPropagation()}>
+                            <div className="flex items-center justify-center gap-1">
+                              {(() => {
+                                const myId = (user as any)?.id;
+                                const isOwnAdminExpense =
+                                  isAdmin && exp.submitterType === 'admin' && exp.submitterAdminId === myId;
+                                const isOwnHrExpense =
+                                  isHr && exp.employeeId != null && exp.employeeId === myId;
+                                const showActions =
+                                  canApprove && exp.status === 'pending'
+                                  && !isOwnAdminExpense && !isOwnHrExpense;
+                                if (!showActions) return null;
+                                return (
+                                  <>
+                                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-emerald-600" onClick={() => { setApproveId(exp.id); setApproveAmount(String(Number(exp.amount || 0))); setApproveRequestedAmt(Number(exp.amount || 0)); setApproveRemarks(''); }} title="Approve">
+                                      <Check className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600" onClick={() => { setRejectId(exp.id); setRejectReason(''); }} title="Reject">
+                                      <X className="h-3.5 w-3.5" />
+                                    </Button>
+                                  </>
+                                );
+                              })()}
+                              {(isAdmin || (isEmployee && exp.status === 'pending')) && (
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500" onClick={() => deleteMut.mutate(exp.id)} title="Delete">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       ) : (
-        <Card>
+        <>
+        {/* Mobile card list for My tab (< md). */}
+        <div className="md:hidden space-y-2">
+          {expenses.map((exp: any) => renderMobileExpenseCard(exp, false))}
+        </div>
+        {/* Desktop table for My tab (md+). */}
+        <Card className="hidden md:block">
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50">
                   <tr>
                     <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">Date</th>
-                    {canApprove && activeTab === 'team' && <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">Employee</th>}
                     <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">Project</th>
                     <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">Type</th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-muted-foreground">Amount</th>
@@ -413,13 +720,12 @@ export default function ExpensesPage() {
                         {exp.expenseDate ? format(new Date(exp.expenseDate + 'T00:00:00'), 'dd MMM yyyy') : '—'}
                         {exp.expenseDateTo && exp.expenseDateTo !== exp.expenseDate ? ` — ${format(new Date(exp.expenseDateTo + 'T00:00:00'), 'dd MMM')}` : ''}
                       </td>
-                      {canApprove && activeTab === 'team' && <td className="px-3 py-2">{exp.employee?.name ?? exp.submitterName ?? '—'}{exp.submitterType === 'admin' ? ' (Admin)' : ''}</td>}
                       <td className="px-3 py-2">{exp.project?.projectName ?? '—'}</td>
                       <td className="px-3 py-2">{exp.expenseType}</td>
-                      <td className="px-3 py-2 text-right font-semibold">₹{Number(exp.amount).toLocaleString('en-IN')}</td>
+                      <td className="px-3 py-2 text-right font-semibold">{'₹'}{Number(exp.amount).toLocaleString('en-IN')}</td>
                       <td className="px-3 py-2 text-center">
                         {exp.attachmentPath ? (
-                          <a href={`${apiBase}${exp.attachmentPath}`} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                          <a href={`${apiBase}${exp.attachmentPath}`} target="_blank" rel="noreferrer" className="text-primary hover:underline" onClick={(ev) => ev.stopPropagation()}>
                             {exp.attachmentName?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? <ImageIcon className="h-4 w-4 inline" /> : <FileText className="h-4 w-4 inline" />}
                           </a>
                         ) : '—'}
@@ -429,10 +735,6 @@ export default function ExpensesPage() {
                       </td>
                       <td className="px-3 py-2 text-center" onClick={(ev) => ev.stopPropagation()}>
                         {(() => {
-                          // Paid pill — only meaningful on approved expenses.
-                          // Approved + can-mark-paid → clickable pill.
-                          // Approved + read-only viewer → static pill.
-                          // Anything else → em-dash placeholder.
                           if (exp.status !== 'approved') {
                             return <span className="text-xs text-muted-foreground">—</span>;
                           }
@@ -462,32 +764,6 @@ export default function ExpensesPage() {
                       </td>
                       <td className="px-3 py-2 text-center" onClick={(ev) => ev.stopPropagation()}>
                         <div className="flex items-center justify-center gap-1">
-                          {(() => {
-                            // Self-approval guard:
-                            //  - Admin can't action their own admin-bridged expense
-                            //    (matched by submitterAdminId === current admin id).
-                            //  - HR can't action an expense they themselves
-                            //    submitted (matched by employeeId === current id).
-                            const myId = (user as any)?.id;
-                            const isOwnAdminExpense =
-                              isAdmin && exp.submitterType === 'admin' && exp.submitterAdminId === myId;
-                            const isOwnHrExpense =
-                              isHr && exp.employeeId != null && exp.employeeId === myId;
-                            const showActions =
-                              canApprove && activeTab === 'team' && exp.status === 'pending'
-                              && !isOwnAdminExpense && !isOwnHrExpense;
-                            if (!showActions) return null;
-                            return (
-                              <>
-                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-emerald-600" onClick={() => { setApproveId(exp.id); setApproveAmount(String(Number(exp.amount || 0))); setApproveRequestedAmt(Number(exp.amount || 0)); setApproveRemarks(''); }} title="Approve">
-                                  <Check className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-600" onClick={() => { setRejectId(exp.id); setRejectReason(''); }} title="Reject">
-                                  <X className="h-3.5 w-3.5" />
-                                </Button>
-                              </>
-                            );
-                          })()}
                           {(isAdmin || (isEmployee && exp.status === 'pending')) && (
                             <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500" onClick={() => deleteMut.mutate(exp.id)} title="Delete">
                               <Trash2 className="h-3.5 w-3.5" />
@@ -502,6 +778,7 @@ export default function ExpensesPage() {
             </div>
           </CardContent>
         </Card>
+        </>
       )}
 
       {/* Add Expense Dialog */}

@@ -57,22 +57,31 @@ export default function NewProjectTypePage() {
   };
 
   return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => router.back()}>
+    // Full-bleed form — no max-width cap, no centered margins.
+    <div className="w-full space-y-4 sm:space-y-5">
+      {/* ── Header ─────────────────────────────────────────────────────
+          < lg : back + title only (actions move to a bottom row)
+          ≥ lg : single row → [back · title · actions]                  */}
+      <div className="flex items-start gap-2 lg:items-center lg:gap-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => router.back()}
+          className="shrink-0 -ml-2 lg:ml-0"
+        >
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <Tags className="h-5 w-5 text-blue-600" />
-            New Project Type
+          <h1 className="text-lg sm:text-xl font-bold flex items-center gap-2">
+            <Tags className="h-5 w-5 text-blue-600 shrink-0" />
+            <span className="truncate">New Project Type</span>
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs sm:text-sm text-muted-foreground">
             Add a reusable type that projects can be tagged with.
           </p>
         </div>
-        <div className="flex gap-2">
+        {/* Actions inline on lg+. Below lg they render in a footer row. */}
+        <div className="hidden lg:flex gap-2 shrink-0">
           <Button variant="outline" size="sm" onClick={() => router.back()}>
             <X className="mr-1 h-3.5 w-3.5" /> Cancel
           </Button>
@@ -92,9 +101,9 @@ export default function NewProjectTypePage() {
         </div>
       </div>
 
-      {/* Top-row cards */}
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div className="rounded-xl border bg-card p-4">
+      {/* ── Top-row cards (Label + Slug) ────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="rounded-xl border bg-card p-3 sm:p-4">
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-cyan-600 dark:text-cyan-400 mb-1.5">
             <Tags className="h-3 w-3" /> Label <span className="text-red-500">*</span>
           </div>
@@ -109,7 +118,7 @@ export default function NewProjectTypePage() {
           </p>
         </div>
 
-        <div className="rounded-xl border bg-card p-4">
+        <div className="rounded-xl border bg-card p-3 sm:p-4">
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-indigo-600 dark:text-indigo-400 mb-1.5">
             <Hash className="h-3 w-3" /> Value (slug)
           </div>
@@ -128,8 +137,8 @@ export default function NewProjectTypePage() {
         </div>
       </div>
 
-      {/* Description */}
-      <div className="rounded-xl border bg-card p-4">
+      {/* ── Description ─────────────────────────────────────────────── */}
+      <div className="rounded-xl border bg-card p-3 sm:p-4">
         <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-violet-600 dark:text-violet-400 mb-1.5">
           <FileText className="h-3 w-3" /> Description
         </div>
@@ -138,12 +147,12 @@ export default function NewProjectTypePage() {
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Briefly describe when this project type should be used…"
           rows={4}
-          className="text-sm"
+          className="text-sm min-h-[96px]"
         />
       </div>
 
-      {/* Recurring toggle */}
-      <div className="rounded-xl border bg-card p-4">
+      {/* ── Recurring toggle ────────────────────────────────────────── */}
+      <div className="rounded-xl border bg-card p-3 sm:p-4">
         <button
           type="button"
           role="switch"
@@ -156,7 +165,7 @@ export default function NewProjectTypePage() {
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold">Recurring billing type</p>
+              <p className="text-sm font-semibold leading-tight">Recurring billing type</p>
               <span
                 className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${isRecurring ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-600'}`}
               >
@@ -165,24 +174,26 @@ export default function NewProjectTypePage() {
                 />
               </span>
             </div>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
               Projects of this type use <strong>per-month recurring billing rows</strong> instead of the milestone payment model. Use this for support / maintenance contracts.
             </p>
           </div>
         </button>
       </div>
 
-      {/* Live preview */}
-      <div className="rounded-xl border bg-card p-4">
+      {/* ── Live preview ────────────────────────────────────────────── */}
+      <div className="rounded-xl border bg-card p-3 sm:p-4">
         <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-2">
           Preview
         </div>
-        <div className="inline-flex items-center gap-2 rounded-lg border bg-background px-3 py-2">
-          <span className="rounded-md bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-400 px-2 py-0.5 text-xs font-semibold">
+        {/* flex-wrap so very long labels or slugs don't blow past the
+            viewport on narrow phones. */}
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-background px-3 py-2 max-w-full">
+          <span className="rounded-md bg-cyan-100 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-400 px-2 py-0.5 text-xs font-semibold break-words">
             {label.trim() || 'Label goes here'}
           </span>
           {value && (
-            <span className="text-[10px] text-muted-foreground font-mono">
+            <span className="text-[10px] text-muted-foreground font-mono break-all">
               {value}
             </span>
           )}
@@ -192,6 +203,25 @@ export default function NewProjectTypePage() {
             </span>
           )}
         </div>
+      </div>
+
+      {/* ── Bottom action row (mobile / tablet only) ────────────────── */}
+      <div className="grid grid-cols-2 gap-2 pt-2 lg:hidden">
+        <Button variant="outline" onClick={() => router.back()} className="w-full h-10">
+          <X className="mr-1 h-3.5 w-3.5" /> Cancel
+        </Button>
+        <Button
+          disabled={!canSave}
+          onClick={handleSave}
+          className="w-full h-10 bg-linear-to-r from-cyan-500 to-blue-600 text-white hover:opacity-90 border-0"
+        >
+          {createMut.isPending ? (
+            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Check className="mr-1 h-3.5 w-3.5" />
+          )}
+          Create
+        </Button>
       </div>
     </div>
   );

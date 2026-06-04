@@ -28,6 +28,27 @@ type GridData = { year: number; month: number; daysInMonth: number; days: string
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+// Match the labels used on the /employees page so role display stays
+// consistent across the app.
+const typeLabels: Record<string, string> = {
+  project_manager: 'Project Manager',
+  functional: 'Functional Consultant',
+  technical: 'Technical Consultant',
+  senior_project_manager: 'Senior Project Manager',
+  senior_functional: 'Senior Functional Consultant',
+  senior_technical: 'Senior Technical Consultant',
+  ceo: 'CEO',
+  coo: 'COO',
+  cto: 'CTO',
+  full_stack_developer: 'Full Stack Developer',
+  account_manager: 'Account Manager',
+  human_resource_manager: 'Human Resource Manager',
+  brand_manager: 'Brand Manager',
+  admin: 'Admin',
+};
+const roleLabel = (t: string | null | undefined) =>
+  (t && typeLabels[t]) || (t ?? '—');
+
 export default function MonthlyGridPage() {
   const { user } = useAuth();
   const router = useRouter();
@@ -114,7 +135,7 @@ export default function MonthlyGridPage() {
             {selectedEmp ? `${selectedEmp.name} — Monthly Grid` : 'Monthly Attendance Grid'}
           </h1>
           <p className="text-sm text-muted-foreground">
-            {selectedEmp ? `${selectedEmp.empCode} · ${selectedEmp.consultantType ?? 'Employee'}` : 'Select an employee to view their daily task sheet'}
+            {selectedEmp ? `${selectedEmp.empCode} · ${roleLabel(selectedEmp.consultantType)}` : 'Select an employee to view their daily task sheet'}
           </p>
         </div>
 
@@ -144,7 +165,11 @@ export default function MonthlyGridPage() {
             {filteredRows.map((row) => {
               const fillPct = data?.daysInMonth ? Math.round((row.filledDays / data.daysInMonth) * 100) : 0;
               return (
-                <Card key={row.employeeId} className="cursor-pointer hover:border-primary/50 hover:shadow-md transition-all" onClick={() => setSelectedEmp(row)}>
+                <Card
+                  key={row.employeeId}
+                  onClick={() => setSelectedEmp(row)}
+                  className="group cursor-pointer transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-lg hover:border-primary/50 hover:ring-2 hover:ring-primary/15"
+                >
                   <CardContent className="p-4">
                     <div className="flex items-start gap-3">
                       <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary shrink-0">
@@ -152,12 +177,12 @@ export default function MonthlyGridPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-sm truncate">{row.name}</p>
-                        <p className="text-xs text-muted-foreground">{row.empCode} · {row.consultantType ?? '—'}</p>
+                        <p className="text-xs text-muted-foreground">{row.empCode} · {roleLabel(row.consultantType)}</p>
                       </div>
                     </div>
                     <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                       <div>
-                        <p className="text-lg font-bold text-primary">{row.totalHours}</p>
+                        <p className="text-lg font-bold text-primary">{Number(row.totalHours).toFixed(2)}</p>
                         <p className="text-[10px] text-muted-foreground">Hours</p>
                       </div>
                       <div>
@@ -198,7 +223,7 @@ export default function MonthlyGridPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Card>
               <CardContent className="p-3 text-center">
-                <p className="text-2xl font-bold text-primary">{empRow.totalHours}</p>
+                <p className="text-2xl font-bold text-primary">{Number(empRow.totalHours).toFixed(2)}</p>
                 <p className="text-xs text-muted-foreground">Total Hours</p>
               </CardContent>
             </Card>
