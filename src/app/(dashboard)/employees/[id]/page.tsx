@@ -57,15 +57,24 @@ const PRAISE_TYPES = [
   { value: 'deadline_crusher', label: 'Deadline Crusher', icon: '⏰', color: 'bg-red-100 dark:bg-red-900/30' },
 ];
 
+// Roster set 2026-06-10 (backend migration 1716900000009). Order matches
+// the new-employee picker. Legacy keys are intentionally absent — any
+// row that still carries them would have been remapped by the data
+// migration on the same date.
 const TYPE_LABELS: Record<string, string> = {
-  project_manager: 'Project Manager', functional: 'Functional Consultant',
-  technical: 'Technical Consultant', full_stack_developer: 'Full Stack Developer',
-  account_manager: 'Account Manager',
-  human_resource_manager: 'Human Resource Manager',
+  co_founder: 'Co Founder',
+  technical_director: 'Technical Director',
+  pmo: 'PMO',
   senior_project_manager: 'Senior Project Manager',
-  senior_functional: 'Senior Functional Consultant',
+  project_lead: 'Project Lead',
   senior_technical: 'Senior Technical Consultant',
-  ceo: 'CEO', coo: 'COO', cto: 'CTO',
+  technical: 'Technical Consultant',
+  retail_functional: 'Retail Functional Consultant',
+  functional: 'Functional Consultant',
+  account_manager: 'Account Manager',
+  dotnet_developer: '.Net Developer',
+  full_stack_developer: 'Full Stack Developer',
+  intern: 'Intern',
   brand_manager: 'Brand Manager',
 };
 

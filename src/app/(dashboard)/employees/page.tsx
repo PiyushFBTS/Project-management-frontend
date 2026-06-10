@@ -31,19 +31,21 @@ function getInitials(name: string) {
   return name.split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 }
 
+// Roster set 2026-06-10 (backend migration 1716900000009).
 const typeLabels: Record<string, string> = {
-  project_manager: 'Project Manager',
-  functional: 'Functional Consultant',
-  technical: 'Technical Consultant',
+  co_founder: 'Co Founder',
+  technical_director: 'Technical Director',
+  pmo: 'PMO',
   senior_project_manager: 'Senior Project Manager',
-  senior_functional: 'Senior Functional Consultant',
+  project_lead: 'Project Lead',
   senior_technical: 'Senior Technical Consultant',
-  ceo: 'CEO',
-  coo: 'COO',
-  cto: 'CTO',
-  full_stack_developer: 'Full Stack Developer',
+  technical: 'Technical Consultant',
+  retail_functional: 'Retail Functional Consultant',
+  functional: 'Functional Consultant',
   account_manager: 'Account Manager',
-  human_resource_manager: 'Human Resource Manager',
+  dotnet_developer: '.Net Developer',
+  full_stack_developer: 'Full Stack Developer',
+  intern: 'Intern',
   brand_manager: 'Brand Manager',
   admin: 'Admin',
 };

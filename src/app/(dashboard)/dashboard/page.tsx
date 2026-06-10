@@ -566,20 +566,22 @@ function AdminDashboard() {
     queryFn: () => dashboardApi.getTopEmployees(thisMonth, 10).then((r) => r.data.data),
   });
 
+  // Short labels for cramped dashboard chips. Roster set 2026-06-10.
   const typeLabels: Record<string, string> = {
-    project_manager: 'PM',
-    functional: 'Functional',
-    technical: 'Technical',
+    co_founder: 'Co Founder',
+    technical_director: 'Tech Director',
+    pmo: 'PMO',
     senior_project_manager: 'Senior PM',
-    senior_functional: 'Senior Functional',
+    project_lead: 'Project Lead',
     senior_technical: 'Senior Technical',
-    ceo: 'CEO',
-    coo: 'COO',
-    cto: 'CTO',
+    technical: 'Technical',
+    retail_functional: 'Retail Functional',
+    functional: 'Functional',
+    account_manager: 'Account Mgr',
+    dotnet_developer: '.Net Dev',
     full_stack_developer: 'Full Stack',
-    account_manager: 'Account Manager',
-    human_resource_manager: 'HR',
-    brand_manager: 'Brand Manager',
+    intern: 'Intern',
+    brand_manager: 'Brand Mgr',
   };
 
   return (

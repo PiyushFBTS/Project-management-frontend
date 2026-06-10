@@ -384,20 +384,22 @@ export type UpdateProjectDto = Partial<CreateProjectDto>;
 // 'management' + 'core_team' were retired from the picker; the backend
 // enum still has them for any historical employee row, but UI flows
 // (forms, label maps, reports) only deal with the active values.
-// Senior tiers + C-suite were added 2026-06-03 (migration 1716900000006).
+// Roster refreshed 2026-06-10 (migration 1716900000009) — see the
+// backend `ConsultantType` enum for the canonical list.
 export type ConsultantType =
-  | 'project_manager'
-  | 'functional'
-  | 'technical'
+  | 'co_founder'
+  | 'technical_director'
+  | 'pmo'
   | 'senior_project_manager'
-  | 'senior_functional'
+  | 'project_lead'
   | 'senior_technical'
-  | 'ceo'
-  | 'coo'
-  | 'cto'
-  | 'full_stack_developer'
+  | 'technical'
+  | 'retail_functional'
+  | 'functional'
   | 'account_manager'
-  | 'human_resource_manager'
+  | 'dotnet_developer'
+  | 'full_stack_developer'
+  | 'intern'
   | 'brand_manager';
 
 export interface Employee {

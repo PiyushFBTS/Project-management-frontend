@@ -17,21 +17,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SearchableSelect } from '@/components/ui/searchable-select';
 
 const consultantTypes = [
-  // C-suite first — these are typically the most senior roles.
-  { value: 'ceo', label: 'CEO' },
-  { value: 'coo', label: 'COO' },
-  { value: 'cto', label: 'CTO' },
-  // Senior tier next to their base counterparts so the picker reads
-  // top-down by seniority within each track.
+  // Roster set 2026-06-10 (backend migration 1716900000009). Ordered
+  // exec → PM tier → consultants → IC / cross-functional, so the
+  // picker reads top-down by seniority within each track.
+  { value: 'co_founder', label: 'Co Founder' },
+  { value: 'technical_director', label: 'Technical Director' },
+  { value: 'pmo', label: 'PMO' },
   { value: 'senior_project_manager', label: 'Senior Project Manager' },
-  { value: 'project_manager', label: 'Project Manager' },
-  { value: 'senior_functional', label: 'Senior Functional Consultant' },
-  { value: 'functional', label: 'Functional Consultant' },
+  { value: 'project_lead', label: 'Project Lead' },
   { value: 'senior_technical', label: 'Senior Technical Consultant' },
   { value: 'technical', label: 'Technical Consultant' },
-  { value: 'full_stack_developer', label: 'Full Stack Developer' },
+  { value: 'retail_functional', label: 'Retail Functional Consultant' },
+  { value: 'functional', label: 'Functional Consultant' },
   { value: 'account_manager', label: 'Account Manager' },
-  { value: 'human_resource_manager', label: 'Human Resource Manager' },
+  { value: 'dotnet_developer', label: '.Net Developer' },
+  { value: 'full_stack_developer', label: 'Full Stack Developer' },
+  { value: 'intern', label: 'Intern' },
   { value: 'brand_manager', label: 'Brand Manager' },
 ];
 
