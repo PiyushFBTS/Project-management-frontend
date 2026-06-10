@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowLeft, FolderKanban, Loader2, CheckCircle2, User, Calendar, Clock, FileText, Check, X, Paperclip, Upload, File, Trash2, Milestone, Plus, Layers, Repeat } from 'lucide-react';
+import { ArrowLeft, FolderKanban, Loader2, CheckCircle2, User, Calendar, Clock, FileText, Check, X, Paperclip, Upload, File, Trash2, Milestone, Plus, Layers, Repeat, IndianRupee } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { projectsApi } from '@/lib/api/projects';
 import { SearchableSelect } from '@/components/ui/searchable-select';
@@ -62,6 +62,10 @@ function NewProjectPage() {
     description: '',
     projectManagerId: 'none',
     groupId: groupFromUrl,
+    // Sprint 2 — Total project cost (₹) for non-recurring projects.
+    // Required at submit-time when the chosen type isn't recurring;
+    // milestones below derive their amounts from this number.
+    projectBudget: '',
   });
 
   // Per-field validation: which required fields are currently flagged
@@ -199,6 +203,32 @@ function NewProjectPage() {
     },
   });
 
+  // Bidirectional helpers for the milestone % ↔ ₹ binding. Both depend
+  // on `form.projectBudget` so the caller can compute against the live
+  // value (no need to pass it through every call site).
+  const budgetNum = Number(form.projectBudget) || 0;
+  const pctToAmount = (pctStr: string): string => {
+    const p = Number(pctStr);
+    if (!Number.isFinite(p) || budgetNum <= 0) return '';
+    return ((budgetNum * p) / 100).toFixed(2);
+  };
+  const amountToPct = (amtStr: string): string => {
+    const a = Number(amtStr);
+    if (!Number.isFinite(a) || budgetNum <= 0) return '';
+    return ((a / budgetNum) * 100).toFixed(2);
+  };
+
+  // Add-form linked editors. Typing into either field recomputes the
+  // other so the user sees both immediately.
+  const onMsPctChange = (v: string) => {
+    setMsExpectedPct(v);
+    if (v && budgetNum > 0) setMsExpectedAmt(pctToAmount(v));
+  };
+  const onMsAmtChange = (v: string) => {
+    setMsExpectedAmt(v);
+    if (v && budgetNum > 0) setMsExpectedPct(amountToPct(v));
+  };
+
   const addMilestone = () => {
     if (!msName.trim() || !msExpectedPct.trim() || !msExpectedAmt.trim() || Number(msExpectedAmt) <= 0) {
       toast.error('Enter milestone name, expected percentage and amount');
@@ -208,6 +238,31 @@ function NewProjectPage() {
     setMsName('');
     setMsExpectedPct('');
     setMsExpectedAmt('');
+  };
+
+  // Edit-in-place for an existing milestone in the list. Same
+  // bidirectional rule — typing into either field recomputes the other.
+  const updateMilestonePct = (idx: number, v: string) => {
+    setMilestones((prev) => prev.map((m, i) =>
+      i === idx
+        ? {
+            ...m,
+            expectedPercentage: v,
+            expectedAmount: v && budgetNum > 0 ? pctToAmount(v) : m.expectedAmount,
+          }
+        : m,
+    ));
+  };
+  const updateMilestoneAmt = (idx: number, v: string) => {
+    setMilestones((prev) => prev.map((m, i) =>
+      i === idx
+        ? {
+            ...m,
+            expectedAmount: v,
+            expectedPercentage: v && budgetNum > 0 ? amountToPct(v) : m.expectedPercentage,
+          }
+        : m,
+    ));
   };
 
   const removeMilestone = (idx: number) => {
@@ -230,6 +285,13 @@ function NewProjectPage() {
       if (!recurringForm.expectedAmount || !Number.isFinite(amt) || amt <= 0) {
         missing.push({ key: 'recurringAmount', label: `${PERIOD_NOUN[recurringForm.period].replace(/^./, c => c.toUpperCase())} Amount` });
       }
+    } else {
+      // Project Cost is required for non-recurring projects — milestones
+      // can't size themselves without it.
+      const budget = Number(form.projectBudget);
+      if (!form.projectBudget || !Number.isFinite(budget) || budget <= 0) {
+        missing.push({ key: 'projectBudget', label: 'Project Cost' });
+      }
     }
 
     if (missing.length > 0) {
@@ -249,6 +311,14 @@ function NewProjectPage() {
     // Stamp the cadence on the project itself so the detail page can
     // render it even before the first bulk-create call lands.
     if (selectedTypeIsRecurring) dto.recurringPeriod = recurringForm.period;
+    // Coerce projectBudget to number for non-recurring; recurring types
+    // skip it (the existing column stays NULL so reports can tell them
+    // apart from milestone-style projects).
+    if (selectedTypeIsRecurring) {
+      dto.projectBudget = null;
+    } else {
+      dto.projectBudget = Number(form.projectBudget);
+    }
     createMutation.mutate(dto);
   };
 
@@ -343,7 +413,7 @@ function NewProjectPage() {
           <Input
             value={form.projectCode}
             onChange={(e) => { setForm((p) => ({ ...p, projectCode: e.target.value })); clearError('projectCode'); }}
-            placeholder="e.g. PRJ-001"
+            placeholder="Enter Project Code"
             className={`h-8 text-sm font-mono ${errors.projectCode ? 'border-red-500 ring-1 ring-red-500' : ''}`}
           />
           {errors.projectCode && <p className="text-[10px] text-red-500 mt-1">Project Code is required</p>}
@@ -356,7 +426,7 @@ function NewProjectPage() {
           <Input
             value={form.projectName}
             onChange={(e) => { setForm((p) => ({ ...p, projectName: capitalizeFirst(e.target.value) })); clearError('projectName'); }}
-            placeholder="e.g. E-commerce Platform"
+            placeholder="Enter Project Name"
             className={`h-8 text-sm ${errors.projectName ? 'border-red-500 ring-1 ring-red-500' : ''}`}
           />
           {errors.projectName && <p className="text-[10px] text-red-500 mt-1">Project Name is required</p>}
@@ -399,6 +469,30 @@ function NewProjectPage() {
           {errors.projectType && <p className="text-[10px] text-red-500 mt-1">Type is required</p>}
         </div>
 
+        {/* Project Cost (₹) — Sprint 2. Required for non-recurring
+            project types (Fresh Implement, Migration, Change Request,
+            Consulting, etc.); milestones below derive their ₹ amounts
+            from this number. Recurring types skip it entirely. */}
+        {!!form.projectType && !selectedTypeIsRecurring && (
+          <div className="rounded-xl border bg-card p-4">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-fuchsia-600 dark:text-fuchsia-400 mb-1.5">
+              <IndianRupee className="h-3 w-3" /> Project Cost <span className="text-red-500">*</span>
+            </div>
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              value={form.projectBudget}
+              onChange={(e) => { setForm((p) => ({ ...p, projectBudget: e.target.value })); clearError('projectBudget'); }}
+              placeholder="e.g. 500000"
+              className={`h-8 text-sm tabular-nums ${errors.projectBudget ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+            />
+            {errors.projectBudget && (
+              <p className="text-[10px] text-red-500 mt-1">Project Cost is required for non-recurring projects</p>
+            )}
+          </div>
+        )}
+
         <div className="rounded-xl border bg-card p-4">
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-blue-600 dark:text-blue-400 mb-1.5">
             <User className="h-3 w-3" /> Client
@@ -406,7 +500,7 @@ function NewProjectPage() {
           <Input
             value={form.clientName}
             onChange={(e) => setForm((p) => ({ ...p, clientName: e.target.value }))}
-            placeholder="e.g. Acme Corp"
+            placeholder="Enter Client Name"
             className="h-8 text-sm"
           />
         </div>
@@ -748,29 +842,36 @@ function NewProjectPage() {
               Project Milestones
             </DialogTitle>
           </DialogHeader>
-          <p className="text-xs text-muted-foreground -mt-2">Add at least one milestone. Received amount can be updated later.</p>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Add at least one milestone. Typing % auto-fills ₹ from the Project Cost, and vice versa.
+          </p>
+          {budgetNum <= 0 && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 -mt-1">
+              Set a Project Cost above to enable the % ↔ ₹ auto-calculation.
+            </p>
+          )}
 
-          {/* Add new milestone form */}
-          <div className="grid grid-cols-[1fr_80px_120px_auto] gap-2 items-end">
+          {/* Add new milestone form — bidirectional % ↔ ₹. */}
+          <div className="grid grid-cols-[1fr_90px_140px_auto] gap-2 items-end">
             <div>
               <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Name *</label>
-              <Input value={msName} onChange={(e) => setMsName(e.target.value)} placeholder="e.g. Advance" className="h-9" />
+              <Input value={msName} onChange={(e) => setMsName(e.target.value)} placeholder="Enter Milestone Name" className="h-9" />
             </div>
             <div>
               <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Exp % *</label>
-              <Input type="number" min="0" max="100" step="0.01" value={msExpectedPct} onChange={(e) => setMsExpectedPct(e.target.value)} placeholder="20" className="h-9" />
+              <Input type="number" min="0" max="100" step="0.01" value={msExpectedPct} onChange={(e) => onMsPctChange(e.target.value)} placeholder="e.g. 20" className="h-9" />
             </div>
             <div>
-              <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Exp Amt *</label>
-              <Input type="number" min="0" step="0.01" value={msExpectedAmt} onChange={(e) => setMsExpectedAmt(e.target.value)} placeholder="200000" className="h-9" />
+              <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Exp ₹ *</label>
+              <Input type="number" min="0" step="0.01" value={msExpectedAmt} onChange={(e) => onMsAmtChange(e.target.value)} placeholder="e.g. 100000" className="h-9 tabular-nums" />
             </div>
             <Button size="sm" className="h-9" onClick={addMilestone}>
               <Plus className="h-3.5 w-3.5" />
             </Button>
           </div>
 
-          {/* Milestone list */}
-          {/* Scrollable list */}
+          {/* Milestone list — % and ₹ are both editable. Linked just like
+              the add form, so an admin can rebalance after the fact. */}
           <div className="flex-1 overflow-y-auto -mx-6 px-6">
             {milestones.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-4">No milestones added yet</p>
@@ -779,8 +880,8 @@ function NewProjectPage() {
                 <thead className="sticky top-0 bg-background">
                   <tr className="border-b text-left">
                     <th className="py-1.5 text-xs text-muted-foreground">Name</th>
-                    <th className="py-1.5 text-xs text-muted-foreground text-right">Exp %</th>
-                    <th className="py-1.5 text-xs text-muted-foreground text-right">Exp Amt</th>
+                    <th className="py-1.5 text-xs text-muted-foreground text-right w-24">Exp %</th>
+                    <th className="py-1.5 text-xs text-muted-foreground text-right w-36">Exp ₹</th>
                     <th className="py-1.5 w-8"></th>
                   </tr>
                 </thead>
@@ -788,8 +889,27 @@ function NewProjectPage() {
                   {milestones.map((m, idx) => (
                     <tr key={idx} className="border-b last:border-0">
                       <td className="py-2 font-medium">{m.name}</td>
-                      <td className="py-2 text-right">{m.expectedPercentage}%</td>
-                      <td className="py-2 text-right">₹{Number(m.expectedAmount).toLocaleString('en-IN')}</td>
+                      <td className="py-2 text-right">
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={m.expectedPercentage}
+                          onChange={(e) => updateMilestonePct(idx, e.target.value)}
+                          className="h-7 text-sm text-right tabular-nums"
+                        />
+                      </td>
+                      <td className="py-2 text-right">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={m.expectedAmount}
+                          onChange={(e) => updateMilestoneAmt(idx, e.target.value)}
+                          className="h-7 text-sm text-right tabular-nums"
+                        />
+                      </td>
                       <td className="py-2 text-center">
                         <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500 hover:text-red-600" onClick={() => removeMilestone(idx)}>
                           <Trash2 className="h-3 w-3" />
@@ -802,17 +922,43 @@ function NewProjectPage() {
             )}
           </div>
 
-          {/* Fixed total + done at bottom */}
-          {milestones.length > 0 && (
-            <div className="border-t pt-2 shrink-0">
-              <div className="flex justify-between text-sm font-semibold">
-                <span>Total</span>
-                <span>
-                  {milestones.reduce((s, m) => s + Number(m.expectedPercentage || 0), 0)}% · ₹{milestones.reduce((s, m) => s + Number(m.expectedAmount || 0), 0).toLocaleString('en-IN')}
-                </span>
+          {/* Running totals + sum-mismatch warning. Save still works
+              even when the sum doesn't match — the admin may rebalance
+              in stages — but the colour signal flags drift. */}
+          {milestones.length > 0 && (() => {
+            const sumPct = milestones.reduce((s, m) => s + (Number(m.expectedPercentage) || 0), 0);
+            const sumAmt = milestones.reduce((s, m) => s + (Number(m.expectedAmount) || 0), 0);
+            const delta = budgetNum > 0 ? sumAmt - budgetNum : 0;
+            const tone = budgetNum <= 0
+              ? 'text-muted-foreground'
+              : Math.abs(delta) < 0.005
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : delta > 0
+                  ? 'text-red-600 dark:text-red-400'
+                  : 'text-amber-600 dark:text-amber-400';
+            return (
+              <div className="border-t pt-2 shrink-0">
+                <div className="flex flex-wrap justify-between items-center gap-2 text-sm font-semibold">
+                  <span>Total</span>
+                  <span className="tabular-nums">
+                    {sumPct.toFixed(2)}% · ₹{sumAmt.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                    {budgetNum > 0 && (
+                      <> <span className="text-muted-foreground font-normal">of</span> ₹{budgetNum.toLocaleString('en-IN')}</>
+                    )}
+                  </span>
+                </div>
+                {budgetNum > 0 && (
+                  <p className={`text-[11px] font-medium mt-1 ${tone}`}>
+                    {Math.abs(delta) < 0.005
+                      ? '✓ Milestones match the project cost exactly.'
+                      : delta > 0
+                        ? `Over budget by ₹${delta.toLocaleString('en-IN', { maximumFractionDigits: 2 })} — review allocations.`
+                        : `₹${Math.abs(delta).toLocaleString('en-IN', { maximumFractionDigits: 2 })} unallocated — sum is below the project cost.`}
+                  </p>
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
           <div className="flex justify-end pt-2 border-t shrink-0">
             <Button onClick={() => setMilestoneDialogOpen(false)}>
               Done ({milestones.length} milestone{milestones.length !== 1 ? 's' : ''})

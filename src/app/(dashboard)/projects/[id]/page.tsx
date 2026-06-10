@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import {
   ArrowLeft, FolderKanban, Calendar, User, ClipboardList, Clock, FileText, Pencil, Loader2, X, Check,
   Upload, Trash2, Download, File, UserPlus, Users, Milestone, Plus, Layers, Ticket, ExternalLink, Search,
-  Repeat, CalendarPlus,
+  Repeat, CalendarPlus, IndianRupee,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -178,8 +178,30 @@ export default function ProjectDetailPage() {
   const [msExpectedPct, setMsExpectedPct] = useState('');
   const [msExpectedAmt, setMsExpectedAmt] = useState('');
   const [editingMsId, setEditingMsId] = useState<number | null>(null);
-  const [editRecvPct, setEditRecvPct] = useState('');
   const [editRecvAmt, setEditRecvAmt] = useState('');
+
+  // Sprint 2 — bidirectional % ↔ ₹ for the milestone add form. Drives
+  // off the project's persisted projectBudget. When budget is 0 / null
+  // the inputs still work, they just don't cross-fill.
+  const detailBudget = Number((project as any)?.projectBudget) || 0;
+  const detailPctToAmt = (pctStr: string): string => {
+    const p = Number(pctStr);
+    if (!Number.isFinite(p) || detailBudget <= 0) return '';
+    return ((detailBudget * p) / 100).toFixed(2);
+  };
+  const detailAmtToPct = (amtStr: string): string => {
+    const a = Number(amtStr);
+    if (!Number.isFinite(a) || detailBudget <= 0) return '';
+    return ((a / detailBudget) * 100).toFixed(2);
+  };
+  const onAddMsPct = (v: string) => {
+    setMsExpectedPct(v);
+    if (v && detailBudget > 0) setMsExpectedAmt(detailPctToAmt(v));
+  };
+  const onAddMsAmt = (v: string) => {
+    setMsExpectedAmt(v);
+    if (v && detailBudget > 0) setMsExpectedPct(detailAmtToPct(v));
+  };
 
   const createMsMut = useMutation({
     mutationFn: () => projectsApi.createMilestone(Number(id), {
@@ -490,7 +512,7 @@ export default function ProjectDetailPage() {
   };
 
   const startEdit = () => {
-    
+
     if (!project) return;
     setForm({
       projectName: project.projectName,
@@ -502,6 +524,7 @@ export default function ProjectDetailPage() {
       description: project.description ?? '',
       projectManagerId: project.projectManagerId?.toString() ?? 'none',
       groupId: project.groupId?.toString() ?? 'none',
+      projectBudget: project.projectBudget != null ? String(project.projectBudget) : '',
     });
     setEditMode(true);
   };
@@ -512,6 +535,13 @@ export default function ProjectDetailPage() {
   };
 
   const saveEdit = () => {
+    // Mirror /projects/new: send projectBudget on non-recurring types
+    // only; recurring projects skip it (their billing comes from
+    // project_recurrings rows, not milestones).
+    const budgetNum = Number(form.projectBudget);
+    const budgetForUpdate = isRecurringProject
+      ? null
+      : (form.projectBudget !== '' && Number.isFinite(budgetNum)) ? budgetNum : null;
     updateMut.mutate({
       projectName: form.projectName,
       projectType: form.projectType,
@@ -522,6 +552,7 @@ export default function ProjectDetailPage() {
       description: form.description || undefined,
       projectManagerId: form.projectManagerId && form.projectManagerId !== 'none' ? Number(form.projectManagerId) : null,
       groupId: form.groupId && form.groupId !== 'none' ? Number(form.groupId) : null,
+      projectBudget: budgetForUpdate,
     });
   };
 
@@ -703,6 +734,33 @@ export default function ProjectDetailPage() {
             />
           )}
         </div>
+
+        {/* Project Cost (₹) — non-recurring projects only. Read-only
+            outside edit mode; required input in edit mode. Sprint 2. */}
+        {!isRecurringProject && (
+          <div className="rounded-xl border bg-card p-4">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-fuchsia-600 dark:text-fuchsia-400 mb-1.5">
+              <IndianRupee className="h-3 w-3" /> Project Cost
+            </div>
+            {!editMode ? (
+              <p className="text-sm font-medium tabular-nums">
+                {project.projectBudget != null
+                  ? `₹${Number(project.projectBudget).toLocaleString('en-IN')}`
+                  : '—'}
+              </p>
+            ) : (
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={form.projectBudget ?? ''}
+                onChange={(e) => setForm((p) => ({ ...p, projectBudget: e.target.value }))}
+                placeholder="e.g. 500000"
+                className="h-8 text-sm tabular-nums"
+              />
+            )}
+          </div>
+        )}
 
         <div className="rounded-xl border bg-card p-4">
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-teal-600 dark:text-teal-400 mb-1.5">
@@ -927,27 +985,24 @@ export default function ProjectDetailPage() {
                   <tr className="border-b text-left text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
                     <th className="py-2 pr-2">Name</th>
                     <th className="py-2 pr-2 text-right">Exp %</th>
-                    <th className="py-2 pr-2 text-right">Exp Amt</th>
-                    <th className="py-2 pr-2 text-right">Recv %</th>
-                    <th className="py-2 text-right">Recv Amt</th>
+                    <th className="py-2 pr-2 text-right">Exp ₹</th>
+                    <th className="py-2 text-right">Recv ₹</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(milestones as any[]).map((ms: any) => (
                     <tr key={ms.id} className="border-b last:border-0 text-sm">
                       <td className="py-2 pr-2 font-medium">{ms.name}</td>
-                      <td className="py-2 pr-2 text-right">{Number(ms.expectedPercentage ?? 0)}%</td>
-                      <td className="py-2 pr-2 text-right">₹{Number(ms.expectedAmount ?? 0).toLocaleString('en-IN')}</td>
-                      <td className="py-2 pr-2 text-right">{Number(ms.receivedPercentage ?? 0)}%</td>
-                      <td className="py-2 text-right">₹{Number(ms.receivedAmount ?? 0).toLocaleString('en-IN')}</td>
+                      <td className="py-2 pr-2 text-right tabular-nums">{Number(ms.expectedPercentage ?? 0)}%</td>
+                      <td className="py-2 pr-2 text-right tabular-nums">₹{Number(ms.expectedAmount ?? 0).toLocaleString('en-IN')}</td>
+                      <td className="py-2 text-right tabular-nums">₹{Number(ms.receivedAmount ?? 0).toLocaleString('en-IN')}</td>
                     </tr>
                   ))}
                   <tr className="text-sm font-semibold bg-muted/30">
                     <td className="py-2 pr-2">Total</td>
-                    <td className="py-2 pr-2 text-right">{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.expectedPercentage ?? 0), 0)}%</td>
-                    <td className="py-2 pr-2 text-right">₹{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.expectedAmount ?? 0), 0).toLocaleString('en-IN')}</td>
-                    <td className="py-2 pr-2 text-right">{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.receivedPercentage ?? 0), 0)}%</td>
-                    <td className="py-2 text-right">₹{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.receivedAmount ?? 0), 0).toLocaleString('en-IN')}</td>
+                    <td className="py-2 pr-2 text-right tabular-nums">{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.expectedPercentage ?? 0), 0)}%</td>
+                    <td className="py-2 pr-2 text-right tabular-nums">₹{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.expectedAmount ?? 0), 0).toLocaleString('en-IN')}</td>
+                    <td className="py-2 text-right tabular-nums">₹{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.receivedAmount ?? 0), 0).toLocaleString('en-IN')}</td>
                   </tr>
                 </tbody>
               </table>
@@ -1399,7 +1454,10 @@ export default function ProjectDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Milestones Dialog (admin, HR, super admin) ─────────────── */}
+      {/* ── Milestones Dialog (admin, HR, super admin) ───────────────
+          Sprint 2 — bidirectional % ↔ ₹ on expected, single ₹ input
+          on received (received% column stays in DB but is no longer
+          shown / saved from this dialog). */}
       <Dialog open={msDialogOpen} onOpenChange={setMsDialogOpen} >
         <DialogContent className="sm:max-w-[100vw] md:max-w-[80vw] lg:max-w-[60vw] w-full h-[100vh] md:h-[85vh] max-h-[100vh] md:max-h-[95vh] rounded-none md:rounded-lg flex flex-col">
           <DialogHeader>
@@ -1407,24 +1465,31 @@ export default function ProjectDetailPage() {
               <Milestone className="h-5 w-5 text-violet-600" /> Project Milestones
             </DialogTitle>
           </DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Typing % auto-fills ₹ from the Project Cost (and vice versa).
+            Received is a plain ₹ — click any received cell to edit.
+          </p>
+          {detailBudget <= 0 && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 -mt-1">
+              Set a Project Cost on this project to enable the % ↔ ₹ auto-calculation.
+            </p>
+          )}
 
-          {/* Add new milestone form */}
+          {/* Add new milestone form — bidirectional. */}
           <div className="border-b pb-3 space-y-2">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 items-end">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 items-end">
               <div className="col-span-2 sm:col-span-1">
                 <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Name</label>
                 <Input value={msName} onChange={(e) => setMsName(e.target.value)} placeholder="e.g. Advance" className="h-8 text-sm" />
               </div>
               <div>
                 <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Exp %</label>
-                <Input type="number" min="0" max="100" step="0.01" value={msExpectedPct} onChange={(e) => setMsExpectedPct(e.target.value)} placeholder="20" className="h-8 text-sm" />
+                <Input type="number" min="0" max="100" step="0.01" value={msExpectedPct} onChange={(e) => onAddMsPct(e.target.value)} placeholder="20" className="h-8 text-sm tabular-nums" />
               </div>
               <div>
-                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Exp Amt</label>
-                <Input type="number" min="0" step="0.01" value={msExpectedAmt} onChange={(e) => setMsExpectedAmt(e.target.value)} placeholder="200000" className="h-8 text-sm" />
+                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Exp ₹</label>
+                <Input type="number" min="0" step="0.01" value={msExpectedAmt} onChange={(e) => onAddMsAmt(e.target.value)} placeholder="200000" className="h-8 text-sm tabular-nums" />
               </div>
-              <div className="hidden md:block"><label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Recv %</label><Input disabled placeholder="—" className="h-8 text-sm bg-muted/50" /></div>
-              <div className="hidden md:block"><label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Recv Amt</label><Input disabled placeholder="—" className="h-8 text-sm bg-muted/50" /></div>
               <div>
                 <Button size="sm" className="h-8 w-full md:w-auto" disabled={!msName.trim() || !msExpectedPct || !msExpectedAmt || Number(msExpectedAmt) <= 0 || createMsMut.isPending} onClick={() => createMsMut.mutate()}>
                   {createMsMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Plus className="h-3.5 w-3.5 mr-1" /><span className="md:hidden">Add</span></>}
@@ -1441,100 +1506,166 @@ export default function ProjectDetailPage() {
               <p className="text-sm text-muted-foreground text-center py-8">No milestones yet. Add one above.</p>
             ) : (
               <>
-                {/* Mobile: card layout */}
+                {/* Mobile: card layout. Editable Exp % / Exp ₹ inline,
+                    plus a click-to-edit received ₹. */}
                 <div className="md:hidden space-y-3">
-                  {(milestones as any[]).map((ms: any) => (
-                    <div key={ms.id} className="rounded-lg border p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="font-semibold text-sm">{ms.name}</p>
-                        <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500" onClick={() => deleteMsMut.mutate(ms.id)}><Trash2 className="h-3 w-3" /></Button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                        <div><span className="text-muted-foreground">Exp %:</span> <span className="font-medium">{Number(ms.expectedPercentage ?? 0)}%</span></div>
-                        <div><span className="text-muted-foreground">Exp Amt:</span> <span className="font-medium">₹{Number(ms.expectedAmount ?? 0).toLocaleString('en-IN')}</span></div>
-                        {editingMsId === ms.id ? (
-                          <>
-                            <div className="col-span-2 grid grid-cols-2 gap-2 pt-1">
-                              <div>
-                                <label className="text-[10px] text-muted-foreground">Recv %</label>
-                                <Input type="number" min="0" max="100" step="0.01" value={editRecvPct} onChange={(e) => setEditRecvPct(e.target.value)} className="h-7 text-xs" />
+                  {(milestones as any[]).map((ms: any) => {
+                    const onPctChange = (v: string) => {
+                      updateMsMut.mutate({
+                        msId: ms.id,
+                        dto: {
+                          expectedPercentage: Number(v),
+                          expectedAmount: detailBudget > 0
+                            ? Number(detailPctToAmt(v))
+                            : Number(ms.expectedAmount ?? 0),
+                        },
+                      });
+                    };
+                    const onAmtChange = (v: string) => {
+                      updateMsMut.mutate({
+                        msId: ms.id,
+                        dto: {
+                          expectedAmount: Number(v),
+                          expectedPercentage: detailBudget > 0
+                            ? Number(detailAmtToPct(v))
+                            : Number(ms.expectedPercentage ?? 0),
+                        },
+                      });
+                    };
+                    return (
+                      <div key={ms.id} className="rounded-lg border p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="font-semibold text-sm">{ms.name}</p>
+                          <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500" onClick={() => deleteMsMut.mutate(ms.id)}><Trash2 className="h-3 w-3" /></Button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Exp %</label>
+                            <Input
+                              type="number" min="0" max="100" step="0.01"
+                              defaultValue={String(ms.expectedPercentage ?? 0)}
+                              onBlur={(e) => {
+                                if (Number(e.target.value) === Number(ms.expectedPercentage)) return;
+                                onPctChange(e.target.value);
+                              }}
+                              className="h-7 text-xs tabular-nums"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Exp ₹</label>
+                            <Input
+                              type="number" min="0" step="0.01"
+                              defaultValue={String(ms.expectedAmount ?? 0)}
+                              onBlur={(e) => {
+                                if (Number(e.target.value) === Number(ms.expectedAmount)) return;
+                                onAmtChange(e.target.value);
+                              }}
+                              className="h-7 text-xs tabular-nums"
+                            />
+                          </div>
+                          {editingMsId === ms.id ? (
+                            <div className="col-span-2">
+                              <label className="text-[10px] text-muted-foreground">Recv ₹</label>
+                              <div className="flex gap-2 pt-1">
+                                <Input type="number" min="0" step="0.01" value={editRecvAmt} onChange={(e) => setEditRecvAmt(e.target.value)} className="h-7 text-xs flex-1" />
+                                <Button size="sm" className="h-7 px-2 text-xs" onClick={() => { updateMsMut.mutate({ msId: ms.id, dto: { receivedAmount: Number(editRecvAmt) } }); setEditingMsId(null); }}><Check className="h-3 w-3" /></Button>
+                                <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => setEditingMsId(null)}><X className="h-3 w-3" /></Button>
                               </div>
-                              <div>
-                                <label className="text-[10px] text-muted-foreground">Recv Amt</label>
-                                <Input type="number" min="0" step="0.01" value={editRecvAmt} onChange={(e) => setEditRecvAmt(e.target.value)} className="h-7 text-xs" />
-                              </div>
                             </div>
-                            <div className="col-span-2 flex gap-2 pt-1">
-                              <Button size="sm" className="h-7 flex-1 text-xs" onClick={() => updateMsMut.mutate({ msId: ms.id, dto: { receivedPercentage: Number(editRecvPct), receivedAmount: Number(editRecvAmt) } })}>
-                                <Check className="h-3 w-3 mr-1" /> Save
-                              </Button>
-                              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditingMsId(null)}>Cancel</Button>
+                          ) : (
+                            <div className="col-span-2 cursor-pointer hover:text-violet-600" onClick={() => { setEditingMsId(ms.id); setEditRecvAmt(String(ms.receivedAmount ?? 0)); }}>
+                              <span className="text-muted-foreground">Recv ₹:</span> <span className="font-medium">₹{Number(ms.receivedAmount ?? 0).toLocaleString('en-IN')}</span> <Pencil className="inline h-2.5 w-2.5 text-muted-foreground" />
                             </div>
-                          </>
-                        ) : (
-                          <>
-                            <div className="cursor-pointer hover:text-violet-600" onClick={() => { setEditingMsId(ms.id); setEditRecvPct(String(ms.receivedPercentage ?? 0)); setEditRecvAmt(String(ms.receivedAmount ?? 0)); }}>
-                              <span className="text-muted-foreground">Recv %:</span> <span className="font-medium">{Number(ms.receivedPercentage ?? 0)}%</span> <Pencil className="inline h-2.5 w-2.5 text-muted-foreground" />
-                            </div>
-                            <div className="cursor-pointer hover:text-violet-600" onClick={() => { setEditingMsId(ms.id); setEditRecvPct(String(ms.receivedPercentage ?? 0)); setEditRecvAmt(String(ms.receivedAmount ?? 0)); }}>
-                              <span className="text-muted-foreground">Recv Amt:</span> <span className="font-medium">₹{Number(ms.receivedAmount ?? 0).toLocaleString('en-IN')}</span> <Pencil className="inline h-2.5 w-2.5 text-muted-foreground" />
-                            </div>
-                          </>
-                        )}
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
-                {/* Desktop: table layout */}
+                {/* Desktop: table layout. Exp % / Exp ₹ inputs cross-fill
+                    on blur; Recv ₹ is a click-to-edit cell. */}
                 <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="sticky top-0 bg-background">
                       <tr className="border-b text-left">
                         <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold">Name</th>
-                        <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold text-right">Exp %</th>
-                        <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold text-right">Exp Amt</th>
-                        <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold text-right">Recv %</th>
-                        <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold text-right">Recv Amt</th>
+                        <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold text-right w-24">Exp %</th>
+                        <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold text-right w-36">Exp ₹</th>
+                        <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold text-right w-36">Recv ₹</th>
                         <th className="py-2 w-20 text-xs text-muted-foreground font-semibold text-center">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {(milestones as any[]).map((ms: any) => (
-                        <tr key={ms.id} className="border-b last:border-0 hover:bg-muted/30">
-                          <td className="py-2 pr-2 font-medium">{ms.name}</td>
-                          <td className="py-2 pr-2 text-right">{Number(ms.expectedPercentage ?? 0)}%</td>
-                          <td className="py-2 pr-2 text-right">₹{Number(ms.expectedAmount ?? 0).toLocaleString('en-IN')}</td>
-                          {editingMsId === ms.id ? (
-                            <>
-                              <td className="py-2 pr-2">
-                                <Input type="number" min="0" max="100" step="0.01" value={editRecvPct} onChange={(e) => setEditRecvPct(e.target.value)} className="h-7 text-xs text-right w-full" />
-                              </td>
-                              <td className="py-2 pr-2">
-                                <Input type="number" min="0" step="0.01" value={editRecvAmt} onChange={(e) => setEditRecvAmt(e.target.value)} className="h-7 text-xs text-right w-full" />
-                              </td>
-                              <td className="py-2 text-center">
-                                <div className="flex justify-center gap-1">
-                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => updateMsMut.mutate({ msId: ms.id, dto: { receivedPercentage: Number(editRecvPct), receivedAmount: Number(editRecvAmt) } })}><Check className="h-3.5 w-3.5 text-emerald-600" /></Button>
-                                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditingMsId(null)}><X className="h-3.5 w-3.5" /></Button>
-                                </div>
-                              </td>
-                            </>
-                          ) : (
-                            <>
-                              <td className="py-2 pr-2 text-right cursor-pointer hover:text-violet-600 transition-colors" onClick={() => { setEditingMsId(ms.id); setEditRecvPct(String(ms.receivedPercentage ?? 0)); setEditRecvAmt(String(ms.receivedAmount ?? 0)); }}>
-                                {Number(ms.receivedPercentage ?? 0)}% <Pencil className="inline h-2.5 w-2.5 ml-1 text-muted-foreground" />
-                              </td>
-                              <td className="py-2 pr-2 text-right cursor-pointer hover:text-violet-600 transition-colors" onClick={() => { setEditingMsId(ms.id); setEditRecvPct(String(ms.receivedPercentage ?? 0)); setEditRecvAmt(String(ms.receivedAmount ?? 0)); }}>
-                                ₹{Number(ms.receivedAmount ?? 0).toLocaleString('en-IN')} <Pencil className="inline h-2.5 w-2.5 ml-1 text-muted-foreground" />
-                              </td>
-                              <td className="py-2 text-center">
-                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500 hover:text-red-600" onClick={() => deleteMsMut.mutate(ms.id)}><Trash2 className="h-3 w-3" /></Button>
-                              </td>
-                            </>
-                          )}
-                        </tr>
-                      ))}
+                      {(milestones as any[]).map((ms: any) => {
+                        const onPctBlur = (v: string) => {
+                          if (Number(v) === Number(ms.expectedPercentage)) return;
+                          updateMsMut.mutate({
+                            msId: ms.id,
+                            dto: {
+                              expectedPercentage: Number(v),
+                              expectedAmount: detailBudget > 0
+                                ? Number(detailPctToAmt(v))
+                                : Number(ms.expectedAmount ?? 0),
+                            },
+                          });
+                        };
+                        const onAmtBlur = (v: string) => {
+                          if (Number(v) === Number(ms.expectedAmount)) return;
+                          updateMsMut.mutate({
+                            msId: ms.id,
+                            dto: {
+                              expectedAmount: Number(v),
+                              expectedPercentage: detailBudget > 0
+                                ? Number(detailAmtToPct(v))
+                                : Number(ms.expectedPercentage ?? 0),
+                            },
+                          });
+                        };
+                        return (
+                          <tr key={ms.id} className="border-b last:border-0 hover:bg-muted/30">
+                            <td className="py-2 pr-2 font-medium">{ms.name}</td>
+                            <td className="py-2 pr-2">
+                              <Input
+                                type="number" min="0" max="100" step="0.01"
+                                defaultValue={String(ms.expectedPercentage ?? 0)}
+                                onBlur={(e) => onPctBlur(e.target.value)}
+                                className="h-7 text-xs text-right tabular-nums"
+                              />
+                            </td>
+                            <td className="py-2 pr-2">
+                              <Input
+                                type="number" min="0" step="0.01"
+                                defaultValue={String(ms.expectedAmount ?? 0)}
+                                onBlur={(e) => onAmtBlur(e.target.value)}
+                                className="h-7 text-xs text-right tabular-nums"
+                              />
+                            </td>
+                            {editingMsId === ms.id ? (
+                              <>
+                                <td className="py-2 pr-2">
+                                  <Input type="number" min="0" step="0.01" value={editRecvAmt} onChange={(e) => setEditRecvAmt(e.target.value)} className="h-7 text-xs text-right w-full tabular-nums" />
+                                </td>
+                                <td className="py-2 text-center">
+                                  <div className="flex justify-center gap-1">
+                                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { updateMsMut.mutate({ msId: ms.id, dto: { receivedAmount: Number(editRecvAmt) } }); setEditingMsId(null); }}><Check className="h-3.5 w-3.5 text-emerald-600" /></Button>
+                                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditingMsId(null)}><X className="h-3.5 w-3.5" /></Button>
+                                  </div>
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="py-2 pr-2 text-right cursor-pointer hover:text-violet-600 transition-colors tabular-nums" onClick={() => { setEditingMsId(ms.id); setEditRecvAmt(String(ms.receivedAmount ?? 0)); }}>
+                                  ₹{Number(ms.receivedAmount ?? 0).toLocaleString('en-IN')} <Pencil className="inline h-2.5 w-2.5 ml-1 text-muted-foreground" />
+                                </td>
+                                <td className="py-2 text-center">
+                                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500 hover:text-red-600" onClick={() => deleteMsMut.mutate(ms.id)}><Trash2 className="h-3 w-3" /></Button>
+                                </td>
+                              </>
+                            )}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1542,25 +1673,40 @@ export default function ProjectDetailPage() {
             )}
           </div>
 
-          {/* Fixed totals at bottom */}
-          {(milestones as any[]).length > 0 && (
-            <div className="border-t pt-2 shrink-0">
-              {/* Mobile totals */}
-              <div className="md:hidden grid grid-cols-2 gap-x-4 gap-y-1 text-xs font-semibold px-1">
-                <div>Exp: {(milestones as any[]).reduce((s: number, m: any) => s + Number(m.expectedPercentage ?? 0), 0)}% / ₹{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.expectedAmount ?? 0), 0).toLocaleString('en-IN')}</div>
-                <div>Recv: {(milestones as any[]).reduce((s: number, m: any) => s + Number(m.receivedPercentage ?? 0), 0)}% / ₹{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.receivedAmount ?? 0), 0).toLocaleString('en-IN')}</div>
+          {/* Totals + sum-mismatch warning. */}
+          {(milestones as any[]).length > 0 && (() => {
+            const list = milestones as any[];
+            const sumPct = list.reduce((s, m) => s + Number(m.expectedPercentage ?? 0), 0);
+            const sumExp = list.reduce((s, m) => s + Number(m.expectedAmount ?? 0), 0);
+            const sumRecv = list.reduce((s, m) => s + Number(m.receivedAmount ?? 0), 0);
+            const delta = detailBudget > 0 ? sumExp - detailBudget : 0;
+            const tone = detailBudget <= 0
+              ? 'text-muted-foreground'
+              : Math.abs(delta) < 0.005
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : delta > 0
+                  ? 'text-red-600 dark:text-red-400'
+                  : 'text-amber-600 dark:text-amber-400';
+            return (
+              <div className="border-t pt-2 shrink-0 space-y-1">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1 text-xs font-semibold px-1 tabular-nums">
+                  <div className="text-muted-foreground font-medium">Total</div>
+                  <div className="text-right">{sumPct.toFixed(2)}%</div>
+                  <div className="text-right">₹{sumExp.toLocaleString('en-IN', { maximumFractionDigits: 2 })}{detailBudget > 0 && <span className="font-normal text-muted-foreground"> / ₹{detailBudget.toLocaleString('en-IN')}</span>}</div>
+                  <div className="text-right">Recv ₹{sumRecv.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</div>
+                </div>
+                {detailBudget > 0 && (
+                  <p className={`text-[11px] font-medium px-1 ${tone}`}>
+                    {Math.abs(delta) < 0.005
+                      ? '✓ Milestones match the project cost exactly.'
+                      : delta > 0
+                        ? `Over budget by ₹${delta.toLocaleString('en-IN', { maximumFractionDigits: 2 })} — review allocations.`
+                        : `₹${Math.abs(delta).toLocaleString('en-IN', { maximumFractionDigits: 2 })} unallocated — sum is below the project cost.`}
+                  </p>
+                )}
               </div>
-              {/* Desktop totals */}
-              <div className="hidden md:grid grid-cols-[1fr_80px_120px_80px_120px_80px] gap-2 text-sm font-semibold px-1">
-                <span>Total</span>
-                <span className="text-right">{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.expectedPercentage ?? 0), 0)}%</span>
-                <span className="text-right">₹{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.expectedAmount ?? 0), 0).toLocaleString('en-IN')}</span>
-                <span className="text-right">{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.receivedPercentage ?? 0), 0)}%</span>
-                <span className="text-right">₹{(milestones as any[]).reduce((s: number, m: any) => s + Number(m.receivedAmount ?? 0), 0).toLocaleString('en-IN')}</span>
-                <span></span>
-              </div>
-            </div>
-          )}
+            );
+          })()}
           <div className="flex justify-end pt-2 border-t shrink-0">
             <Button onClick={() => setMsDialogOpen(false)}>Close</Button>
           </div>

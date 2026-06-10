@@ -353,6 +353,11 @@ export interface Project {
   /** Cadence for recurring-type projects (Sprint 1). NULL on
    *  non-recurring projects. */
   recurringPeriod?: RecurringPeriod | null;
+  /** Total project cost (₹). Required by the UI on non-recurring
+   *  project types so milestones can be expressed as percentages of
+   *  the budget. NULL on recurring projects (their billing comes from
+   *  the per-period recurring rows instead). */
+  projectBudget?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -369,6 +374,7 @@ export interface CreateProjectDto {
   projectManagerId?: number;
   groupId?: number | null;
   recurringPeriod?: RecurringPeriod;
+  projectBudget?: number | null;
 }
 
 export type UpdateProjectDto = Partial<CreateProjectDto>;
