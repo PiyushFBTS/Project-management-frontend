@@ -6,7 +6,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus, Pencil, Trash2, Loader2, FolderInput, Users, Search as SearchIcon, Mail, Phone, Briefcase } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, FolderInput, Users, Search as SearchIcon, Mail, Phone, Briefcase, FileSpreadsheet } from 'lucide-react';
+import { downloadBlob } from '@/lib/utils/download';
+import { format } from 'date-fns';
 import { employeesApi } from '@/lib/api/employees';
 import { projectsApi } from '@/lib/api/projects';
 import { Employee } from '@/types';
@@ -46,6 +48,42 @@ const typeLabels: Record<string, string> = {
   admin: 'Admin',
 };
 
+// Sprint 2 — Excel export column catalog. Mirrors the backend's
+// ALL_COLUMNS allow-list. `alwaysOn: true` means the picker shows
+// the field as a locked chip (Emp Code + Name) — the backend forces
+// these in too, so toggling them in the URL has no effect.
+const EXPORT_FIELDS: Array<{ key: string; label: string; group: string; alwaysOn?: boolean }> = [
+  { key: 'empCode',        label: 'Emp Code',         group: 'Identity', alwaysOn: true },
+  { key: 'name',           label: 'Name',             group: 'Identity', alwaysOn: true },
+  { key: 'email',          label: 'Email',            group: 'Identity' },
+  { key: 'mobileNumber',   label: 'Mobile',           group: 'Identity' },
+  { key: 'joiningDate',    label: 'Joining Date',     group: 'Identity' },
+  { key: 'dateOfBirth',    label: 'Birthday',         group: 'Identity' },
+  { key: 'consultantType', label: 'Consultant Type',  group: 'Role' },
+  { key: 'department',     label: 'Department',       group: 'Role' },
+  { key: 'manager',        label: 'Manager',          group: 'Role' },
+  { key: 'assignedProject',label: 'Assigned Project', group: 'Role' },
+  { key: 'isHr',           label: 'Is HR',            group: 'Permissions' },
+  { key: 'isAccounts',     label: 'Is Accounts',      group: 'Permissions' },
+  { key: 'isAdmin',        label: 'Is Admin',         group: 'Permissions' },
+  { key: 'isActive',       label: 'Is Active',        group: 'Permissions' },
+  { key: 'panNumber',      label: 'PAN',              group: 'Payroll' },
+  { key: 'uanNumber',      label: 'UAN',              group: 'Payroll' },
+  { key: 'pfNumber',       label: 'PF Number',        group: 'Payroll' },
+  { key: 'annualCtc',      label: 'Annual CTC',       group: 'Payroll' },
+  { key: 'bankName',       label: 'Bank Name',        group: 'Bank' },
+  { key: 'bankAccountNo',  label: 'Bank Account No',  group: 'Bank' },
+  { key: 'bankIfsc',       label: 'IFSC',             group: 'Bank' },
+  { key: 'paymentMode',    label: 'Payment Mode',     group: 'Bank' },
+  { key: 'bloodGroup',     label: 'Blood Group',      group: 'Personal' },
+  { key: 'maritalStatus',  label: 'Marital Status',   group: 'Personal' },
+];
+const EXPORT_GROUPS = ['Identity', 'Role', 'Permissions', 'Payroll', 'Bank', 'Personal'] as const;
+// Fields the user can actually toggle (everything except the always-on
+// locked chips).
+const TOGGLEABLE_FIELDS = EXPORT_FIELDS.filter((f) => !f.alwaysOn);
+const TOGGLEABLE_KEYS = new Set(TOGGLEABLE_FIELDS.map((f) => f.key));
+
 export default function EmployeesPage() {
   const qc = useQueryClient();
   const router = useRouter();
@@ -57,6 +95,15 @@ export default function EmployeesPage() {
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active');
+  // In-flight flag for the Excel export so the button can show a
+  // spinner + stay disabled while the backend builds the workbook.
+  const [exporting, setExporting] = useState(false);
+  // Sprint 2 — field-picker modal. Opens before the export runs so the
+  // user can choose which columns to include.
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [selectedFields, setSelectedFields] = useState<Set<string>>(
+    () => new Set(TOGGLEABLE_FIELDS.map((f) => f.key)),
+  );
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignEmp, setAssignEmp] = useState<Employee | null>(null);
   const [assignProjectId, setAssignProjectId] = useState<string>('none');
@@ -93,6 +140,68 @@ export default function EmployeesPage() {
     },
     onError: (e: any, _, ctx) => toast.error(e?.response?.data?.message ?? 'Failed to deactivate employee', { id: ctx?.id }),
   });
+
+  // Opening the picker resets the selection to "all toggleable fields"
+  // each time, matching the assumption locked in for Sprint 2 (no
+  // persistence between sessions). The user can then deselect to taste.
+  const handleExport = () => {
+    if (exporting) return;
+    setSelectedFields(new Set(TOGGLEABLE_FIELDS.map((f) => f.key)));
+    setExportModalOpen(true);
+  };
+
+  // The actual export — fires when the user confirms in the modal.
+  // Uses the same `search` + `isActive` filters the page shows, plus
+  // the column subset the picker collected. Admin and HR hit different
+  // routes; the picker UI is identical for both.
+  const runExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    const id = toast.loading('Building Excel export…');
+    try {
+      const params: { search?: string; isActive?: 'true' | 'false'; fields?: string } = {};
+      if (search.trim()) params.search = search.trim();
+      // The backend defaults to "all" when isActive is omitted, so
+      // only attach it when the user picked a specific status.
+      if (effectiveStatus !== 'all') params.isActive = effectiveStatus === 'active' ? 'true' : 'false';
+      // Always-on fields (empCode, name) are forced server-side too —
+      // sending them is just a clarity thing for someone reading the URL.
+      const requested = [
+        ...EXPORT_FIELDS.filter((f) => f.alwaysOn).map((f) => f.key),
+        ...[...selectedFields].filter((k) => TOGGLEABLE_KEYS.has(k)),
+      ];
+      if (requested.length > 0) params.fields = requested.join(',');
+      const res = isAdmin
+        ? await employeesApi.exportAll(params)
+        : await employeesApi.employeeExportAll(params);
+      downloadBlob(res.data, `employees-${format(new Date(), 'yyyy-MM-dd')}.xlsx`);
+      toast.success('Export ready', { id });
+      setExportModalOpen(false);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message ?? 'Failed to export employees', { id });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Modal helpers.
+  const allToggleableSelected =
+    selectedFields.size >= TOGGLEABLE_FIELDS.length
+    && TOGGLEABLE_FIELDS.every((f) => selectedFields.has(f.key));
+  const noneToggleableSelected = TOGGLEABLE_FIELDS.every((f) => !selectedFields.has(f.key));
+  const toggleField = (key: string) =>
+    setSelectedFields((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  const toggleSelectAll = () =>
+    setSelectedFields(
+      allToggleableSelected
+        ? new Set()
+        : new Set(TOGGLEABLE_FIELDS.map((f) => f.key)),
+    );
 
   const assignMutation = useMutation({
     mutationFn: ({ id, projectId }: { id: number; projectId: number | null; name: string }) =>
@@ -162,6 +271,23 @@ export default function EmployeesPage() {
               <SelectItem value="all">All</SelectItem>
             </SelectContent>
           </Select>
+        )}
+        {/* Excel export — visible to admin and HR. Same filter scope as
+            the list on screen (search + isActive) so the file matches
+            what the user sees. */}
+        {canSeeInactive && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExport}
+            disabled={exporting}
+            className="ml-auto"
+          >
+            {exporting
+              ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              : <FileSpreadsheet className="mr-1.5 h-4 w-4" />}
+            Export
+          </Button>
         )}
       </div>
 
@@ -262,6 +388,101 @@ export default function EmployeesPage() {
         </div>
       )}
 
+
+      {/* Export field-picker dialog — admin / HR only. The same gate
+          shows the trigger button on the filter row above. */}
+      <Dialog open={exportModalOpen} onOpenChange={(v) => { if (!exporting) setExportModalOpen(v); }}>
+        <DialogContent className="max-w-2xl flex flex-col max-h-[90vh] p-0 overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-emerald-500 via-teal-500 to-cyan-500" />
+          <DialogHeader className="px-6 pt-6">
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+              Export to Excel
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground">
+              Pick the columns to include. <span className="font-medium text-foreground">Emp Code</span> and <span className="font-medium text-foreground">Name</span> are always exported.
+            </p>
+          </DialogHeader>
+
+          {/* Body: locked chips + select-all + grouped checkbox grid */}
+          <div className="px-6 py-4 flex-1 overflow-y-auto space-y-4">
+            {/* Always-on chips */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mr-1">Always</span>
+              {EXPORT_FIELDS.filter((f) => f.alwaysOn).map((f) => (
+                <span
+                  key={f.key}
+                  className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 ring-1 ring-emerald-500/30 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 text-xs font-medium"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  {f.label}
+                </span>
+              ))}
+            </div>
+
+            {/* Select-all master + count */}
+            <div className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2">
+              <label className="inline-flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  ref={(el) => {
+                    // Tri-state — visually mark "partial" with the
+                    // indeterminate flag so the master checkbox reads
+                    // accurately when only some boxes are ticked.
+                    if (el) el.indeterminate = !allToggleableSelected && !noneToggleableSelected;
+                  }}
+                  className="h-4 w-4 rounded border-input accent-emerald-600 cursor-pointer"
+                  checked={allToggleableSelected}
+                  onChange={toggleSelectAll}
+                />
+                <span className="text-sm font-semibold">Select all</span>
+              </label>
+              <span className="text-xs text-muted-foreground">
+                {selectedFields.size} / {TOGGLEABLE_FIELDS.length} optional fields
+              </span>
+            </div>
+
+            {/* Grouped checkbox grid */}
+            {EXPORT_GROUPS.map((group) => {
+              const fieldsInGroup = TOGGLEABLE_FIELDS.filter((f) => f.group === group);
+              if (fieldsInGroup.length === 0) return null;
+              return (
+                <div key={group} className="space-y-1.5">
+                  <div className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">{group}</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
+                    {fieldsInGroup.map((f) => (
+                      <label
+                        key={f.key}
+                        className="inline-flex items-center gap-2 cursor-pointer rounded-md px-2 py-1 hover:bg-muted/50 transition-colors"
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-input accent-emerald-600 cursor-pointer"
+                          checked={selectedFields.has(f.key)}
+                          onChange={() => toggleField(f.key)}
+                        />
+                        <span className="text-sm">{f.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <DialogFooter className="px-6 py-4 border-t bg-muted/20 sm:justify-between">
+            <Button variant="outline" disabled={exporting} onClick={() => setExportModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={runExport} disabled={exporting}>
+              {exporting
+                ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                : <FileSpreadsheet className="mr-1.5 h-4 w-4" />}
+              Export {selectedFields.size + EXPORT_FIELDS.filter((f) => f.alwaysOn).length} field{selectedFields.size + EXPORT_FIELDS.filter((f) => f.alwaysOn).length === 1 ? '' : 's'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Assign Project Dialog — admin only */}
       {isAdmin && (

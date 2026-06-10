@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useEffect, useMemo, Fragment } from 'react';
+import { useState, useEffect, useMemo, useRef, Fragment } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Plus, Pencil, Trash2, ClipboardList, FolderKanban, Search as SearchIcon, Layers, ChevronDown, ChevronRight } from 'lucide-react';
@@ -146,6 +146,17 @@ export default function ProjectsPage() {
   const hasGroups = groups.length > 0;
   const total = (data ?? []).length;
 
+  // Default every group to collapsed the first time the projects list
+  // lands. After that we leave the user's expand/collapse alone — they
+  // get to keep whatever sections they've opened across a refetch.
+  const collapseInitRef = useRef(false);
+  useEffect(() => {
+    if (collapseInitRef.current) return;
+    if (groups.length === 0) return;
+    collapseInitRef.current = true;
+    setCollapsed(new Set(groups.map((g) => g.id)));
+  }, [groups]);
+
   const toggleGroup = (id: number) =>
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -286,19 +297,34 @@ export default function ProjectsPage() {
               const isOpen = !collapsed.has(g.id);
               return (
                 <div key={g.id} className="space-y-3">
-                  <button
-                    type="button"
-                    onClick={() => toggleGroup(g.id)}
-                    className="w-full flex items-center gap-2 rounded-lg border bg-card px-3 py-2.5 text-left shadow-sm"
-                  >
-                    {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
-                    <Layers className="h-4 w-4 text-teal-500 shrink-0" />
-                    <Link href={`/project-groups/${g.id}`} onClick={(e) => e.stopPropagation()} className="font-semibold text-foreground hover:underline truncate">
-                      {g.name}
-                    </Link>
-                    <Badge variant="secondary" className="text-[10px] shrink-0">{g.projects.length}</Badge>
-                    <div className="ml-auto hidden xs:flex flex-wrap gap-1 justify-end">{groupBadges(g.projects)}</div>
-                  </button>
+                  <div className="w-full flex items-center gap-2 rounded-lg border bg-card px-3 py-2.5 shadow-sm">
+                    {/* Collapsible title — same tap area as before. */}
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(g.id)}
+                      className="flex flex-1 items-center gap-2 text-left min-w-0"
+                    >
+                      {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
+                      <Layers className="h-4 w-4 text-teal-500 shrink-0" />
+                      <Link href={`/project-groups/${g.id}`} onClick={(e) => e.stopPropagation()} className="font-semibold text-foreground hover:underline truncate">
+                        {g.name}
+                      </Link>
+                      <Badge variant="secondary" className="text-[10px] shrink-0">{g.projects.length}</Badge>
+                    </button>
+                    {/* "+ Sub Project" — admin / HR only. */}
+                    {!isEmployee && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 px-2 text-xs border-teal-500/40 text-teal-600 hover:bg-teal-500/10 shrink-0"
+                        title={`Add a sub project under ${g.name}`}
+                        onClick={() => router.push(`/projects/new?groupId=${g.id}`)}
+                      >
+                        <Plus className="mr-1 h-3 w-3" />
+                        Sub
+                      </Button>
+                    )}
+                  </div>
                   {isOpen && (
                     <div className="space-y-3 border-l-2 border-teal-500/30 pl-3">
                       {g.projects.map(projectCard)}
@@ -354,7 +380,8 @@ export default function ProjectsPage() {
                   return (
                     <Fragment key={g.id}>
                       <TableRow className="bg-muted/40 hover:bg-muted/40">
-                        <TableCell colSpan={7} className="py-2">
+                        {/* Group title + count + type badges (collapsible) */}
+                        <TableCell colSpan={6} className="py-2">
                           <button type="button" onClick={() => toggleGroup(g.id)} className="flex items-center gap-2 w-full text-left">
                             {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
                             <Layers className="h-4 w-4 text-teal-500" />
@@ -364,6 +391,27 @@ export default function ProjectsPage() {
                             <Badge variant="secondary" className="text-[10px]">{g.projects.length}</Badge>
                             <div className="ml-2 flex flex-wrap gap-1">{groupBadges(g.projects)}</div>
                           </button>
+                        </TableCell>
+                        {/* "+ Sub Project" affordance — adds a project
+                            inside this group. The new-project form
+                            already reads `?groupId=` from the URL and
+                            pre-selects it. Admin / HR only. */}
+                        <TableCell className="py-2 text-right">
+                          {!isEmployee && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs border-teal-500/40 text-teal-600 hover:bg-teal-500/10"
+                              title={`Add a sub project under ${g.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                router.push(`/projects/new?groupId=${g.id}`);
+                              }}
+                            >
+                              <Plus className="mr-1 h-3 w-3" />
+                              Sub Project
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                       {isOpen && g.projects.map(projectRow)}

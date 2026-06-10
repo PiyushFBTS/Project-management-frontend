@@ -6,6 +6,23 @@ export const employeesApi = {
   getAll: (params?: PaginationParams & { search?: string; consultantType?: string; isActive?: boolean }) =>
     api.get<ApiResponse<Employee[]>>('/employees', { params }),
 
+  /**
+   * Export every employee in the company to Excel. Same filter contract
+   * as `getAll` so the export matches what the page currently shows
+   * (search + isActive + consultant type). Admin hits this route; HR
+   * hits the mirrored `/employee/employees/export` below.
+   *
+   * Sprint 2: `fields` is a CSV of column keys the picker collected
+   * (e.g. `'empCode,name,email,annualCtc'`). When omitted the server
+   * falls back to the full column set.
+   */
+  exportAll: (params?: { search?: string; consultantType?: string; isActive?: 'true' | 'false'; fields?: string }) =>
+    api.get<Blob>('/employees/export', { params, responseType: 'blob' }),
+
+  /** HR-gated mirror of `exportAll`. */
+  employeeExportAll: (params?: { search?: string; consultantType?: string; isActive?: 'true' | 'false'; fields?: string }) =>
+    api.get<Blob>('/employee/employees/export', { params, responseType: 'blob' }),
+
   getOne: (id: number) => api.get<ApiResponse<Employee>>(`/employees/${id}`),
 
   getAdmin: (id: number) => api.get<ApiResponse<Employee>>(`/employees/admin/${id}`),

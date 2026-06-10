@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { ArrowLeft, FolderKanban, Loader2, CheckCircle2, User, Calendar, Clock, FileText, Check, X, Paperclip, Upload, File, Trash2, Milestone, Plus, Layers, Repeat, IndianRupee } from 'lucide-react';
+import { ArrowLeft, FolderKanban, Loader2, CheckCircle2, User, Calendar, Clock, FileText, Check, X, Paperclip, Upload, File, Trash2, Milestone, Plus, Repeat, IndianRupee } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { projectsApi } from '@/lib/api/projects';
 import { SearchableSelect } from '@/components/ui/searchable-select';
@@ -74,11 +74,9 @@ function NewProjectPage() {
   const clearError = (key: string) =>
     setErrors((e) => (e[key] ? { ...e, [key]: false } : e));
 
-  // Inline "create group" dialog state
-  const [groupDialogOpen, setGroupDialogOpen] = useState(false);
-  const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupCode, setNewGroupCode] = useState('');
-  const [newGroupClient, setNewGroupClient] = useState('');
+  // (Inline "create group" dialog was removed alongside the Project
+  // Group field — groups are now picked via the "+ Sub Project" entry
+  // points on the projects list page.)
 
   const { data: managers } = useQuery({
     queryKey: ['project-managers'],
@@ -145,24 +143,8 @@ function NewProjectPage() {
     return `${y}-${mm}-01`;
   };
 
-  const { data: groupsRaw } = useQuery({
-    queryKey: ['project-groups'],
-    queryFn: () => projectsApi.getGroups().then((r: any) => r.data?.data ?? r.data ?? []),
-  });
-  const groups: any[] = (groupsRaw ?? []) as any[];
-
-  const createGroupMutation = useMutation({
-    mutationFn: (dto: { name: string; code?: string; clientName?: string }) => projectsApi.createGroup(dto),
-    onSuccess: async (res: any) => {
-      const g = res.data?.data ?? res.data;
-      await qc.invalidateQueries({ queryKey: ['project-groups'] });
-      if (g?.id) setForm((p) => ({ ...p, groupId: String(g.id) }));
-      setGroupDialogOpen(false);
-      setNewGroupName(''); setNewGroupCode(''); setNewGroupClient('');
-      toast.success('Group created');
-    },
-    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to create group'),
-  });
+  // (Groups query + inline createGroupMutation removed alongside the
+  // Project Group field. groupId still flows through from the URL.)
 
   const createMutation = useMutation({
     mutationFn: (dto: CreateProjectDto) => projectsApi.create(dto),
@@ -521,30 +503,11 @@ function NewProjectPage() {
           />
         </div>
 
-        <div className="rounded-xl border bg-card p-4">
-          <div className="flex items-center justify-between mb-1.5">
-            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-teal-600 dark:text-teal-400">
-              <Layers className="h-3 w-3" /> Project Group
-            </div>
-            <button
-              type="button"
-              onClick={() => setGroupDialogOpen(true)}
-              className="text-[10px] font-semibold text-teal-600 dark:text-teal-400 hover:underline inline-flex items-center gap-0.5"
-            >
-              <Plus className="h-3 w-3" /> New
-            </button>
-          </div>
-          <SearchableSelect
-            value={form.groupId}
-            onValueChange={(v) => setForm((p) => ({ ...p, groupId: v }))}
-            placeholder="Search group..."
-            options={[
-              { value: 'none', label: 'No group (standalone)' },
-              ...groups.map((g: any) => ({ value: String(g.id), label: g.name })),
-            ]}
-            className="h-8 text-sm"
-          />
-        </div>
+        {/* Project Group card removed. The group is now set implicitly
+            either via the "+ Sub Project" affordance on the projects
+            list (which routes here with `?groupId=...`) or stays NULL
+            for plain "+ New Project" creations. `form.groupId` still
+            participates in the create dto via `groupFromUrl`. */}
 
         <div className="rounded-xl border bg-card p-4">
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-amber-600 dark:text-amber-400 mb-1.5">
@@ -788,50 +751,6 @@ function NewProjectPage() {
           </Button>
         </div>
       </div>
-
-      {/* ── New Group Dialog ──────────────────────────────────────────── */}
-      <Dialog open={groupDialogOpen} onOpenChange={setGroupDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Layers className="h-5 w-5 text-teal-600" /> New Project Group
-            </DialogTitle>
-          </DialogHeader>
-          <p className="text-xs text-muted-foreground -mt-2">
-            A primary name (e.g. &quot;BTW&quot;) that groups several typed projects under it.
-          </p>
-          <div className="space-y-3 pt-1">
-            <div>
-              <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Name *</label>
-              <Input value={newGroupName} onChange={(e) => setNewGroupName(capitalizeFirst(e.target.value))} placeholder="e.g. BTW" className="h-9" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Code</label>
-                <Input value={newGroupCode} onChange={(e) => setNewGroupCode(e.target.value)} placeholder="optional" className="h-9 font-mono" />
-              </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Client</label>
-                <Input value={newGroupClient} onChange={(e) => setNewGroupClient(e.target.value)} placeholder="optional" className="h-9" />
-              </div>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setGroupDialogOpen(false)}>Cancel</Button>
-            <Button
-              disabled={!newGroupName.trim() || createGroupMutation.isPending}
-              onClick={() => createGroupMutation.mutate({
-                name: newGroupName.trim(),
-                code: newGroupCode.trim() || undefined,
-                clientName: newGroupClient.trim() || undefined,
-              })}
-            >
-              {createGroupMutation.isPending ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Check className="mr-1 h-3.5 w-3.5" />}
-              Create
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* ── Milestone Dialog ──────────────────────────────────────────── */}
       <Dialog open={milestoneDialogOpen} onOpenChange={setMilestoneDialogOpen}>
