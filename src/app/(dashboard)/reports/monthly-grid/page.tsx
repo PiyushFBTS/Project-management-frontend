@@ -13,7 +13,20 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 
-type DayEntry = { date: string; sheetId: number | null; hours: number | null; submitted: boolean };
+type LeaveStatus =
+  | 'pending'
+  | 'manager_approved'
+  | 'hr_approved'
+  | 'manager_rejected'
+  | 'hr_rejected';
+type LeaveCell = { id: number; type: string; status: LeaveStatus };
+type DayEntry = {
+  date: string;
+  sheetId: number | null;
+  hours: number | null;
+  submitted: boolean;
+  leave: LeaveCell | null;
+};
 type EmployeeRow = {
   employeeId: number;
   empCode: string;
@@ -21,9 +34,43 @@ type EmployeeRow = {
   consultantType: string;
   totalHours: number;
   filledDays: number;
+  leavesCount: number;
   days: DayEntry[];
 };
 type GridData = { year: number; month: number; daysInMonth: number; days: string[]; rows: EmployeeRow[] };
+
+// Visual classification for a leave cell, driven by status:
+//   approved → solid violet (employee was actually out)
+//   pending  → translucent violet w/ dashed border (decision still pending)
+//   rejected → muted slate w/ strikethrough (request was made but denied)
+function leaveTone(status: LeaveStatus): {
+  cell: string;
+  pill: string;
+  label: string;
+} {
+  if (status === 'hr_approved') {
+    return {
+      cell: 'bg-violet-100 dark:bg-violet-900/40 border-violet-300 dark:border-violet-700',
+      pill: 'bg-violet-200 dark:bg-violet-800 text-violet-800 dark:text-violet-200 border-violet-300',
+      label: 'Approved',
+    };
+  }
+  if (status === 'manager_approved' || status === 'pending') {
+    return {
+      cell: 'bg-violet-50/70 dark:bg-violet-900/20 border-violet-300 dark:border-violet-700 border-dashed',
+      pill: 'bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 border-violet-300',
+      label: status === 'pending' ? 'Pending' : 'Pending HR',
+    };
+  }
+  // rejected — leave was applied for but denied. We surface it so the
+  // viewer knows about the request, but the cell is muted with a
+  // strikethrough so it's clear the day is NOT a leave day.
+  return {
+    cell: 'bg-slate-50 dark:bg-slate-900 border-slate-300 dark:border-slate-700',
+    pill: 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 line-through',
+    label: 'Rejected',
+  };
+}
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -106,12 +153,6 @@ export default function MonthlyGridPage() {
   const getDayOfWeek = (dateStr: string) => new Date(dateStr + 'T00:00:00').getDay();
   const isSunday = (dateStr: string) => getDayOfWeek(dateStr) === 0;
 
-  const getCellColor = (entry: DayEntry) => {
-    if (entry.hours === null) return 'bg-red-50 dark:bg-red-950/30 text-muted-foreground';
-    if (entry.submitted) return 'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400';
-    return 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400';
-  };
-
   // Filter employees
   const filteredRows = (data?.rows ?? []).filter(
     (r) => !empSearch || r.name.toLowerCase().includes(empSearch.toLowerCase()) || r.empCode.toLowerCase().includes(empSearch.toLowerCase()),
@@ -180,18 +221,22 @@ export default function MonthlyGridPage() {
                         <p className="text-xs text-muted-foreground">{row.empCode} · {roleLabel(row.consultantType)}</p>
                       </div>
                     </div>
-                    <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    <div className="mt-3 grid grid-cols-4 gap-2 text-center">
                       <div>
-                        <p className="text-lg font-bold text-primary">{Number(row.totalHours).toFixed(2)}</p>
+                        <p className="text-base font-bold text-primary">{Number(row.totalHours).toFixed(2)}</p>
                         <p className="text-[10px] text-muted-foreground">Hours</p>
                       </div>
                       <div>
-                        <p className="text-lg font-bold text-emerald-600">{row.filledDays}</p>
-                        <p className="text-[10px] text-muted-foreground">Days Filled</p>
+                        <p className="text-base font-bold text-emerald-600">{row.filledDays}</p>
+                        <p className="text-[10px] text-muted-foreground">Days</p>
                       </div>
                       <div>
-                        <p className="text-lg font-bold" style={{ color: fillPct >= 80 ? '#16a34a' : fillPct >= 50 ? '#d97706' : '#dc2626' }}>{fillPct}%</p>
-                        <p className="text-[10px] text-muted-foreground">Fill Rate</p>
+                        <p className="text-base font-bold text-violet-600 dark:text-violet-400">{row.leavesCount}</p>
+                        <p className="text-[10px] text-muted-foreground">Leaves</p>
+                      </div>
+                      <div>
+                        <p className="text-base font-bold" style={{ color: fillPct >= 80 ? '#16a34a' : fillPct >= 50 ? '#d97706' : '#dc2626' }}>{fillPct}%</p>
+                        <p className="text-[10px] text-muted-foreground">Fill</p>
                       </div>
                     </div>
                     {/* Mini bar showing filled vs unfilled */}
@@ -212,15 +257,18 @@ export default function MonthlyGridPage() {
         /* ── Individual Employee Calendar Grid ─────────────────────────── */
         <div className="space-y-3">
           {/* Legend */}
-          <div className="flex items-center gap-4 text-xs">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
             <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-emerald-200 dark:bg-emerald-800 inline-block" /> Submitted</span>
             <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-amber-200 dark:bg-amber-800 inline-block" /> Draft</span>
             <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-red-200 dark:bg-red-800 inline-block" /> Not Filled</span>
             <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-gray-200 dark:bg-gray-700 inline-block" /> Sunday</span>
+            <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-violet-200 dark:bg-violet-800 inline-block" /> On Leave</span>
+            <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-violet-100 dark:bg-violet-900/40 inline-block border border-violet-300 border-dashed" /> Pending Leave</span>
+            <span className="flex items-center gap-1"><span className="h-3 w-3 rounded inline-block bg-linear-to-br from-violet-200 to-amber-200" /> Worked on Leave</span>
           </div>
 
           {/* Summary cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             <Card>
               <CardContent className="p-3 text-center">
                 <p className="text-2xl font-bold text-primary">{Number(empRow.totalHours).toFixed(2)}</p>
@@ -231,6 +279,12 @@ export default function MonthlyGridPage() {
               <CardContent className="p-3 text-center">
                 <p className="text-2xl font-bold text-emerald-600">{empRow.filledDays}</p>
                 <p className="text-xs text-muted-foreground">Days Filled</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-3 text-center">
+                <p className="text-2xl font-bold text-violet-600 dark:text-violet-400">{empRow.leavesCount}</p>
+                <p className="text-xs text-muted-foreground">Leaves</p>
               </CardContent>
             </Card>
             <Card>
@@ -266,6 +320,26 @@ export default function MonthlyGridPage() {
                   const day = parseInt(entry.date.split('-')[2], 10);
                   const sun = isSunday(entry.date);
                   const clickable = !sun && entry.sheetId != null;
+                  const hasLeave = !sun && entry.leave !== null;
+                  const tone = entry.leave ? leaveTone(entry.leave.status) : null;
+                  // Cell tone precedence:
+                  //   Sunday → grey (leaves on Sundays are ignored visually).
+                  //   Leave + filled → leave background with amber bottom
+                  //     stripe to flag "worked on a leave day".
+                  //   Pure leave → leaveTone(status).
+                  //   Otherwise → existing draft/submitted/not-filled logic.
+                  let cellClass = '';
+                  if (sun) {
+                    cellClass = 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800';
+                  } else if (hasLeave && tone) {
+                    cellClass = tone.cell;
+                  } else if (entry.hours !== null) {
+                    cellClass = entry.submitted
+                      ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
+                      : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800';
+                  } else {
+                    cellClass = 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800';
+                  }
                   return (
                     <div
                       key={entry.date}
@@ -278,37 +352,55 @@ export default function MonthlyGridPage() {
                           router.push(`/task-sheets/${entry.sheetId}`);
                         }
                       } : undefined}
-                      title={clickable ? 'Open task sheet' : undefined}
-                      className={`rounded-lg border p-2 min-h-[70px] transition-all ${
+                      title={
+                        hasLeave && entry.hours !== null
+                          ? `Worked ${entry.hours}h on a leave day (${entry.leave!.type})`
+                          : hasLeave
+                            ? `${entry.leave!.type} (${tone!.label})`
+                            : clickable
+                              ? 'Open task sheet'
+                              : undefined
+                      }
+                      className={`relative rounded-lg border p-2 min-h-[70px] overflow-hidden transition-all ${
                         clickable ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5' : ''
-                      } ${
-                        sun
-                          ? 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800'
-                          : entry.hours !== null
-                            ? entry.submitted
-                              ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
-                              : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800'
-                            : 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800'
-                      }`}
+                      } ${cellClass}`}
                     >
-                      <div className="flex items-center justify-between">
+                      {/* Warning stripe along the bottom for "worked on a
+                          leave day" — caught by scan even when the cell
+                          is dense with text. */}
+                      {hasLeave && entry.hours !== null && (
+                        <span className="absolute inset-x-0 bottom-0 h-1 bg-amber-400 dark:bg-amber-600" />
+                      )}
+                      <div className="flex items-center justify-between gap-1">
                         <span className={`text-xs font-semibold ${sun ? 'text-gray-400' : ''}`}>{day}</span>
-                        {!sun && entry.submitted && (
+                        {hasLeave ? (
+                          <Badge variant="outline" className={`text-[8px] px-1 py-0 ${tone!.pill}`}>
+                            {tone!.label === 'Approved' ? 'Leave' : tone!.label}
+                          </Badge>
+                        ) : !sun && entry.submitted ? (
                           <Badge variant="outline" className="text-[8px] px-1 py-0 bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border-emerald-300">
                             Submitted
                           </Badge>
-                        )}
-                        {!sun && entry.hours !== null && !entry.submitted && (
+                        ) : !sun && entry.hours !== null && !entry.submitted ? (
                           <Badge variant="outline" className="text-[8px] px-1 py-0 bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 border-amber-300">
                             Draft
                           </Badge>
-                        )}
+                        ) : null}
                       </div>
                       <div className="mt-1">
                         {sun ? (
                           <span className="text-xs text-gray-400">Sunday</span>
                         ) : entry.hours !== null ? (
+                          // Always show hours when the sheet is filled —
+                          // even on a leave day. The amber stripe + Leave
+                          // pill signal the overlap.
                           <span className="text-lg font-bold">{entry.hours}h</span>
+                        ) : hasLeave ? (
+                          // Pure leave: show the leave type instead of
+                          // the red em-dash. Truncate long type names.
+                          <span className="text-[10px] font-medium leading-tight line-clamp-2 text-violet-700 dark:text-violet-300">
+                            {entry.leave!.type}
+                          </span>
                         ) : (
                           <span className="text-xs text-red-400">—</span>
                         )}

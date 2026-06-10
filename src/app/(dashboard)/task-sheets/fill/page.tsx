@@ -217,6 +217,25 @@ function diffHours(from: string, to: string): number {
   return Math.round(((b - a) / 60) * 100) / 100;
 }
 
+/// "11:00" or "11:00:00" → "11:00 AM". Empty / invalid input → "—".
+function formatTime12(t: string): string {
+  if (!t) return '—';
+  const { h, m, ampm } = to12Parts(t);
+  if (!h) return '—';
+  return `${h}:${m.padStart(2, '0')} ${ampm}`;
+}
+
+/// Minutes → "1h 30m" / "45m" / "2h". Used to label the gap rows
+/// inserted between consecutive entries so the user can see at a
+/// glance which time slots aren't covered.
+function formatGapDuration(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
 /// Suggest a default fromTime for a new entry — picks the last entry's
 /// toTime, or 09:00 if the sheet is empty. The user can override.
 function suggestFromTime(entries: TaskEntry[]): string {
@@ -593,17 +612,57 @@ function FillTaskSheetPage() {
         ))}
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/15">
-              <Clock className="h-5 w-5 text-violet-500" />
+      {/* Summary cards (Sprint 3) — Total Hours is the primary stat
+          while filling, so it spans wider on tablet+ and carries a
+          progress bar against an 8-hour target so the user can see at
+          a glance how close they are without doing mental arithmetic. */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="md:col-span-2">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/15">
+                <Clock className="h-5 w-5 text-violet-500" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-muted-foreground">Total Hours</p>
+                <div className="flex items-baseline gap-2">
+                  <p className="text-2xl font-bold text-foreground tabular-nums">
+                    {Number(sheet.totalHours).toFixed(2)}<span className="text-sm font-medium text-muted-foreground">h</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">/ 8.00h target</p>
+                </div>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Total Hours</p>
-              <p className="text-lg font-bold text-foreground">{Number(sheet.totalHours).toFixed(1)}h</p>
-            </div>
+            {(() => {
+              // 8-hour day reference. Clamp the bar to 100% so a heroic
+              // 11-hour day doesn't blow past the card edge; we add a
+              // small "over" indicator beside it instead.
+              const target = 8;
+              const total = Number(sheet.totalHours) || 0;
+              const pct = Math.max(0, Math.min(100, (total / target) * 100));
+              const over = total > target;
+              const tone = total >= target
+                ? 'bg-emerald-500'
+                : total >= target * 0.75
+                  ? 'bg-violet-500'
+                  : 'bg-amber-500';
+              return (
+                <div className="mt-3 space-y-1">
+                  <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${tone} transition-all duration-300`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-muted-foreground">
+                    <span>{Math.round((total / target) * 100)}% of target</span>
+                    {over
+                      ? <span className="text-emerald-600 font-semibold">+{(total - target).toFixed(2)}h over</span>
+                      : <span>{(target - total).toFixed(2)}h to go</span>}
+                  </div>
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
         <Card>
@@ -675,6 +734,7 @@ function FillTaskSheetPage() {
           <TableHeader>
             <TableRow>
               <TableHead className="w-10">#</TableHead>
+              <TableHead className="w-40">Time</TableHead>
               <TableHead>Project</TableHead>
               <TableHead>Project Type</TableHead>
               <TableHead>Description</TableHead>
@@ -687,7 +747,7 @@ function FillTaskSheetPage() {
           <TableBody>
             {entries.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-12 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
                   <div className="flex flex-col items-center gap-2">
                     <Clock className="h-8 w-8 text-muted-foreground/40" />
                     <p>No task entries yet</p>
@@ -699,7 +759,16 @@ function FillTaskSheetPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              entries.map((entry, i) => {
+              // Sort chronologically so gaps line up visually. Entries
+              // without a valid fromTime go last (they can't be placed
+              // on the timeline).
+              [...entries]
+                .sort((a, b) => {
+                  const am = parseTimeToMinutes(normalizeTime((a as any).fromTime ?? '')) ?? 1e9;
+                  const bm = parseTimeToMinutes(normalizeTime((b as any).fromTime ?? '')) ?? 1e9;
+                  return am - bm;
+                })
+                .flatMap((entry, i, arr) => {
                 // "Not submitted" badge — only meaningful on an already-
                 // submitted sheet, where it flags rows the user has
                 // added or edited since the last submit (i.e. work
@@ -716,9 +785,59 @@ function FillTaskSheetPage() {
                   sheet.isSubmitted &&
                   submittedAtMs > 0 &&
                   updatedAtMs > submittedAtMs;
-                return (
+
+                // Gap detection. Sprint 3 polish — show "Gap · 12:00
+                // PM – 1:00 PM (1h)" as its own amber row whenever the
+                // previous entry's toTime doesn't meet this entry's
+                // fromTime. Saves the user from cross-checking edit
+                // dialogs to find unfilled slots.
+                const prev = arr[i - 1];
+                const prevEndMins = prev
+                  ? parseTimeToMinutes(normalizeTime((prev as any).toTime ?? ''))
+                  : null;
+                const thisStartMins = parseTimeToMinutes(
+                  normalizeTime((entry as any).fromTime ?? ''),
+                );
+                const gapMins =
+                  prevEndMins != null && thisStartMins != null && thisStartMins > prevEndMins
+                    ? thisStartMins - prevEndMins
+                    : 0;
+                const gapFrom = gapMins > 0 ? normalizeTime((prev as any).toTime) : '';
+                const gapTo = gapMins > 0 ? normalizeTime((entry as any).fromTime) : '';
+
+                const rangeLabel = (() => {
+                  const f = normalizeTime((entry as any).fromTime ?? '');
+                  const t = normalizeTime((entry as any).toTime ?? '');
+                  if (!f || !t) return '—';
+                  return `${formatTime12(f)} – ${formatTime12(t)}`;
+                })();
+
+                return [
+                  gapMins > 0 ? (
+                    <TableRow key={`gap-${entry.id}`} className="bg-amber-50/40 dark:bg-amber-950/20 hover:bg-amber-50/60">
+                      <TableCell />
+                      <TableCell colSpan={8} className="py-2">
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="inline-flex h-1.5 w-1.5 rounded-full bg-amber-500" />
+                          <span className="font-semibold text-amber-700 dark:text-amber-400">Gap</span>
+                          <span className="text-muted-foreground">·</span>
+                          <span className="tabular-nums text-amber-700 dark:text-amber-400">
+                            {formatTime12(gapFrom)} – {formatTime12(gapTo)}
+                          </span>
+                          <span className="text-muted-foreground">·</span>
+                          <span className="font-semibold text-amber-700 dark:text-amber-400 tabular-nums">
+                            {formatGapDuration(gapMins)}
+                          </span>
+                          <span className="text-muted-foreground italic ml-1">no entry covers this slot</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : null,
                 <TableRow key={entry.id}>
                   <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                  <TableCell className="text-xs text-foreground/80 tabular-nums whitespace-nowrap">
+                    {rangeLabel}
+                  </TableCell>
                   <TableCell className="font-medium text-sm">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span>{entry.project?.projectName ?? entry.otherProjectName ?? '—'}</span>
@@ -777,8 +896,8 @@ function FillTaskSheetPage() {
                       </Button>
                       </div>
                     </TableCell>
-                </TableRow>
-                );
+                </TableRow>,
+                ];
               })
             )}
           </TableBody>
@@ -924,13 +1043,39 @@ function FillTaskSheetPage() {
                 {errors.toTime && <p className="text-xs text-red-500">Required</p>}
               </div>
             </div>
-            <p className="text-xs text-muted-foreground -mt-2">
-              Time taken:{' '}
-              <span className="font-semibold text-foreground">
-                {computedHours > 0 ? `${computedHours.toFixed(2)} h` : '—'}
-              </span>
-              {' '}(end − start, auto-calculated)
-            </p>
+            {/* Live duration preview — calculated as the user types
+                the start/end times. Format as "Xh Ym" so 1.5h reads as
+                "1h 30m" without arithmetic. Colour-coded:
+                  invalid (0 or > 24h) → red
+                  short (< 1h)          → amber
+                  normal                → emerald                       */}
+            <div className="-mt-1">
+              {(() => {
+                const valid = computedHours > 0 && computedHours <= 24;
+                const h = Math.floor(computedHours);
+                const m = Math.round((computedHours - h) * 60);
+                const text = !valid
+                  ? '—'
+                  : h === 0
+                    ? `${m} min`
+                    : m === 0
+                      ? `${h} h`
+                      : `${h} h ${m} min`;
+                const tone = !valid
+                  ? 'bg-red-500/10 text-red-700 dark:text-red-300 ring-red-500/30'
+                  : computedHours < 1
+                    ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 ring-amber-500/30'
+                    : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-emerald-500/30';
+                return (
+                  <div className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 ring-1 ${tone}`}>
+                    <Clock className="h-3.5 w-3.5" />
+                    <span className="text-xs font-medium">Duration</span>
+                    <span className="font-bold text-sm tabular-nums">{text}</span>
+                  </div>
+                );
+              })()}
+              <span className="text-[10px] text-muted-foreground ml-2">end − start, auto-calculated</span>
+            </div>
 
             {/* 6. Status */}
             <div className="space-y-1.5">
