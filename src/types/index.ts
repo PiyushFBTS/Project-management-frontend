@@ -147,19 +147,37 @@ export interface ProjectTypeDef {
   label: string;
   description?: string;
   /** Marks this type as recurring-billing (e.g. Support). Projects of a
-   *  recurring type use monthly recurring rows instead of milestones. */
+   *  recurring type use recurring billing rows instead of milestones;
+   *  the cadence (monthly / quarterly / half-yearly / yearly) is chosen
+   *  per project via {@link RecurringPeriod}. */
   isRecurring?: boolean;
   isActive?: boolean;
 }
 
 export type ProjectRecurringStatus = 'pending' | 'billed' | 'received';
 
-/** One billing month for a recurring-type project (parallels Milestone). */
+/**
+ * Cadence selector for a recurring-type project (Sprint 1).
+ *   monthly      → step 1 month, label "Apr 2026"
+ *   quarterly    → step 3 months, label "Q2 2026 (Apr–Jun)"
+ *   half_yearly  → step 6 months, label "H1 2026 (Jan–Jun)"
+ *   yearly       → step 12 months, label "2026"
+ *
+ * Per-project; chosen at create-time and locked once any
+ * project_recurrings row exists (backend returns 409 otherwise).
+ */
+export type RecurringPeriod = 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
+
+/** One billing period for a recurring-type project (parallels Milestone). */
 export interface ProjectRecurring {
   id: number;
   projectId: number;
-  /** First day of the billing month (YYYY-MM-01). */
+  /** First day of the period being billed (YYYY-MM-01). For wider cadences
+   *  this is the first month of the period — Q2 2026 → 2026-04-01. */
   billingMonth: string;
+  /** Cadence-aware display string generated server-side. Nullable for
+   *  legacy rows pre-Sprint 1 (the UI should fall back to billingMonth). */
+  periodLabel: string | null;
   expectedAmount: number;
   receivedAmount: number;
   receivedAt: string | null;
@@ -332,6 +350,9 @@ export interface Project {
   projectManager?: { id: number; name: string; empCode: string };
   groupId?: number | null;
   group?: { id: number; name: string } | null;
+  /** Cadence for recurring-type projects (Sprint 1). NULL on
+   *  non-recurring projects. */
+  recurringPeriod?: RecurringPeriod | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -347,6 +368,7 @@ export interface CreateProjectDto {
   description?: string;
   projectManagerId?: number;
   groupId?: number | null;
+  recurringPeriod?: RecurringPeriod;
 }
 
 export type UpdateProjectDto = Partial<CreateProjectDto>;

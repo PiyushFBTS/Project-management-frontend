@@ -1,6 +1,6 @@
 import { api } from './axios-instance';
 import { tokenStorage } from '@/lib/auth/token-storage';
-import { ApiResponse, Project, CreateProjectDto, UpdateProjectDto, PaginationParams, Employee, ProjectGroup, ProjectRecurring, ProjectRecurringStatus } from '@/types';
+import { ApiResponse, Project, CreateProjectDto, UpdateProjectDto, PaginationParams, Employee, ProjectGroup, ProjectRecurring, ProjectRecurringStatus, RecurringPeriod } from '@/types';
 
 export interface ProjectGroupDto {
   name: string;
@@ -174,7 +174,11 @@ export const projectsApi = {
   createRecurring: (projectId: number, dto: { billingMonth: string; expectedAmount: number; receivedAmount?: number }) =>
     api.post<ApiResponse<ProjectRecurring>>(`/projects/${projectId}/recurrings`, dto),
 
-  bulkCreateRecurrings: (projectId: number, dto: { startMonth: string; months: number; expectedAmount: number }) =>
+  // `months` is the number of *periods* to generate (Sprint 1). `period`
+  // is optional on the first call (server defaults to monthly); once a
+  // row exists it must match the project's locked cadence or the server
+  // returns 409.
+  bulkCreateRecurrings: (projectId: number, dto: { startMonth: string; months: number; expectedAmount: number; period?: RecurringPeriod }) =>
     api.post<ApiResponse<{ created: number; skipped: number }>>(`/projects/${projectId}/recurrings/bulk`, dto),
 
   updateRecurring: (projectId: number, recurringId: number, dto: { expectedAmount?: number; receivedAmount?: number; status?: ProjectRecurringStatus }) =>

@@ -9,7 +9,7 @@ import { ArrowLeft, FolderKanban, Loader2, CheckCircle2, User, Calendar, Clock, 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { projectsApi } from '@/lib/api/projects';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import { CreateProjectDto } from '@/types';
+import { CreateProjectDto, RecurringPeriod } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
@@ -97,11 +97,49 @@ function NewProjectPage() {
   // Recurring billing setup (only used when the selected type is recurring).
   const _today = new Date();
   const defaultStartMonth = `${_today.getFullYear()}-${String(_today.getMonth() + 1).padStart(2, '0')}-01`;
-  const [recurringForm, setRecurringForm] = useState({
+  const [recurringForm, setRecurringForm] = useState<{
+    period: RecurringPeriod;
+    startMonth: string;
+    months: string;
+    expectedAmount: string;
+  }>({
+    period: 'monthly',
     startMonth: defaultStartMonth,
     months: '12',
     expectedAmount: '',
   });
+
+  // Period-specific copy + start-month snapping. Keep these helpers
+  // co-located with the form so the labels stay in sync with the
+  // backend's cadence enum.
+  const PERIOD_OPTIONS: { value: RecurringPeriod; label: string }[] = [
+    { value: 'monthly', label: 'Monthly' },
+    { value: 'quarterly', label: 'Quarterly' },
+    { value: 'half_yearly', label: 'Half-Yearly' },
+    { value: 'yearly', label: 'Yearly' },
+  ];
+  const PERIOD_NOUN: Record<RecurringPeriod, string> = {
+    monthly: 'month',
+    quarterly: 'quarter',
+    half_yearly: 'half-year',
+    yearly: 'year',
+  };
+  // Snap a YYYY-MM-01 start to the nearest valid boundary for the
+  // chosen cadence so the user can't submit a 400 (quarterly →
+  // Jan/Apr/Jul/Oct, half-yearly → Jan/Jul, yearly → Jan).
+  const snapStartMonth = (start: string, period: RecurringPeriod): string => {
+    if (!start) return start;
+    const [yStr, mStr] = start.split('-');
+    const y = Number(yStr);
+    const m = Number(mStr);
+    if (!Number.isFinite(y) || !Number.isFinite(m)) return start;
+    let snapped = m;
+    if (period === 'quarterly') snapped = [1, 4, 7, 10][Math.floor((m - 1) / 3)];
+    else if (period === 'half_yearly') snapped = m <= 6 ? 1 : 7;
+    else if (period === 'yearly') snapped = 1;
+    const mm = String(snapped).padStart(2, '0');
+    return `${y}-${mm}-01`;
+  };
 
   const { data: groupsRaw } = useQuery({
     queryKey: ['project-groups'],
@@ -137,6 +175,7 @@ function NewProjectPage() {
       if (selectedTypeIsRecurring) {
         try {
           await projectsApi.bulkCreateRecurrings(newId, {
+            period: recurringForm.period,
             startMonth: recurringForm.startMonth,
             months: Number(recurringForm.months) || 12,
             expectedAmount: Number(recurringForm.expectedAmount),
@@ -189,7 +228,7 @@ function NewProjectPage() {
       if (!recurringForm.startMonth) missing.push({ key: 'recurringStartMonth', label: 'Start Month' });
       const amt = Number(recurringForm.expectedAmount);
       if (!recurringForm.expectedAmount || !Number.isFinite(amt) || amt <= 0) {
-        missing.push({ key: 'recurringAmount', label: 'Monthly Amount' });
+        missing.push({ key: 'recurringAmount', label: `${PERIOD_NOUN[recurringForm.period].replace(/^./, c => c.toUpperCase())} Amount` });
       }
     }
 
@@ -207,6 +246,9 @@ function NewProjectPage() {
     const pmId = form.projectManagerId && form.projectManagerId !== 'none' ? Number(form.projectManagerId) : null;
     const groupId = form.groupId && form.groupId !== 'none' ? Number(form.groupId) : null;
     const dto: any = { ...form, projectManagerId: pmId, groupId };
+    // Stamp the cadence on the project itself so the detail page can
+    // render it even before the first bulk-create call lands.
+    if (selectedTypeIsRecurring) dto.recurringPeriod = recurringForm.period;
     createMutation.mutate(dto);
   };
 
@@ -443,28 +485,60 @@ function NewProjectPage() {
           <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-emerald-700 dark:text-emerald-400 mb-3">
             <Repeat className="h-3 w-3" /> Recurring Setup
           </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Cadence selector. Changing it snaps the Start Month to the
+                nearest valid period boundary so the user can't submit an
+                invalid combination (e.g. quarterly + May start). */}
             <div>
               <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">
-                Start Month <span className="text-red-500">*</span>
+                Period <span className="text-red-500">*</span>
+              </label>
+              <SearchableSelect
+                value={recurringForm.period}
+                onValueChange={(v) => {
+                  if (!v) return;
+                  const next = v as RecurringPeriod;
+                  setRecurringForm((p) => ({
+                    ...p,
+                    period: next,
+                    startMonth: snapStartMonth(p.startMonth, next),
+                  }));
+                }}
+                placeholder="Period…"
+                options={PERIOD_OPTIONS}
+                className="text-sm"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">Bill every {PERIOD_NOUN[recurringForm.period]}.</p>
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">
+                Start {recurringForm.period === 'yearly' ? 'Year' : recurringForm.period === 'monthly' ? 'Month' : 'Period'} <span className="text-red-500">*</span>
               </label>
               <Input
                 type="month"
                 value={recurringForm.startMonth ? recurringForm.startMonth.slice(0, 7) : ''}
                 onChange={(e) => {
                   const v = e.target.value;
-                  setRecurringForm((p) => ({ ...p, startMonth: v ? `${v}-01` : '' }));
+                  const snapped = v ? snapStartMonth(`${v}-01`, recurringForm.period) : '';
+                  setRecurringForm((p) => ({ ...p, startMonth: snapped }));
                   clearError('recurringStartMonth');
                 }}
                 className={`h-8 text-sm ${errors.recurringStartMonth ? 'border-red-500 ring-1 ring-red-500' : ''}`}
               />
               {errors.recurringStartMonth && (
-                <p className="text-[10px] text-red-500 mt-1">Start Month is required</p>
+                <p className="text-[10px] text-red-500 mt-1">Start is required</p>
+              )}
+              {recurringForm.period !== 'monthly' && (
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  {recurringForm.period === 'quarterly' && 'Snaps to Jan / Apr / Jul / Oct.'}
+                  {recurringForm.period === 'half_yearly' && 'Snaps to Jan or Jul.'}
+                  {recurringForm.period === 'yearly' && 'Snaps to January.'}
+                </p>
               )}
             </div>
             <div>
               <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">
-                Months Count
+                Number of Periods
               </label>
               <Input
                 type="number"
@@ -475,11 +549,13 @@ function NewProjectPage() {
                 placeholder="12"
                 className="h-8 text-sm"
               />
-              <p className="text-[10px] text-muted-foreground mt-1">How many months to pre-create (1–60).</p>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {`How many ${PERIOD_NOUN[recurringForm.period]}s to pre-create (1–60).`}
+              </p>
             </div>
             <div>
               <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">
-                Monthly Amount <span className="text-red-500">*</span>
+                Amount per {PERIOD_NOUN[recurringForm.period].replace(/^./, c => c.toUpperCase())} <span className="text-red-500">*</span>
               </label>
               <Input
                 type="number"
@@ -494,12 +570,13 @@ function NewProjectPage() {
                 className={`h-8 text-sm ${errors.recurringAmount ? 'border-red-500 ring-1 ring-red-500' : ''}`}
               />
               {errors.recurringAmount && (
-                <p className="text-[10px] text-red-500 mt-1">Monthly Amount is required</p>
+                <p className="text-[10px] text-red-500 mt-1">Amount is required</p>
               )}
             </div>
           </div>
           <p className="mt-3 text-[11px] text-muted-foreground">
-            One billable row per month will be created. You can mark each month as received from the project detail page.
+            One billable row per {PERIOD_NOUN[recurringForm.period]} will be created.
+            You can mark each one as received from the project detail page.
           </p>
         </div>
       )}

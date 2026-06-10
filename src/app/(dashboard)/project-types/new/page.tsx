@@ -175,7 +175,7 @@ export default function NewProjectTypePage() {
               </span>
             </div>
             <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
-              Projects of this type use <strong>per-month recurring billing rows</strong> instead of the milestone payment model. Use this for support / maintenance contracts.
+              Projects of this type use <strong>recurring billing rows</strong> (monthly, quarterly, half-yearly, or yearly — chosen per project) instead of the milestone payment model. Use this for support / maintenance contracts.
             </p>
           </div>
         </button>

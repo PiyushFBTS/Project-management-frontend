@@ -216,7 +216,7 @@ export default function ProjectTypesPage() {
                       </span>
                     </div>
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      Per-month recurring rows instead of milestones (e.g. support / maintenance).
+                      Recurring billing rows instead of milestones (e.g. support / maintenance). Cadence — monthly, quarterly, half-yearly, or yearly — is chosen per project.
                     </p>
                   </div>
                 </button>

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -29,6 +29,37 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { RecurringPeriod } from '@/types';
+
+// Cadence helpers (Sprint 1) — mirror the server-side logic so the
+// picker offers exactly the same values and the start-month snaps to
+// the same boundaries before we hit the backend.
+const PERIOD_OPTIONS: { value: RecurringPeriod; label: string }[] = [
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'quarterly', label: 'Quarterly' },
+  { value: 'half_yearly', label: 'Half-Yearly' },
+  { value: 'yearly', label: 'Yearly' },
+];
+const PERIOD_NOUN: Record<RecurringPeriod, string> = {
+  monthly: 'month',
+  quarterly: 'quarter',
+  half_yearly: 'half-year',
+  yearly: 'year',
+};
+const MONTHS_PER_PERIOD: Record<RecurringPeriod, number> = {
+  monthly: 1, quarterly: 3, half_yearly: 6, yearly: 12,
+};
+function snapStartMonth(start: string, period: RecurringPeriod): string {
+  if (!start) return start;
+  const [yStr, mStr] = start.split('-');
+  const y = Number(yStr); const m = Number(mStr);
+  if (!Number.isFinite(y) || !Number.isFinite(m)) return start;
+  let snapped = m;
+  if (period === 'quarterly') snapped = [1, 4, 7, 10][Math.floor((m - 1) / 3)];
+  else if (period === 'half_yearly') snapped = m <= 6 ? 1 : 7;
+  else if (period === 'yearly') snapped = 1;
+  return `${y}-${String(snapped).padStart(2, '0')}-01`;
+}
 
 const statusColors: Record<string, string> = {
   active: 'bg-emerald-500/15 text-emerald-600 ring-1 ring-emerald-500/30',
@@ -203,22 +234,71 @@ export default function ProjectDetailPage() {
   const [recurringStartMonth, setRecurringStartMonth] = useState('');
   const [recurringMonths, setRecurringMonths] = useState('12');
   const [recurringAmount, setRecurringAmount] = useState('');
+  // Cadence picker for the Recurring Billing dialog. While no rows
+  // exist, this is the source of truth — the user can freely edit the
+  // period and we persist each change to the project. Once a row
+  // exists the backend locks the cadence (returns 409 on mismatch); we
+  // mirror that by disabling the picker.
+  const [recurringDialogPeriod, setRecurringDialogPeriod] = useState<RecurringPeriod>('monthly');
+
+  const lockedPeriod: RecurringPeriod | null =
+    ((project as any)?.recurringPeriod as RecurringPeriod | undefined) ?? null;
+  // Lock only when rows ALREADY exist on the project — that's the
+  // condition that triggers the backend 409. Just having a stamped
+  // `recurringPeriod` doesn't lock the cadence; the user is free to
+  // change it until the first bulk-create lands.
+  const isPeriodLocked = lockedPeriod !== null && (recurrings as any[]).length > 0;
+  // While the user is editing freely (no rows yet), the picker wins.
+  // After the lock kicks in, the project's stored cadence wins.
+  const effectivePeriod: RecurringPeriod = isPeriodLocked
+    ? (lockedPeriod as RecurringPeriod)
+    : recurringDialogPeriod;
+
+  // Seed the picker from the project's stamped cadence once it loads,
+  // so users open the dialog on the right value (and we don't reset
+  // their unsaved selection if the project query refetches).
+  const [periodHydrated, setPeriodHydrated] = useState(false);
+  useEffect(() => {
+    if (!periodHydrated && lockedPeriod) {
+      setRecurringDialogPeriod(lockedPeriod);
+      setPeriodHydrated(true);
+    }
+  }, [periodHydrated, lockedPeriod]);
+
+  // Persist a cadence edit on the project before any rows exist.
+  // Fires immediately when the picker changes so the badge / current-
+  // period detection (which read from `project.recurringPeriod`) stay
+  // in sync with the dialog.
+  const savePeriodMut = useMutation({
+    mutationFn: (next: RecurringPeriod) =>
+      projectsApi.update(Number(id), { recurringPeriod: next } as any),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project', id] });
+    },
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message ?? 'Failed to change cadence'),
+  });
 
   const bulkRecurringMut = useMutation({
     mutationFn: () => projectsApi.bulkCreateRecurrings(Number(id), {
+      period: effectivePeriod,
       startMonth: recurringStartMonth,
       months: Number(recurringMonths) || 1,
       expectedAmount: Number(recurringAmount),
     }),
     onSuccess: (res: any) => {
       qc.invalidateQueries({ queryKey: ['project-recurrings', id] });
+      // Also re-read the project so the freshly-stamped recurringPeriod
+      // shows up in the read-only badge if this was the first bulk call.
+      qc.invalidateQueries({ queryKey: ['project', id] });
       const created = res?.data?.data?.created ?? 0;
       const skipped = res?.data?.data?.skipped ?? 0;
-      toast.success(`Added ${created} month${created === 1 ? '' : 's'}${skipped ? ` (${skipped} already existed)` : ''}`);
+      const noun = PERIOD_NOUN[effectivePeriod];
+      toast.success(`Added ${created} ${noun}${created === 1 ? '' : 's'}${skipped ? ` (${skipped} already existed)` : ''}`);
       setRecurringStartMonth('');
       setRecurringAmount('');
     },
-    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed to add months'),
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? `Failed to add ${PERIOD_NOUN[effectivePeriod]}s`),
   });
 
   const updateRecurringMut = useMutation({
@@ -246,6 +326,11 @@ export default function ProjectDetailPage() {
     return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric', timeZone: 'UTC' });
   };
 
+  // Prefer the server-supplied periodLabel (cadence-aware); fall back to
+  // the monthly date format for legacy rows that pre-date Sprint 1.
+  const rowLabel = (r: any): string =>
+    r?.periodLabel?.trim() ? r.periodLabel : formatBillingMonth(r?.billingMonth);
+
   const recurringTotals = (recurrings as any[]).reduce(
     (acc: { expected: number; received: number }, r: any) => ({
       expected: acc.expected + Number(r.expectedAmount ?? 0),
@@ -254,15 +339,17 @@ export default function ProjectDetailPage() {
     { expected: 0, received: 0 },
   );
 
-  // For the inline Overview-tab card we only surface the current month —
-  // the full 12-row schedule stays accessible via the Manage dialog.
+  // For the inline Overview-tab card we surface the *current period* —
+  // i.e. the row whose [billingMonth, billingMonth + step) window
+  // contains today. That generalises the previous "match this calendar
+  // month" check to all four cadences (Sprint 1).
   const _now = new Date();
-  const currentMonthKey = `${_now.getUTCFullYear()}-${String(_now.getUTCMonth() + 1).padStart(2, '0')}`;
+  const _stepMonths = MONTHS_PER_PERIOD[effectivePeriod];
   const currentMonthRecurring = (recurrings as any[]).find((r: any) => {
     if (!r?.billingMonth) return false;
-    const d = new Date(r.billingMonth);
-    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-    return key === currentMonthKey;
+    const start = new Date(r.billingMonth);
+    const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + _stepMonths, 1));
+    return _now >= start && _now < end;
   });
 
   // ── Phases & Tickets (loaded on demand for their tabs) ──
@@ -729,6 +816,12 @@ export default function ProjectDetailPage() {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-emerald-600 dark:text-emerald-400">
               <Repeat className="h-3 w-3" /> Recurring Billing
+              {/* Cadence badge (Sprint 1) — visible on the Overview tab so
+                  the PM doesn't have to open the Manage dialog to know
+                  whether they're looking at monthly / quarterly / etc. */}
+              <span className="ml-1 inline-flex items-center rounded-full border border-emerald-300 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold tracking-wide normal-case">
+                {PERIOD_OPTIONS.find((o) => o.value === effectivePeriod)?.label ?? 'Monthly'}
+              </span>
               {(recurrings as any[]).length > 0 && (
                 <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white px-1">
                   {(recurrings as any[]).length}
@@ -766,7 +859,7 @@ export default function ProjectDetailPage() {
                 </thead>
                 <tbody>
                   <tr className="border-b last:border-0 text-sm">
-                    <td className="py-2 pr-2 font-medium">{formatBillingMonth(currentMonthRecurring.billingMonth)}</td>
+                    <td className="py-2 pr-2 font-medium">{rowLabel(currentMonthRecurring)}</td>
                     <td className="py-2 pr-2 text-right">₹{Number(currentMonthRecurring.expectedAmount ?? 0).toLocaleString('en-IN')}</td>
                     <td className="py-2 pr-2 text-right">₹{Number(currentMonthRecurring.receivedAmount ?? 0).toLocaleString('en-IN')}</td>
                     <td className="py-2 pr-2">
@@ -1083,23 +1176,61 @@ export default function ProjectDetailPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Repeat className="h-5 w-5 text-emerald-600" /> Recurring Billing
+              {/* Cadence badge — shows the locked period once any row
+                  exists; otherwise the in-progress picker selection. */}
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+                {PERIOD_OPTIONS.find((o) => o.value === effectivePeriod)?.label}
+              </span>
             </DialogTitle>
           </DialogHeader>
 
           {/* Add / extend form */}
           <div className="border-b pb-3 space-y-2">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 items-end">
+              {/* Period selector. Disabled (lock icon) once any row
+                  exists — the backend enforces a 409 if it changes. */}
               <div>
-                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Start Month</label>
+                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">
+                  Period {isPeriodLocked && <span className="text-emerald-600 dark:text-emerald-400">(locked)</span>}
+                </label>
+                <SearchableSelect
+                  value={effectivePeriod}
+                  onValueChange={(v) => {
+                    if (!v || isPeriodLocked) return;
+                    const next = v as RecurringPeriod;
+                    if (next === effectivePeriod) return;
+                    setRecurringDialogPeriod(next);
+                    setRecurringStartMonth((s) => snapStartMonth(s, next));
+                    // Persist the cadence on the project so the badge
+                    // and current-period detection update immediately —
+                    // backend's update() short-circuits to 409 if rows
+                    // already exist, which `isPeriodLocked` prevents.
+                    savePeriodMut.mutate(next);
+                  }}
+                  placeholder="Period…"
+                  options={PERIOD_OPTIONS}
+                  className="text-sm"
+                  disabled={isPeriodLocked || savePeriodMut.isPending}
+                />
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">
+                  Start {effectivePeriod === 'yearly' ? 'Year' : effectivePeriod === 'monthly' ? 'Month' : 'Period'}
+                </label>
                 <Input
                   type="month"
                   value={recurringStartMonth ? recurringStartMonth.slice(0, 7) : ''}
-                  onChange={(e) => setRecurringStartMonth(e.target.value ? `${e.target.value}-01` : '')}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setRecurringStartMonth(v ? snapStartMonth(`${v}-01`, effectivePeriod) : '');
+                  }}
                   className="h-8 text-sm"
                 />
               </div>
               <div>
-                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Months</label>
+                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">
+                  {`# of ${PERIOD_NOUN[effectivePeriod]}s`}
+                </label>
                 <Input
                   type="number"
                   min={1}
@@ -1111,7 +1242,9 @@ export default function ProjectDetailPage() {
                 />
               </div>
               <div>
-                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">Monthly Amount</label>
+                <label className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 block">
+                  Amount per {PERIOD_NOUN[effectivePeriod]}
+                </label>
                 <Input
                   type="number"
                   min={0}
@@ -1136,12 +1269,13 @@ export default function ProjectDetailPage() {
                 >
                   {bulkRecurringMut.isPending
                     ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    : <><CalendarPlus className="h-3.5 w-3.5 mr-1" /> Add Months</>}
+                    : <><CalendarPlus className="h-3.5 w-3.5 mr-1" /> {`Add ${PERIOD_NOUN[effectivePeriod].replace(/^./, c => c.toUpperCase())}s`}</>}
                 </Button>
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Already-existing months are skipped automatically — safe to extend at any time.
+              Already-existing periods are skipped automatically — safe to extend at any time.
+              {!isPeriodLocked && ' Pick the cadence before adding the first row; it locks afterwards.'}
             </p>
           </div>
 
@@ -1150,13 +1284,13 @@ export default function ProjectDetailPage() {
             {recurringsLoading ? (
               <Skeleton className="h-20 w-full" />
             ) : (recurrings as any[]).length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">No months yet. Add some above.</p>
+              <p className="text-sm text-muted-foreground text-center py-8">{`No ${PERIOD_NOUN[effectivePeriod]}s yet. Add some above.`}</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-background">
                     <tr className="border-b text-left">
-                      <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold">Month</th>
+                      <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold">Period</th>
                       <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold text-right">Expected</th>
                       <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold text-right">Received</th>
                       <th className="py-2 pr-2 text-xs text-muted-foreground font-semibold">Status</th>
@@ -1167,7 +1301,7 @@ export default function ProjectDetailPage() {
                   <tbody>
                     {(recurrings as any[]).map((r: any) => (
                       <tr key={r.id} className="border-b last:border-0 hover:bg-muted/30">
-                        <td className="py-2 pr-2 font-medium">{formatBillingMonth(r.billingMonth)}</td>
+                        <td className="py-2 pr-2 font-medium">{rowLabel(r)}</td>
                         <td className="py-2 pr-2 text-right">
                           <Input
                             type="number"
