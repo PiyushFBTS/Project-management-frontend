@@ -153,6 +153,15 @@ export default function ProfilePage() {
   if (user._type === 'client') return <ClientProfileView />;
 
   const userId = (user as any).id;
-  const userType = user._type === 'admin' ? 'admin' : 'employee';
+  // Branch on the BACKEND row type, not the promoted `_type`. Soft-admins
+  // (`userType='employee'` + `isAdmin=true`) are flipped to `_type='admin'`
+  // by the auth provider so admin-only UI gates pass, but their actual
+  // record lives in the employee row — consultantType, empCode, dept,
+  // etc. all sit there. Using `_type` here would route them through
+  // `employeesApi.getAdmin()` and render the admin stub (literal "Admin"
+  // role, empCode "ADMIN", blank department) instead of their real
+  // employee profile. So look at `user.userType` (preserved from
+  // `/auth/me`) to decide which endpoint owns the data.
+  const userType = (user as any).userType === 'admin' ? 'admin' : 'employee';
   return <EmployeeDetailView employeeId={userId} targetType={userType} isSelfProfile />;
 }
