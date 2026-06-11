@@ -26,6 +26,36 @@ export function capitalizeFirst(s: string): string {
   return first === upper ? s : upper + s.slice(1);
 }
 
+/**
+ * Derive a default Project Code from the project's Name.
+ *
+ * Rule (agreed with the client 2026-06-12):
+ *   - Trim + count letters (ignoring whitespace).
+ *   - **≤ 5 letters**: take the whole name uppercased + spaces stripped.
+ *       `fbts` → `FBTS`, `Oam` → `OAM`, `Aaaaa` → `AAAAA`.
+ *   - **> 5 letters**: take the first letter of each word uppercased.
+ *       `Aaa Bbbb` → `AB`, `Thirdwave Coffee` → `TC`,
+ *       `Bittoo Tikki Wala` → `BTW`.
+ *
+ * The new-project form auto-fills the Code as the user types the
+ * Name, until the user manually edits the Code field — at that point
+ * the auto-derive stops respecting Name changes.
+ */
+export function deriveProjectCode(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return '';
+  const letterCount = trimmed.replace(/\s+/g, '').length;
+  if (letterCount <= 5) {
+    return trimmed.replace(/\s+/g, '').toUpperCase();
+  }
+  return trimmed
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w[0])
+    .join('')
+    .toUpperCase();
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function apiErrorMessage(err: any, fallback = 'Something went wrong'): string {
   const data = err?.response?.data;

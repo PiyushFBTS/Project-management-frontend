@@ -13,7 +13,7 @@ import { CreateProjectDto, RecurringPeriod } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { RichTextEditor } from '@/components/ui/rich-text-editor';
-import { capitalizeFirst } from '@/lib/utils';
+import { capitalizeFirst, deriveProjectCode } from '@/lib/utils';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -73,6 +73,13 @@ function NewProjectPage() {
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const clearError = (key: string) =>
     setErrors((e) => (e[key] ? { ...e, [key]: false } : e));
+
+  // Tracks whether the user has manually edited the Project Code field.
+  // Once true, typing in the Name no longer auto-derives the Code — we
+  // assume the user has a specific code in mind. Clearing the Code
+  // field resets this so the auto-derive resumes on the next Name
+  // keystroke.
+  const [codeManuallyEdited, setCodeManuallyEdited] = useState(false);
 
   // (Inline "create group" dialog was removed alongside the Project
   // Group field — groups are now picked via the "+ Sub Project" entry
@@ -394,8 +401,16 @@ function NewProjectPage() {
           </div>
           <Input
             value={form.projectCode}
-            onChange={(e) => { setForm((p) => ({ ...p, projectCode: e.target.value })); clearError('projectCode'); }}
-            placeholder="Enter Project Code"
+            onChange={(e) => {
+              const next = e.target.value;
+              setForm((p) => ({ ...p, projectCode: next }));
+              clearError('projectCode');
+              // Mark as user-edited only when there's actual content.
+              // Clearing the field back to '' resumes auto-derive on
+              // the next Name keystroke.
+              setCodeManuallyEdited(next.length > 0);
+            }}
+            placeholder="Auto-fills from Project Name — override if you want"
             className={`h-8 text-sm font-mono ${errors.projectCode ? 'border-red-500 ring-1 ring-red-500' : ''}`}
           />
           {errors.projectCode && <p className="text-[10px] text-red-500 mt-1">Project Code is required</p>}
@@ -407,7 +422,21 @@ function NewProjectPage() {
           </div>
           <Input
             value={form.projectName}
-            onChange={(e) => { setForm((p) => ({ ...p, projectName: capitalizeFirst(e.target.value) })); clearError('projectName'); }}
+            onChange={(e) => {
+              const nextName = capitalizeFirst(e.target.value);
+              setForm((p) => ({
+                ...p,
+                projectName: nextName,
+                // Auto-derive the Code as long as the user hasn't
+                // manually edited it. Once they have, their value
+                // wins for the rest of the session.
+                projectCode: codeManuallyEdited
+                  ? p.projectCode
+                  : deriveProjectCode(nextName),
+              }));
+              clearError('projectName');
+              if (!codeManuallyEdited) clearError('projectCode');
+            }}
             placeholder="Enter Project Name"
             className={`h-8 text-sm ${errors.projectName ? 'border-red-500 ring-1 ring-red-500' : ''}`}
           />
