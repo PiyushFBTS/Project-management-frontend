@@ -87,7 +87,7 @@ function getNotificationRoute(notif: Notification, isEmployee: boolean): string 
       // `/full-tickets/[id]` works for both admins and employees — it
       // branches its API client by user type internally.
       if (meta?.taskId) return `/full-tickets/${meta.taskId}`;
-      return isEmployee ? '/my-tasks' : (meta?.projectId ? `/projects/${meta.projectId}/planning` : '/full-tickets');
+      return isEmployee ? '/tickets?view=my' : (meta?.projectId ? `/projects/${meta.projectId}/planning` : '/tickets?view=log');
     default:
       return null;
   }

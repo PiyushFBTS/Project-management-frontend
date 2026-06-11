@@ -926,14 +926,14 @@ function ClientDashboard() {
           {
             label: 'Ticket Log',
             description: 'Browse every project ticket',
-            href: '/full-tickets',
+            href: '/tickets?view=log',
             icon: Ticket,
             gradient: 'from-blue-500 to-indigo-700',
           },
           {
             label: 'My Tickets',
             description: 'Tickets assigned to you',
-            href: '/my-tasks',
+            href: '/tickets?view=my',
             icon: ListTodo,
             gradient: 'from-indigo-500 to-blue-700',
           },
@@ -968,7 +968,7 @@ function ClientDashboard() {
                 <Ticket className="h-4 w-4 text-blue-600" />
                 Recent Project Tickets
               </CardTitle>
-              <Link href="/full-tickets">
+              <Link href="/tickets?view=log">
                 <Button variant="ghost" size="sm" className="gap-1 text-xs h-7 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10">
                   View all <ArrowRight className="h-3 w-3" />
                 </Button>
@@ -1015,7 +1015,7 @@ function ClientDashboard() {
                 <ListTodo className="h-4 w-4 text-indigo-600" />
                 My Tickets
               </CardTitle>
-              <Link href="/my-tasks">
+              <Link href="/tickets?view=my">
                 <Button variant="ghost" size="sm" className="gap-1 text-xs h-7 text-blue-600 hover:text-blue-700 hover:bg-blue-500/10">
                   View all <ArrowRight className="h-3 w-3" />
                 </Button>

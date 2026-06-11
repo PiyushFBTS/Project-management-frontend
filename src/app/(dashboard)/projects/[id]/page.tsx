@@ -159,6 +159,12 @@ export default function ProjectDetailPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['project-detail', id] });
       qc.invalidateQueries({ queryKey: ['projects'] });
+      // When PM changes the backend cascades pending task-sheet
+      // approvals onto the new PM. Invalidate the current user's
+      // approvals inbox so if they're the new PM (or HR) the count
+      // updates immediately. Other users' tabs refetch via
+      // refetchOnWindowFocus on the approvals page itself.
+      qc.invalidateQueries({ queryKey: ['pm-task-approvals'] });
       toast.success('Project updated');
       setEditMode(false);
     },
@@ -1112,7 +1118,7 @@ export default function ProjectDetailPage() {
                     <Plus className="mr-1.5 h-3.5 w-3.5" /> New Ticket
                   </Button>
                 </Link>
-                <Link href={`/full-tickets?projectId=${id}`}>
+                <Link href={`/tickets?view=log&projectId=${id}`}>
                   <Button size="sm" variant="outline">
                     <ExternalLink className="mr-1.5 h-3.5 w-3.5" /> Open Ticket Log
                   </Button>

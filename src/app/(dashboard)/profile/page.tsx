@@ -110,10 +110,10 @@ function ClientProfileView() {
             </Link>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
               <Button asChild variant="outline" size="sm" className="justify-start">
-                <Link href="/full-tickets">View Ticket Log</Link>
+                <Link href="/tickets?view=log">View Ticket Log</Link>
               </Button>
               <Button asChild variant="outline" size="sm" className="justify-start">
-                <Link href="/my-tasks">My Ticket</Link>
+                <Link href="/tickets?view=my">My Tickets</Link>
               </Button>
             </div>
           </CardContent>

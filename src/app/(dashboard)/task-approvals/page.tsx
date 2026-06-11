@@ -53,6 +53,16 @@ export default function TaskApprovalsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['pm-task-approvals', filter],
     queryFn: () => pmTaskApprovalsApi.list(filter).then((r) => r.data.data),
+    // Auto-refetch when the user tabs back to this page. Important
+    // for the PM-reassign cascade: when an admin reassigns a project
+    // to a new PM, the new PM's tab won't get pushed an update — but
+    // the moment they switch to the approvals tab, this triggers a
+    // refetch and the newly-cascaded rows appear.
+    refetchOnWindowFocus: true,
+    // Treat anything older than 10s as stale so brief tab switches
+    // also reload — the default `staleTime: 0` would refetch on every
+    // remount which is fine here but excessive on rapid filter toggles.
+    staleTime: 10_000,
   });
 
   // Reset selection whenever the visible list changes (filter switch, refetch).

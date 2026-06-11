@@ -336,7 +336,7 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
       toast.success('Ticket deleted');
       qc.invalidateQueries({ queryKey: ['project-tickets-all'] });
       qc.invalidateQueries({ queryKey: ['project-tasks'] });
-      router.push('/full-tickets');
+      router.push('/tickets?view=log');
     },
     onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Delete failed'),
   });
@@ -432,7 +432,7 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
         <div className="text-center">
           <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
           <p className="text-lg font-semibold">Ticket not found</p>
-          <Button variant="ghost" className="mt-3" onClick={() => router.push('/full-tickets')}>Back to Ticket Log</Button>
+          <Button variant="ghost" className="mt-3" onClick={() => router.push('/tickets?view=log')}>Back to Ticket Log</Button>
         </div>
       </div>
     );
@@ -449,7 +449,7 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
         <Breadcrumb>
           <BreadcrumbList>
             <BreadcrumbItem>
-              <BreadcrumbLink asChild><Link href="/full-tickets">Ticket Log</Link></BreadcrumbLink>
+              <BreadcrumbLink asChild><Link href="/tickets?view=log">Ticket Log</Link></BreadcrumbLink>
             </BreadcrumbItem>
             <BreadcrumbSeparator><ChevronRight className="h-3.5 w-3.5" /></BreadcrumbSeparator>
             <BreadcrumbItem>

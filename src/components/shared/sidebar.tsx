@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, FolderKanban, Tags, Users, Receipt,
   ClipboardList, BarChart3, ChevronDown, X,
-  ChevronLeft, ChevronRight, CalendarDays, Building2, LogOut, Settings, ListTodo, Ticket, Mail,
+  ChevronLeft, ChevronRight, CalendarDays, Building2, LogOut, Settings, Ticket, Mail,
   Megaphone, Wallet, Layers, Laptop2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -73,17 +73,20 @@ const navItems: NavItem[] = [
     activeBg: 'bg-blue-500/20', hoverBg: 'hover:bg-blue-500/10',
     borderColor: 'border-l-blue-400', dotColor: 'bg-blue-400',
   },
+    {
+    label: 'Daily Log Sheets', href: '/task-sheets', icon: ClipboardList,
+    iconColor: 'text-violet-400', iconBg: 'bg-violet-500/20',
+    activeBg: 'bg-violet-500/20', hoverBg: 'hover:bg-violet-500/10',
+    borderColor: 'border-l-violet-400', dotColor: 'bg-violet-400',
+  },
   {
-    label: 'My Ticket', href: '/my-tasks', icon: ListTodo,
+    // Single "Tickets" nav entry — the page itself has My Tickets /
+    // Tickets Log tabs. /my-tasks and /full-tickets still resolve via
+    // redirect stubs for old bookmarks.
+    label: 'Tickets', href: '/tickets', icon: Ticket,
     iconColor: 'text-teal-400', iconBg: 'bg-teal-500/20',
     activeBg: 'bg-teal-500/20', hoverBg: 'hover:bg-teal-500/10',
     borderColor: 'border-l-teal-400', dotColor: 'bg-teal-400',
-  },
-  {
-    label: 'Ticket Log', href: '/full-tickets', icon: Ticket,
-    iconColor: 'text-purple-400', iconBg: 'bg-purple-500/20',
-    activeBg: 'bg-purple-500/20', hoverBg: 'hover:bg-purple-500/10',
-    borderColor: 'border-l-purple-400', dotColor: 'bg-purple-400',
   },
   {
     label: 'Employees', href: '/employees', icon: Users,
@@ -102,12 +105,6 @@ const navItems: NavItem[] = [
       { label: 'Leave Balance', href: '/leave-balance', dotColor: 'bg-blue-400' },
       { label: 'Holiday Calendar', href: '/holidays', dotColor: 'bg-amber-400' },
     ],
-  },
-  {
-    label: 'Task Sheets', href: '/task-sheets', icon: ClipboardList,
-    iconColor: 'text-violet-400', iconBg: 'bg-violet-500/20',
-    activeBg: 'bg-violet-500/20', hoverBg: 'hover:bg-violet-500/10',
-    borderColor: 'border-l-violet-400', dotColor: 'bg-violet-400',
   },
   {
     // Approval inbox for project managers, HR, and admins. Plain employees
