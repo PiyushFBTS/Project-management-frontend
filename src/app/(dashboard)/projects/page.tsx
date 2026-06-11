@@ -118,6 +118,11 @@ export default function ProjectsPage() {
 
   // ── Grouping: split projects into their "primary name" umbrellas + the
   // standalone (ungrouped) ones. Group info rides on each project (p.group).
+  //
+  // Sort order:
+  //   1. Groups listed first, alphabetical by group name.
+  //   2. Within each group, projects alphabetical by projectName.
+  //   3. Ungrouped projects last, also alphabetical by projectName.
   const { groups, ungrouped } = useMemo(() => {
     const map = new Map<number, { id: number; name: string; projects: any[] }>();
     const loose: any[] = [];
@@ -131,9 +136,14 @@ export default function ProjectsPage() {
         loose.push(p);
       }
     }
+    const byName = (a: any, b: any) =>
+      String(a.projectName ?? '').localeCompare(String(b.projectName ?? ''), undefined, { sensitivity: 'base' });
+    // Sort projects inside each group.
+    for (const entry of map.values()) entry.projects.sort(byName);
     return {
-      groups: [...map.values()].sort((a, b) => a.name.localeCompare(b.name)),
-      ungrouped: loose,
+      groups: [...map.values()].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })),
+      ungrouped: loose.sort(byName),
     };
   }, [data]);
 
