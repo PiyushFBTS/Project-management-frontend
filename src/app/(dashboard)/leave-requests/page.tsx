@@ -9,7 +9,10 @@ import { CalendarDays, Eye, CheckCircle2, XCircle, Ban, Plus, X, ChevronLeft, Ch
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/auth-provider';
 import { leaveRequestsApi } from '@/lib/api/leave-requests';
+import { wfhRequestsApi } from '@/lib/api/wfh-requests';
 import { LeaveRequest, LeaveRequestStatus } from '@/types';
+import { ApplyWfhDialog } from './_components/apply-wfh-dialog';
+import { WfhTab } from './_components/wfh-tab';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -66,8 +69,13 @@ function StatusBadge({ lr }: { lr: { status: LeaveRequestStatus } }) {
 // Plain (non-HR) employees see a 2-tab layout: Leave (their own) +
 // Calendar (their own data only). HR + admin get a 3-tab layout: My
 // Leaves (own) + Team Leaves (everyone) + Calendar (everyone).
-type Tab = 'my-leaves' | 'team-leaves' | 'calendar';
-type AdminTab = 'my-leaves' | 'team-leaves' | 'calendar';
+// `my-wfh` and `team-wfh` were added 2026-06-11 (Sprint 2 of the WFH
+// feature). Same surface as the Leave tabs — same filter strip,
+// same status pills — but powered by `wfhRequestsApi` via the
+// `<WfhTab />` component. Calendar stays a single tab that overlays
+// both event sources.
+type Tab = 'my-leaves' | 'team-leaves' | 'my-wfh' | 'team-wfh' | 'calendar';
+type AdminTab = 'my-leaves' | 'team-leaves' | 'my-wfh' | 'team-wfh' | 'calendar';
 
 export default function LeaveRequestsPage() {
   return (
@@ -117,6 +125,12 @@ function LeaveRequestsContent() {
   const [teamEmployeeId, setTeamEmployeeId] = useState<string>('');
   const [actionRemarks, setActionRemarks] = useState('');
   const [acting, setActing] = useState(false);
+
+  // ── Apply for WFH dialog (Sprint 2) ──
+  // Same self / on-behalf shape as the Leave dialog. Hosted as a
+  // separate component so the inline Leave form stays untouched.
+  const [applyWfhOpen, setApplyWfhOpen] = useState(false);
+  const [applyWfhMode, setApplyWfhMode] = useState<'self' | 'on-behalf'>('self');
 
   // ── Apply for Leave dialog ──
   const [applyOpen, setApplyOpen] = useState(false);
@@ -279,6 +293,40 @@ function LeaveRequestsContent() {
     enabled: canSeeTeam && tab === 'team-leaves' && isEmployee,
   });
 
+  // ── WFH calendar overlay (Sprint 2) ──
+  // Fetch the same WFH slice the WFH list would render — but only
+  // when the Calendar tab is active — so the calendar grid can
+  // paint WFH days as a distinct blue marker next to the Leave
+  // colors. Admins reuse the company-wide list; employees combine
+  // my-wfh + team-wfh.
+  const onCalendar =
+    (isEmployee && tab === 'calendar') || (isAdmin && adminTab === 'calendar');
+
+  const { data: wfhMine } = useQuery({
+    queryKey: ['calendar-my-wfh', dateFrom, dateTo],
+    queryFn: () =>
+      wfhRequestsApi
+        .getMyRequests({ dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, limit: 100 })
+        .then((r) => r.data.data),
+    enabled: onCalendar && isEmployee,
+  });
+  const { data: wfhTeam } = useQuery({
+    queryKey: ['calendar-team-wfh', dateFrom, dateTo],
+    queryFn: () =>
+      wfhRequestsApi
+        .getTeamRequests({ dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, limit: 100 })
+        .then((r) => r.data.data),
+    enabled: onCalendar && isEmployee && canSeeTeam,
+  });
+  const { data: wfhAll } = useQuery({
+    queryKey: ['calendar-all-wfh', dateFrom, dateTo],
+    queryFn: () =>
+      wfhRequestsApi
+        .getAll({ dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, limit: 100 })
+        .then((r) => r.data.data),
+    enabled: onCalendar && isAdmin,
+  });
+
   // Detail
   const { data: detail, isLoading: detailLoading } = useQuery({
     queryKey: ['leave-request-detail', selected?.id, isEmployee],
@@ -434,59 +482,72 @@ function LeaveRequestsContent() {
             </div>
           </div>
           {(isEmployee || isAdmin) && (() => {
-            // Team Leaves tab → file leave on someone's behalf. Anywhere
-            // else (My Leaves, Calendar) → file own leave.
+            // Team Leaves / Team WFH tabs → file on someone's behalf.
+            // Anywhere else → file own request.
             const onTeamTab =
-              (isEmployee && tab === 'team-leaves') ||
-              (isAdmin && adminTab === 'team-leaves');
+              (isEmployee && (tab === 'team-leaves' || tab === 'team-wfh')) ||
+              (isAdmin && (adminTab === 'team-leaves' || adminTab === 'team-wfh'));
             return (
-              <Button
-                onClick={() => {
-                  setApplyMode(onTeamTab ? 'on-behalf' : 'self');
-                  setApplyOpen(true);
-                }}
-                className="w-full sm:w-auto shrink-0 bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg"
-                size="sm"
-              >
-                <Plus className="mr-1.5 h-4 w-4" />
-                {onTeamTab ? 'Apply on Behalf' : 'Apply for Leave'}
-              </Button>
+              <div className="flex w-full sm:w-auto flex-col sm:flex-row gap-2">
+                <Button
+                  onClick={() => {
+                    setApplyMode(onTeamTab ? 'on-behalf' : 'self');
+                    setApplyOpen(true);
+                  }}
+                  className="w-full sm:w-auto shrink-0 bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg"
+                  size="sm"
+                >
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  {onTeamTab ? 'Apply Leave on Behalf' : 'Apply for Leave'}
+                </Button>
+                <Button
+                  onClick={() => {
+                    setApplyWfhMode(onTeamTab ? 'on-behalf' : 'self');
+                    setApplyWfhOpen(true);
+                  }}
+                  className="w-full sm:w-auto shrink-0 bg-white/15 backdrop-blur-sm text-white hover:bg-white/25 border border-white/30 shadow-lg"
+                  size="sm"
+                >
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  {onTeamTab ? 'Apply WFH on Behalf' : 'Apply for WFH'}
+                </Button>
+              </div>
             );
           })()}
         </div>
       </div>
 
       {/* Employee tabs.
-          Plain employees with no reports → 2 tabs: My Leave + Calendar.
-          HR + Reporting Managers         → 3 tabs: My / Team / Calendar. */}
+          Plain employees → 3 tabs: My Leave + My WFH + Calendar.
+          HR + Reporting Managers → 5 tabs adding Team Leaves + Team WFH. */}
       {isEmployee && (
         <div className="flex rounded-lg border border-border bg-muted/50 p-1 w-fit max-w-full overflow-x-auto scrollbar-hide">
           {((canSeeTeam
-            ? ['my-leaves', 'team-leaves', 'calendar']
-            : ['my-leaves', 'calendar']) as Tab[]).map((t) => (
+            ? ['my-leaves', 'team-leaves', 'my-wfh', 'team-wfh', 'calendar']
+            : ['my-leaves', 'my-wfh', 'calendar']) as Tab[]).map((t) => (
             <button
               key={t}
-              onClick={() => { setTab(t); if (t !== 'team-leaves') setTeamEmployeeId(''); }}
+              onClick={() => { setTab(t); if (t !== 'team-leaves' && t !== 'team-wfh') setTeamEmployeeId(''); }}
               className={`shrink-0 whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
                 tab === t
                   ? 'bg-white dark:bg-card shadow-sm text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {t === 'my-leaves'
-                ? 'My Leave'
-                : t === 'team-leaves'
-                  ? 'Team Leaves'
-                  : 'Calendar'}
+              {t === 'my-leaves' ? 'My Leave'
+                : t === 'team-leaves' ? 'Team Leaves'
+                : t === 'my-wfh' ? 'My WFH'
+                : t === 'team-wfh' ? 'Team WFH'
+                : 'Calendar'}
             </button>
           ))}
         </div>
       )}
 
-      {/* Admin tabs — My Leaves / Team Leaves / Calendar */}
+      {/* Admin tabs — My Leave / Team Leaves / My WFH / Team WFH / Calendar */}
       {isAdmin && (
         <div className="flex rounded-lg border border-border bg-muted/50 p-1 w-fit max-w-full overflow-x-auto scrollbar-hide">
-          {(['my-leaves', 'team-leaves', 'calendar'] as AdminTab[]).map((t) => (
+          {(['my-leaves', 'team-leaves', 'my-wfh', 'team-wfh', 'calendar'] as AdminTab[]).map((t) => (
             <button
               key={t}
               onClick={() => setAdminTab(t)}
@@ -496,7 +557,11 @@ function LeaveRequestsContent() {
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              {t === 'my-leaves' ? 'My Leave' : t === 'team-leaves' ? 'Team Leaves' : 'Calendar'}
+              {t === 'my-leaves' ? 'My Leave'
+                : t === 'team-leaves' ? 'Team Leaves'
+                : t === 'my-wfh' ? 'My WFH'
+                : t === 'team-wfh' ? 'Team WFH'
+                : 'Calendar'}
             </button>
           ))}
         </div>
@@ -554,9 +619,31 @@ function LeaveRequestsContent() {
         )}
       </div>
 
+      {/* WFH tabs — render the dedicated WFH table. The Leave table
+          below gates itself off so the two never paint together. */}
+      {((isEmployee && (tab === 'my-wfh' || tab === 'team-wfh')) ||
+        (isAdmin && (adminTab === 'my-wfh' || adminTab === 'team-wfh'))) && (
+        <WfhTab
+          scope={
+            (isEmployee && tab === 'my-wfh') || (isAdmin && adminTab === 'my-wfh')
+              ? 'my'
+              : 'team'
+          }
+          statusFilter={statusFilter as any}
+          teamEmployeeId={teamEmployeeId}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+        />
+      )}
+
       {/* Calendar View */}
       {((isEmployee && tab === 'calendar') || (isAdmin && adminTab === 'calendar')) && (() => {
         const allLeaves: LeaveRequest[] = isAdmin ? (data ?? []) : [...(myLeaves ?? []), ...(teamData ?? [])];
+        // Merge WFH events so the grid shows both. WFH gets a single
+        // shared color (we don't bucket by "WFH type" since there is
+        // none). Status filter mirrors Leave.
+        const allWfh = isAdmin ? (wfhAll ?? []) : [...(wfhMine ?? []), ...(wfhTeam ?? [])];
+        const activeWfh = allWfh.filter((w) => ['hr_approved', 'manager_approved', 'pending'].includes(w.status));
         const monthStart = startOfMonth(calMonth);
         const monthEnd = endOfMonth(calMonth);
         const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
@@ -570,7 +657,22 @@ function LeaveRequestsContent() {
         // the admin "Apply for Leave" flow); the corresponding side
         // relation will be populated. Resolving both means admin-
         // submitted leaves don't render as "Employee #null" rows.
-        const empMap: Record<string, { name: string; code: string; leaves: LeaveRequest[] }> = {};
+        const empMap: Record<string, { name: string; code: string; leaves: LeaveRequest[]; wfh: typeof activeWfh }> = {};
+        // Same grouping for WFH so we can paint a per-employee row
+        // even when they have only WFH (no leave) this month.
+        const groupKeyForWfh = (w: typeof activeWfh[number]) =>
+          w.adminId != null ? `adm_${w.adminId}` : `emp_${w.employeeId}`;
+        activeWfh.forEach((w) => {
+          const key = groupKeyForWfh(w);
+          const adminRel = (w as { admin?: { name?: string } }).admin;
+          const empRel = (w as { employee?: { name?: string; empCode?: string } }).employee;
+          const name = w.adminId != null
+            ? (adminRel?.name ?? `Admin #${w.adminId}`)
+            : (empRel?.name ?? `Employee #${w.employeeId}`);
+          const code = w.adminId != null ? 'Admin' : (empRel?.empCode ?? '');
+          if (!empMap[key]) empMap[key] = { name, code, leaves: [], wfh: [] };
+          empMap[key].wfh.push(w);
+        });
         approvedLeaves.forEach((l) => {
           const isAdminLeave = l.adminId != null;
           const groupKey = isAdminLeave ? `adm_${l.adminId}` : `emp_${l.employeeId}`;
@@ -580,7 +682,7 @@ function LeaveRequestsContent() {
             ? (adminRel?.name ?? `Admin #${l.adminId}`)
             : (empRel?.name ?? `Employee #${l.employeeId}`);
           const code = isAdminLeave ? 'Admin' : (empRel?.empCode ?? '');
-          if (!empMap[groupKey]) empMap[groupKey] = { name, code, leaves: [] };
+          if (!empMap[groupKey]) empMap[groupKey] = { name, code, leaves: [], wfh: [] };
           empMap[groupKey].leaves.push(l);
         });
         const employees = Object.entries(empMap);
@@ -624,6 +726,10 @@ function LeaveRequestsContent() {
                 </div>
               ))}
               <div className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded-full bg-cyan-500" />
+                <span className="text-[10px] font-medium text-muted-foreground">WFH (applied)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
                 <span className="h-3 w-3 rounded-full bg-blue-200" />
                 <span className="text-[10px] font-medium text-muted-foreground">Saturday (WFH)</span>
               </div>
@@ -661,26 +767,54 @@ function LeaveRequestsContent() {
                       {days.map((d, dayIdx) => {
                         const isSun = getDay(d) === 0;
                         const isSat = getDay(d) === 6;
-                        const leave = emp.leaves.find((l) => {
+                        const isWeekend = isSat || isSun;
+
+                        // Weekends are never painted as leave / WFH —
+                        // a Fri-to-Mon leave should highlight only
+                        // Friday and Monday, with Sat/Sun rendering
+                        // their normal weekend background.
+                        const leave = isWeekend ? null : emp.leaves.find((l) => {
                           const from = new Date(l.dateFrom + 'T00:00:00');
                           const to = new Date(l.dateTo + 'T00:00:00');
+                          return isWithinInterval(d, { start: from, end: to });
+                        });
+                        const wfh = isWeekend || leave ? null : emp.wfh.find((w) => {
+                          const from = new Date(w.dateFrom + 'T00:00:00');
+                          const to = new Date(w.dateTo + 'T00:00:00');
                           return isWithinInterval(d, { start: from, end: to });
                         });
                         const reasonName = leave?.leaveReason?.reasonName ?? 'Other';
                         const color = leave ? leaveColors[reasonName] : '';
 
-                        // Check prev/next day for same leave (for connected bar)
+                        // Connecting bar — only joins adjacent weekday
+                        // cells so the line never crosses Sat/Sun. Same
+                        // for WFH (Sprint 3 follow-up): a Mon-Tue WFH
+                        // gets a single connecting bar between them.
                         const prevDay = dayIdx > 0 ? days[dayIdx - 1] : null;
                         const nextDay = dayIdx < days.length - 1 ? days[dayIdx + 1] : null;
-                        const prevHasLeave = prevDay && leave && emp.leaves.some((l) => {
+                        const prevIsWeekday = prevDay && getDay(prevDay) !== 0 && getDay(prevDay) !== 6;
+                        const nextIsWeekday = nextDay && getDay(nextDay) !== 0 && getDay(nextDay) !== 6;
+
+                        const prevHasLeave = prevIsWeekday && leave && emp.leaves.some((l) => {
                           const from = new Date(l.dateFrom + 'T00:00:00');
                           const to = new Date(l.dateTo + 'T00:00:00');
-                          return isWithinInterval(prevDay, { start: from, end: to }) && (l.leaveReason?.reasonName ?? 'Other') === reasonName;
+                          return isWithinInterval(prevDay!, { start: from, end: to }) && (l.leaveReason?.reasonName ?? 'Other') === reasonName;
                         });
-                        const nextHasLeave = nextDay && leave && emp.leaves.some((l) => {
+                        const nextHasLeave = nextIsWeekday && leave && emp.leaves.some((l) => {
                           const from = new Date(l.dateFrom + 'T00:00:00');
                           const to = new Date(l.dateTo + 'T00:00:00');
-                          return isWithinInterval(nextDay, { start: from, end: to }) && (l.leaveReason?.reasonName ?? 'Other') === reasonName;
+                          return isWithinInterval(nextDay!, { start: from, end: to }) && (l.leaveReason?.reasonName ?? 'Other') === reasonName;
+                        });
+
+                        const prevHasWfh = prevIsWeekday && wfh && emp.wfh.some((w) => {
+                          const from = new Date(w.dateFrom + 'T00:00:00');
+                          const to = new Date(w.dateTo + 'T00:00:00');
+                          return isWithinInterval(prevDay!, { start: from, end: to });
+                        });
+                        const nextHasWfh = nextIsWeekday && wfh && emp.wfh.some((w) => {
+                          const from = new Date(w.dateFrom + 'T00:00:00');
+                          const to = new Date(w.dateTo + 'T00:00:00');
+                          return isWithinInterval(nextDay!, { start: from, end: to });
                         });
 
                         const lightColor = leave ? (leaveColorsLight[reasonName] ?? 'bg-gray-200') : '';
@@ -689,11 +823,24 @@ function LeaveRequestsContent() {
                           <td key={d.toISOString()} className="px-0 py-1 text-center relative">
                             {leave ? (
                               <div className="relative flex items-center justify-center h-6">
-                                {/* Light connecting line behind */}
                                 {prevHasLeave && <div className={`absolute left-0 top-1/2 -translate-y-1/2 h-3 w-1/2 ${lightColor}`} />}
                                 {nextHasLeave && <div className={`absolute right-0 top-1/2 -translate-y-1/2 h-3 w-1/2 ${lightColor}`} />}
-                                {/* Full color circle on top */}
                                 <div className={`relative z-10 h-6 w-6 rounded-full ${color} flex items-center justify-center text-white text-[10px] font-bold cursor-default`} title={`${reasonName} (${leave.status})`}>
+                                  {format(d, 'd')}
+                                </div>
+                              </div>
+                            ) : wfh ? (
+                              <div className="relative flex items-center justify-center h-6">
+                                {/* Same connecting-bar treatment Leave
+                                    has — a light cyan strip behind the
+                                    circle on either side when the
+                                    adjacent weekday is also WFH. */}
+                                {prevHasWfh && <div className="absolute left-0 top-1/2 -translate-y-1/2 h-3 w-1/2 bg-cyan-200" />}
+                                {nextHasWfh && <div className="absolute right-0 top-1/2 -translate-y-1/2 h-3 w-1/2 bg-cyan-200" />}
+                                <div
+                                  className="relative z-10 h-6 w-6 rounded-full bg-cyan-500 flex items-center justify-center text-white text-[10px] font-bold cursor-default"
+                                  title={`WFH (${wfh.status})`}
+                                >
                                   {format(d, 'd')}
                                 </div>
                               </div>
@@ -718,8 +865,9 @@ function LeaveRequestsContent() {
         );
       })()}
 
-      {/* Table */}
-      {((isEmployee && tab !== 'calendar') || (isAdmin && adminTab !== 'calendar')) && <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
+      {/* Table — Leave list. Suppressed on WFH and Calendar tabs. */}
+      {((isEmployee && tab !== 'calendar' && tab !== 'my-wfh' && tab !== 'team-wfh') ||
+        (isAdmin && adminTab !== 'calendar' && adminTab !== 'my-wfh' && adminTab !== 'team-wfh')) && <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
         <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-orange-500 via-rose-500 to-violet-500" />
         <Table>
           <TableHeader>
@@ -860,6 +1008,18 @@ function LeaveRequestsContent() {
           </TableBody>
         </Table>
       </div>}
+
+      {/* Apply for WFH Dialog — extracted component, same audience as
+          the Leave dialog. Sits before Leave so it's mounted alongside
+          rather than replacing it. */}
+      {(isEmployee || isAdmin) && (
+        <ApplyWfhDialog
+          open={applyWfhOpen}
+          onOpenChange={setApplyWfhOpen}
+          mode={applyWfhMode}
+          isAdmin={isAdmin}
+        />
+      )}
 
       {/* Apply for Leave Dialog — open for both employee and admin */}
       {(isEmployee || isAdmin) && (

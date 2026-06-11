@@ -1,0 +1,403 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+'use client';
+
+import { useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { format } from 'date-fns';
+import { toast } from 'sonner';
+import {
+  ArrowLeft, CalendarDays, CheckCircle2, XCircle, Ban, User, Clock, FileText, Users, MessageSquare, Home,
+} from 'lucide-react';
+import { wfhRequestsApi } from '@/lib/api/wfh-requests';
+import { useAuth } from '@/providers/auth-provider';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardContent } from '@/components/ui/card';
+import { WfhActionDialog } from '../../_components/wfh-action-dialog';
+
+// Mirrors the Leave detail page's status collapse + StatusBadge.
+type SimpleStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+const SIMPLE_STATUS_CONFIG: Record<SimpleStatus, { label: string; bg: string }> = {
+  pending:   { label: 'Pending',   bg: 'bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400' },
+  approved:  { label: 'Approved',  bg: 'bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400' },
+  rejected:  { label: 'Rejected',  bg: 'bg-red-100 dark:bg-red-900/30 dark:text-red-400' },
+  cancelled: { label: 'Cancelled', bg: 'bg-slate-100 dark:bg-slate-900/30 dark:text-slate-400' },
+};
+
+function toSimpleStatus(raw: string): SimpleStatus {
+  if (raw === 'hr_approved') return 'approved';
+  if (raw === 'manager_rejected' || raw === 'hr_rejected') return 'rejected';
+  if (raw === 'cancelled') return 'cancelled';
+  return 'pending';
+}
+
+function StatusBadge({ w }: { w: { status: string } }) {
+  const c = SIMPLE_STATUS_CONFIG[toSimpleStatus(w.status)];
+  return <Badge className={`${c.bg} border-0 text-xs font-semibold`}>{c.label}</Badge>;
+}
+
+function fmtDate(d: string | null | undefined) {
+  if (!d) return '—';
+  try { return format(new Date(d + (d.includes('T') ? '' : 'T00:00:00')), 'dd MMM yyyy'); } catch { return d; }
+}
+
+function fmtDateTime(d: string | null | undefined) {
+  if (!d) return '—';
+  try { return format(new Date(d), 'dd MMM yyyy, hh:mm a'); } catch { return d; }
+}
+
+export default function WfhRequestDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const isAdmin = user?._type === 'admin';
+  const isEmployee = user?._type === 'employee';
+  // Action confirmation dialog state. Both approve and reject share
+  // the same dialog component — `action` tells it which shape to
+  // render (optional vs required remarks).
+  const [actionDialog, setActionDialog] = useState<{ open: boolean; action: 'approve' | 'reject' }>({
+    open: false,
+    action: 'approve',
+  });
+
+  const wfhId = Number(id);
+
+  const { data: detail, isLoading } = useQuery({
+    queryKey: ['wfh-request-detail', wfhId, isEmployee],
+    queryFn: () =>
+      (isEmployee
+        ? wfhRequestsApi.getOneForEmployee(wfhId)
+        : wfhRequestsApi.getOne(wfhId)
+      ).then((r) => r.data.data),
+    enabled: !!id,
+  });
+
+  // Same access logic as Leave detail. Self-approval guards mirror
+  // the backend: a person can't approve a WFH they themselves filed.
+  const canAct = (() => {
+    if (!detail || !user) return { canApprove: false, canReject: false, canCancel: false };
+    const userId = (user as { id: number }).id;
+    const isOwnEmployee = isEmployee && detail.employeeId === userId;
+    const isOwnAdmin = isAdmin && detail.adminId != null && detail.adminId === userId;
+    const isOwn = isOwnEmployee || isOwnAdmin;
+    const canCancel = isOwn && !['cancelled', 'hr_approved', 'hr_rejected', 'manager_rejected'].includes(detail.status);
+
+    let canApprove = false;
+    let canReject = false;
+    if (isAdmin) {
+      if (!isOwnAdmin) {
+        canApprove = ['pending', 'manager_approved'].includes(detail.status);
+        canReject = ['pending', 'manager_approved', 'hr_approved'].includes(detail.status);
+      }
+    } else if (isEmployee) {
+      const isManager = (detail.employee as any)?.reportsToId === userId;
+      const isHr = !!(user as { isHr?: boolean }).isHr;
+      if (isManager && detail.status === 'pending' && !isOwnEmployee) {
+        canApprove = true; canReject = true;
+      }
+      if (isHr && ['pending', 'manager_approved'].includes(detail.status) && !isOwnEmployee) {
+        canApprove = true; canReject = true;
+      }
+    }
+    return { canApprove, canReject, canCancel };
+  })();
+
+  const invalidateAll = () => {
+    qc.invalidateQueries({ queryKey: ['wfh-request-detail', wfhId] });
+    qc.invalidateQueries({ queryKey: ['wfh-requests'] });
+    qc.invalidateQueries({ queryKey: ['my-wfh-requests'] });
+    qc.invalidateQueries({ queryKey: ['team-wfh-requests'] });
+    qc.invalidateQueries({ queryKey: ['wfh-on-today'] });
+  };
+
+  // Approve / Reject now live inside `<WfhActionDialog />` — it owns
+  // its own mutation and toast handling. We only keep the cancel
+  // mutation here since cancel doesn't need a remarks prompt.
+
+  const cancelMut = useMutation({
+    mutationFn: () => wfhRequestsApi.cancel(wfhId),
+    onSuccess: () => { toast.success('Cancelled'); invalidateAll(); },
+    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4 max-w-3xl mx-auto">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    );
+  }
+
+  if (!detail) {
+    return (
+      <div className="text-center py-20">
+        <p className="text-muted-foreground">WFH request not found</p>
+        <Button variant="link" onClick={() => router.back()}>Go back</Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={() => router.back()}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div className="flex-1">
+          <h1 className="text-lg font-bold flex items-center gap-2">
+            <Home className="h-4 w-4 text-cyan-600" /> WFH Request
+          </h1>
+          <p className="text-xs text-muted-foreground">#{detail.id} · Applied {fmtDate(detail.createdAt)}</p>
+        </div>
+        <StatusBadge w={detail as any} />
+      </div>
+
+      {/* Employee + WFH Info */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-violet-600 dark:text-violet-400">
+              <User className="h-3 w-3" /> Employee
+            </div>
+            <div>
+              <p className="font-semibold">{detail.employee?.name}</p>
+              <p className="text-xs text-muted-foreground">{detail.employee?.empCode} · {detail.employee?.email}</p>
+            </div>
+            {(() => {
+              const filedById = detail.appliedById ?? null;
+              const subjId = detail.adminId ?? detail.employeeId ?? null;
+              const subjType = detail.adminId != null ? 'admin' : 'employee';
+              const isOnBehalf =
+                filedById != null &&
+                (filedById !== subjId || detail.appliedByType !== subjType);
+              if (!isOnBehalf || !detail.appliedByName) return null;
+              return (
+                <div className="rounded-md border border-amber-200/40 bg-amber-50/50 dark:bg-amber-500/10 px-3 py-2">
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-amber-700 dark:text-amber-400">
+                    Applied By
+                  </p>
+                  <p className="text-xs text-amber-800 dark:text-amber-300 mt-0.5">
+                    {detail.appliedByName}
+                    <span className="text-muted-foreground ml-1">
+                      ({detail.appliedByType === 'admin' ? 'Admin' : 'HR'})
+                    </span>
+                  </p>
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-cyan-600 dark:text-cyan-400">
+              <CalendarDays className="h-3 w-3" /> WFH Details
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <p className="text-[10px] text-muted-foreground">From</p>
+                <p className="text-sm font-mono font-medium">{fmtDate(detail.dateFrom)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground">To</p>
+                <p className="text-sm font-mono font-medium">{fmtDate(detail.dateTo)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground">Days</p>
+                <p className="text-sm font-bold">{detail.totalDays}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {/* Reason */}
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-blue-600 dark:text-blue-400">
+              <FileText className="h-3 w-3" /> Reason
+            </div>
+            <p className="text-sm text-foreground whitespace-pre-wrap">{detail.reason}</p>
+          </CardContent>
+        </Card>
+
+        {/* Approval Timeline — identical shape to Leave detail. */}
+        <Card>
+          <CardContent className="p-4 space-y-4">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-emerald-600 dark:text-emerald-400">
+              <Clock className="h-3 w-3" /> Approval Timeline
+            </div>
+            {(() => {
+              const hrApproverName = (detail as any).hrApproverName as string | undefined;
+              const isFinal = detail.status === 'hr_approved' || detail.status === 'hr_rejected';
+              const adminFinal = isFinal && detail.hrId == null && !!hrApproverName;
+              const autoWord = detail.status === 'hr_rejected' ? 'Auto-rejected' : 'Auto-approved';
+              const showHrRow =
+                detail.status === 'manager_approved' ||
+                detail.status === 'hr_approved' ||
+                detail.status === 'hr_rejected' ||
+                !!detail.hrActionAt;
+
+              return (
+                <>
+                  <div className="flex items-start gap-3">
+                    <div className={`mt-1 h-3 w-3 rounded-full shrink-0 ${
+                      detail.status === 'manager_rejected' ? 'bg-red-500' :
+                      detail.managerActionAt ? 'bg-emerald-500' :
+                      adminFinal ? 'bg-emerald-500' : 'bg-amber-400'
+                    }`} />
+                    <div>
+                      <p className="text-sm font-medium">Manager: {detail.manager?.name ?? '—'}</p>
+                      {detail.managerActionAt ? (
+                        <>
+                          <p className="text-xs text-muted-foreground">
+                            {detail.status === 'manager_rejected' ? 'Rejected' : 'Approved'} on {fmtDateTime(detail.managerActionAt)}
+                          </p>
+                          {detail.managerRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.managerRemarks}&quot;</p>}
+                        </>
+                      ) : adminFinal ? (
+                        <p className="text-xs text-muted-foreground">{autoWord}</p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Pending action</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {showHrRow && (
+                    <div className="flex items-start gap-3">
+                      <div className={`mt-1 h-3 w-3 rounded-full shrink-0 ${
+                        detail.status === 'hr_rejected' ? 'bg-red-500' :
+                        detail.hrActionAt || adminFinal ? 'bg-emerald-500' : 'bg-amber-400'
+                      }`} />
+                      <div>
+                        <p className="text-sm font-medium">
+                          HR: {adminFinal ? '—' : (detail.hr?.name ?? hrApproverName ?? 'Pending')}
+                        </p>
+                        {adminFinal ? (
+                          <p className="text-xs text-muted-foreground">{autoWord}</p>
+                        ) : detail.hrActionAt ? (
+                          <>
+                            <p className="text-xs text-muted-foreground">
+                              {detail.status === 'hr_rejected' ? 'Rejected' : 'Approved'} on {fmtDateTime(detail.hrActionAt)}
+                            </p>
+                            {detail.hrRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.hrRemarks}&quot;</p>}
+                          </>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">Pending action</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {adminFinal && (
+                    <div className="flex items-start gap-3">
+                      <div className={`mt-1 h-3 w-3 rounded-full shrink-0 ${
+                        detail.status === 'hr_rejected' ? 'bg-red-500' : 'bg-emerald-500'
+                      }`} />
+                      <div>
+                        <p className="text-sm font-medium">Admin: {hrApproverName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {detail.status === 'hr_rejected' ? 'Rejected' : 'Approved'}
+                          {detail.hrActionAt ? ` on ${fmtDateTime(detail.hrActionAt)}` : ''}
+                        </p>
+                        {detail.hrRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.hrRemarks}&quot;</p>}
+                      </div>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {/* Watchers */}
+        {detail.watchers && detail.watchers.length > 0 && (
+          <Card>
+            <CardContent className="p-4 space-y-2">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-pink-600 dark:text-pink-400">
+                <Users className="h-3 w-3" /> Watchers
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {detail.watchers.map((w: any) => (
+                  <Badge key={w.id} variant="outline" className="text-xs">
+                    {w.employee?.name ?? `Employee #${w.employeeId}`}
+                  </Badge>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Actions */}
+        {(canAct.canApprove || canAct.canReject || canAct.canCancel) && (
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+                <MessageSquare className="h-3 w-3" /> Actions
+              </div>
+              {(canAct.canApprove || canAct.canReject) && (
+                <div className="flex gap-2">
+                  {canAct.canApprove && (
+                    <Button
+                      size="sm"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      onClick={() => setActionDialog({ open: true, action: 'approve' })}
+                    >
+                      <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                      Approve
+                    </Button>
+                  )}
+                  {canAct.canReject && (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => setActionDialog({ open: true, action: 'reject' })}
+                    >
+                      <XCircle className="mr-1.5 h-3.5 w-3.5" />
+                      {detail.status === 'hr_approved' ? 'Reject (revoke approval)' : 'Reject'}
+                    </Button>
+                  )}
+                </div>
+              )}
+              {canAct.canCancel && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                  disabled={cancelMut.isPending}
+                  onClick={() => cancelMut.mutate()}
+                >
+                  <Ban className="mr-1.5 h-3.5 w-3.5" />
+                  {cancelMut.isPending ? 'Cancelling...' : 'Cancel Request'}
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {/* Shared approve / reject confirmation dialog. */}
+      <WfhActionDialog
+        open={actionDialog.open}
+        onOpenChange={(v) => setActionDialog((p) => ({ ...p, open: v }))}
+        action={actionDialog.action}
+        wfhId={wfhId}
+        rejectIsRevoke={detail.status === 'hr_approved'}
+        // Pop back to the previous screen after a successful action —
+        // matches the leave-detail behaviour where approve / reject
+        // returns the user to the list.
+        onSuccess={() => router.back()}
+      />
+    </div>
+  );
+}

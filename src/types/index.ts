@@ -757,6 +757,38 @@ export interface LeaveRequest {
   updatedAt: string;
 }
 
+// ── WFH Requests ─────────────────────────────────────────────────────────
+// Same shape as LeaveRequest minus leaveReason; reason is required text.
+
+export type WfhRequestStatus = LeaveRequestStatus;
+
+export interface WfhRequest {
+  id: number;
+  employeeId: number | null;
+  adminId?: number | null;
+  employee?: Employee;
+  dateFrom: string;
+  dateTo: string;
+  totalDays: number;
+  reason: string;
+  status: WfhRequestStatus;
+  managerId?: number | null;
+  manager?: Employee | null;
+  managerActionAt?: string | null;
+  managerRemarks?: string | null;
+  hrId?: number | null;
+  hr?: Employee | null;
+  hrActionAt?: string | null;
+  hrRemarks?: string | null;
+  hrApproverName?: string | null;
+  appliedById?: number | null;
+  appliedByType?: 'employee' | 'admin' | null;
+  appliedByName?: string | null;
+  watchers?: { id: number; employeeId: number; employee?: Employee }[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ── Notifications ─────────────────────────────────────────────────────────
 
 export type NotificationType =
@@ -774,6 +806,12 @@ export type NotificationType =
   | 'leave_request_hr_approved'
   | 'leave_request_hr_rejected'
   | 'leave_request_cancelled'
+  | 'wfh_request_submitted'
+  | 'wfh_request_manager_approved'
+  | 'wfh_request_manager_rejected'
+  | 'wfh_request_hr_approved'
+  | 'wfh_request_hr_rejected'
+  | 'wfh_request_cancelled'
   | 'task_assigned'
   | 'task_status_changed'
   | 'task_commented'

@@ -42,6 +42,12 @@ const typeConfig: Record<NotificationType, {
   leave_request_hr_approved:      { icon: CalendarCheck, iconBg: 'bg-emerald-100 dark:bg-emerald-500/15', iconColor: 'text-emerald-600 dark:text-emerald-400', label: 'Leave' },
   leave_request_hr_rejected:      { icon: CalendarX,     iconBg: 'bg-red-100 dark:bg-red-500/15',         iconColor: 'text-red-600 dark:text-red-400',         label: 'Leave' },
   leave_request_cancelled:        { icon: CalendarOff,   iconBg: 'bg-gray-100 dark:bg-gray-500/15',       iconColor: 'text-gray-600 dark:text-gray-400',       label: 'Leave' },
+  wfh_request_submitted:          { icon: CalendarPlus,  iconBg: 'bg-cyan-100 dark:bg-cyan-500/15',       iconColor: 'text-cyan-600 dark:text-cyan-400',       label: 'WFH' },
+  wfh_request_manager_approved:   { icon: CalendarCheck, iconBg: 'bg-blue-100 dark:bg-blue-500/15',       iconColor: 'text-blue-600 dark:text-blue-400',       label: 'WFH' },
+  wfh_request_manager_rejected:   { icon: CalendarX,     iconBg: 'bg-red-100 dark:bg-red-500/15',         iconColor: 'text-red-600 dark:text-red-400',         label: 'WFH' },
+  wfh_request_hr_approved:        { icon: CalendarCheck, iconBg: 'bg-emerald-100 dark:bg-emerald-500/15', iconColor: 'text-emerald-600 dark:text-emerald-400', label: 'WFH' },
+  wfh_request_hr_rejected:        { icon: CalendarX,     iconBg: 'bg-red-100 dark:bg-red-500/15',         iconColor: 'text-red-600 dark:text-red-400',         label: 'WFH' },
+  wfh_request_cancelled:          { icon: CalendarOff,   iconBg: 'bg-gray-100 dark:bg-gray-500/15',       iconColor: 'text-gray-600 dark:text-gray-400',       label: 'WFH' },
   task_assigned:                  { icon: ListTodo,      iconBg: 'bg-teal-100 dark:bg-teal-500/15',       iconColor: 'text-teal-600 dark:text-teal-400',       label: 'Task' },
   task_status_changed:            { icon: ArrowRightLeft,iconBg: 'bg-indigo-100 dark:bg-indigo-500/15',   iconColor: 'text-indigo-600 dark:text-indigo-400',   label: 'Task' },
   task_commented:                 { icon: MessageSquare, iconBg: 'bg-cyan-100 dark:bg-cyan-500/15',       iconColor: 'text-cyan-600 dark:text-cyan-400',       label: 'Task' },
@@ -73,6 +79,13 @@ function getNotificationRoute(notif: Notification, isEmployee: boolean): string 
     case 'leave_request_hr_rejected':
     case 'leave_request_cancelled':
       return '/leave-requests';
+    case 'wfh_request_submitted':
+    case 'wfh_request_manager_approved':
+    case 'wfh_request_manager_rejected':
+    case 'wfh_request_hr_approved':
+    case 'wfh_request_hr_rejected':
+    case 'wfh_request_cancelled':
+      return meta?.wfhRequestId ? `/leave-requests/wfh/${meta.wfhRequestId}` : '/leave-requests';
     case 'task_assigned':
     case 'task_status_changed':
     case 'task_commented':
