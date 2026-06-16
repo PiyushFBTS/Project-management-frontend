@@ -199,12 +199,22 @@ function NewEmployeeContent() {
           <Section title="Role & Hierarchy">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Consultant Type" required>
-                <Select value={form.consultantType} onValueChange={(v) => setForm((p) => ({ ...p, consultantType: v as Employee['consultantType'] }))}>
-                  <SelectTrigger className='w-full'><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {consultantTypes.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                {/* SearchableSelect — same component the Reports-To
+                    field below already uses. `consultantTypes` is
+                    already shaped as `{ value, label }`, which is
+                    exactly what the component expects, so no
+                    conversion layer is needed. */}
+                <SearchableSelect
+                  value={form.consultantType}
+                  onValueChange={(v) =>
+                    setForm((p) => ({
+                      ...p,
+                      consultantType: v as Employee['consultantType'],
+                    }))
+                  }
+                  options={consultantTypes}
+                  placeholder="Search role..."
+                />
               </Field>
               <Field label="Reports To">
                 <SearchableSelect value={form.reportsTo} onValueChange={(v) => setForm((p) => ({ ...p, reportsTo: v }))} options={reportsToOptions} placeholder="Select manager..." />

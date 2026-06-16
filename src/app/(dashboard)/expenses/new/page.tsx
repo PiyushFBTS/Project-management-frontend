@@ -190,12 +190,16 @@ export default function NewExpensePage() {
                   <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5 mb-2">
                     <Tag className="h-3.5 w-3.5 text-primary" /> Expense Type <span className="text-red-500">*</span>
                   </label>
-                  <Select value={formType} onValueChange={setFormType}>
-                    <SelectTrigger className='w-full'><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {EXPENSE_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  {/* SearchableSelect — same component the Project
+                      field above uses. `EXPENSE_TYPES` is a plain
+                      string array so we map it inline to the
+                      `{value, label}` shape SearchableSelect expects. */}
+                  <SearchableSelect
+                    value={formType}
+                    onValueChange={setFormType}
+                    options={EXPENSE_TYPES.map((t) => ({ value: t, label: t }))}
+                    placeholder="Search expense type..."
+                  />
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5 mb-2">
