@@ -66,16 +66,13 @@ export default function NewExpensePage() {
   });
   const projects: any[] = Array.isArray(projectsRaw) ? projectsRaw : [];
 
-  // Options for the searchable project picker — mirrors how Flutter
-  // builds its dropdown source list. "None" is always available so the
-  // expense can be filed without a project.
-  const projectOptions = [
-    { value: 'none', label: 'None' },
-    ...projects.map((p: any) => ({
-      value: String(p.id),
-      label: p.projectCode ? `${p.projectCode} · ${p.projectName}` : p.projectName,
-    })),
-  ];
+  // Options for the searchable project picker. Project is now a
+  // required field on this form, so the previous "None" sentinel is
+  // gone — every expense must carry a projectId.
+  const projectOptions = projects.map((p: any) => ({
+    value: String(p.id),
+    label: p.projectCode ? `${p.projectCode} · ${p.projectName}` : p.projectName,
+  }));
 
   const createMut = useMutation({
     mutationFn: async () => {
@@ -86,7 +83,9 @@ export default function NewExpensePage() {
       fd.append('expenseType', formType);
       fd.append('amount', formAmount);
       if (formDesc) fd.append('description', formDesc);
-      if (formProjectId) fd.append('projectId', formProjectId);
+      // Project is now required — the Submit button gates on this so
+      // we know the id is set by the time the mutation fires.
+      fd.append('projectId', formProjectId);
       if (formFile) fd.append('file', formFile);
       return isAdmin ? adminExpensesApi.create(fd) : expensesApi.create(fd);
     },
@@ -115,7 +114,7 @@ export default function NewExpensePage() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => router.push('/expenses')}>Cancel</Button>
-          <Button disabled={!formDate || !formAmount || !formType || createMut.isPending} onClick={() => createMut.mutate()}>
+          <Button disabled={!formDate || !formAmount || !formType || !formProjectId || createMut.isPending} onClick={() => createMut.mutate()}>
             {createMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Receipt className="h-4 w-4 mr-1" />}
             Submit Expense
           </Button>
@@ -176,11 +175,11 @@ export default function NewExpensePage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
                   <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5 mb-2">
-                    <FolderKanban className="h-3.5 w-3.5 text-primary" /> Project
+                    <FolderKanban className="h-3.5 w-3.5 text-primary" /> Project <span className="text-red-500">*</span>
                   </label>
                   <SearchableSelect
-                    value={formProjectId || 'none'}
-                    onValueChange={(v) => setFormProjectId(v === 'none' ? '' : v)}
+                    value={formProjectId}
+                    onValueChange={setFormProjectId}
                     options={projectOptions}
                     placeholder="Search projects..."
                   />

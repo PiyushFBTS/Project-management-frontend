@@ -1017,15 +1017,16 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Blood Group</p>
                         {editMode ? (
-                          <Select value={editBloodGroup || 'none'} onValueChange={(v) => setEditBloodGroup(v === 'none' ? '' : v)}>
-                            <SelectTrigger className="h-8 text-sm w-full"><SelectValue placeholder="Select" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">Not set</SelectItem>
-                              {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((bg) => (
-                                <SelectItem key={bg} value={bg}>{bg}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <SearchableSelect
+                            value={editBloodGroup || 'none'}
+                            onValueChange={(v) => setEditBloodGroup(v === 'none' ? '' : v)}
+                            options={[
+                              { value: 'none', label: 'Not set' },
+                              ...['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((bg) => ({ value: bg, label: bg })),
+                            ]}
+                            placeholder="Search blood group..."
+                            className="h-8 text-sm w-full"
+                          />
                         ) : (
                           <p className="text-sm font-medium">{emp.bloodGroup || '—'}</p>
                         )}
@@ -1033,15 +1034,16 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Marital Status</p>
                         {editMode ? (
-                          <Select value={editMaritalStatus || 'none'} onValueChange={(v) => setEditMaritalStatus(v === 'none' ? '' : v)}>
-                            <SelectTrigger className="h-8 text-sm w-full"><SelectValue placeholder="Select" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="none">Not set</SelectItem>
-                              {['Unmarried', 'Married', 'Divorced', 'Widowed'].map((ms) => (
-                                <SelectItem key={ms} value={ms}>{ms}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <SearchableSelect
+                            value={editMaritalStatus || 'none'}
+                            onValueChange={(v) => setEditMaritalStatus(v === 'none' ? '' : v)}
+                            options={[
+                              { value: 'none', label: 'Not set' },
+                              ...['Unmarried', 'Married', 'Divorced', 'Widowed'].map((ms) => ({ value: ms, label: ms })),
+                            ]}
+                            placeholder="Search status..."
+                            className="h-8 text-sm w-full"
+                          />
                         ) : (
                           <p className="text-sm font-medium">{emp.maritalStatus || '—'}</p>
                         )}

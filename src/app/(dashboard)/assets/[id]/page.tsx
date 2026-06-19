@@ -50,6 +50,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+
+const ASSET_CONDITION_OPTIONS = [
+  { value: 'new', label: 'New' },
+  { value: 'good', label: 'Good' },
+  { value: 'fair', label: 'Fair' },
+  { value: 'damaged', label: 'Damaged' },
+];
 
 const STATUS_COLORS: Record<AssetStatus, string> = {
   available:
@@ -327,22 +335,14 @@ function OverviewTab({
               />
             </SmallField>
             <SmallField label="Condition">
-              <Select
+              <SearchableSelect
                 value={form.condition}
                 onValueChange={(v) =>
                   setForm((p) => ({ ...p, condition: v as AssetCondition }))
                 }
-              >
-                <SelectTrigger className="h-9 w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="new">New</SelectItem>
-                  <SelectItem value="good">Good</SelectItem>
-                  <SelectItem value="fair">Fair</SelectItem>
-                  <SelectItem value="damaged">Damaged</SelectItem>
-                </SelectContent>
-              </Select>
+                options={ASSET_CONDITION_OPTIONS}
+                placeholder="Search condition..."
+              />
             </SmallField>
             <SmallField label="Status">
               <Select

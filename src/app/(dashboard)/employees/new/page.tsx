@@ -260,22 +260,36 @@ function NewEmployeeContent() {
                 <Input type="number" min="0" value={form.annualCTC} onChange={(e) => setForm((p) => ({ ...p, annualCTC: e.target.value }))} placeholder="600000" />
               </Field>
               <Field label="Blood Group">
-                <Select value={form.bloodGroup} onValueChange={(v) => setForm((p) => ({ ...p, bloodGroup: v }))}>
-                  <SelectTrigger className='w-full'><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">—</SelectItem>
-                    {bloodGroups.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                {/* SearchableSelect — the leading "none" sentinel is
+                    kept so the submit handler's existing `'none' →
+                    undefined` map at the top of the file keeps working
+                    without a change. */}
+                <SearchableSelect
+                  value={form.bloodGroup}
+                  onValueChange={(v) => setForm((p) => ({ ...p, bloodGroup: v }))}
+                  options={[
+                    { value: 'none', label: '—' },
+                    ...bloodGroups.map((b) => ({ value: b, label: b })),
+                  ]}
+                  placeholder="Search blood group..."
+                />
               </Field>
               <Field label="Marital Status">
-                <Select value={form.maritalStatus} onValueChange={(v) => setForm((p) => ({ ...p, maritalStatus: v }))}>
-                  <SelectTrigger className='w-full'><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">—</SelectItem>
-                    {maritalStatuses.map((m) => <SelectItem key={m} value={m} className="capitalize">{m}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  value={form.maritalStatus}
+                  onValueChange={(v) => setForm((p) => ({ ...p, maritalStatus: v }))}
+                  options={[
+                    { value: 'none', label: '—' },
+                    ...maritalStatuses.map((m) => ({
+                      value: m,
+                      // Display label capitalised (`unmarried` →
+                      // `Unmarried`) so the picker reads naturally;
+                      // the stored value stays lowercase per backend.
+                      label: m.charAt(0).toUpperCase() + m.slice(1),
+                    })),
+                  ]}
+                  placeholder="Search status..."
+                />
               </Field>
             </div>
           </Section>

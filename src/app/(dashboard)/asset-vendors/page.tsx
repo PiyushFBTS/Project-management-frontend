@@ -78,27 +78,9 @@ export default function AssetVendorsPage() {
     enabled: canManage,
   });
 
-  const createMut = useMutation({
-    mutationFn: (dto: VendorDraft) =>
-      assetsApi.createVendor({
-        name: dto.name.trim(),
-        contactName: dto.contactName.trim() || undefined,
-        email: dto.email.trim() || undefined,
-        phone: dto.phone.trim() || undefined,
-        address: dto.address.trim() || undefined,
-        gst: dto.gst.trim() || undefined,
-        paymentTerms: dto.paymentTerms.trim() || undefined,
-        notes: dto.notes.trim() || undefined,
-      }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['asset-vendors'] });
-      toast.success('Vendor created');
-      setDialogOpen(false);
-      setDraft(emptyDraft);
-    },
-    onError: (e: any) =>
-      toast.error(e?.response?.data?.message ?? 'Failed to create vendor'),
-  });
+  // Create now lives on the dedicated `/asset-vendors/new` route so
+  // the form has room for the same section layout as New Employee /
+  // New Expense. The dialog below is edit-only.
 
   const updateMut = useMutation({
     mutationFn: (vars: { id: number; dto: VendorDraft }) =>
@@ -131,12 +113,6 @@ export default function AssetVendorsPage() {
     onError: (e: any) =>
       toast.error(e?.response?.data?.message ?? 'Failed to delete vendor'),
   });
-
-  const startCreate = () => {
-    setEditing(null);
-    setDraft(emptyDraft);
-    setDialogOpen(true);
-  };
 
   const startEdit = (v: AssetVendor) => {
     setEditing(v);
@@ -178,7 +154,7 @@ export default function AssetVendorsPage() {
             <Button
               size="sm"
               className="bg-white text-emerald-700 hover:bg-white/90 border-0 shadow-lg font-semibold"
-              onClick={startCreate}
+              onClick={() => router.push('/asset-vendors/new')}
             >
               <Plus className="mr-1.5 h-4 w-4" /> Add Vendor
             </Button>
@@ -267,7 +243,7 @@ export default function AssetVendorsPage() {
         </div>
       )}
 
-      {/* Add / edit dialog */}
+      {/* Edit dialog. Create lives on /asset-vendors/new now. */}
       <Dialog
         open={dialogOpen}
         onOpenChange={(v) => {
@@ -280,7 +256,7 @@ export default function AssetVendorsPage() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {editing ? `Edit ${editing.name}` : 'New Asset Vendor'}
+              {editing ? `Edit ${editing.name}` : 'Edit Vendor'}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 pt-1">
@@ -369,22 +345,17 @@ export default function AssetVendorsPage() {
               Cancel
             </Button>
             <Button
-              disabled={
-                !draft.name.trim() ||
-                createMut.isPending ||
-                updateMut.isPending
-              }
+              disabled={!draft.name.trim() || !editing || updateMut.isPending}
               onClick={() => {
                 if (editing) updateMut.mutate({ id: editing.id, dto: draft });
-                else createMut.mutate(draft);
               }}
             >
-              {createMut.isPending || updateMut.isPending ? (
+              {updateMut.isPending ? (
                 <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
               ) : (
                 <Check className="mr-1 h-3.5 w-3.5" />
               )}
-              {editing ? 'Save' : 'Create'}
+              Save
             </Button>
           </div>
         </DialogContent>

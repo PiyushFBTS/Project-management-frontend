@@ -33,6 +33,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
+
+// Static enum options. Pulled out of the JSX so the searchable picker
+// can also do its own client-side filter on the same source list.
+const CATEGORY_OPTIONS = [
+  { value: 'laptop', label: 'Laptop' },
+  { value: 'desktop', label: 'Desktop' },
+  { value: 'monitor', label: 'Monitor' },
+  { value: 'phone', label: 'Phone' },
+  { value: 'accessory', label: 'Accessory' },
+  { value: 'other', label: 'Other (specify)' },
+];
+const CONDITION_OPTIONS = [
+  { value: 'new', label: 'New' },
+  { value: 'good', label: 'Good' },
+  { value: 'fair', label: 'Fair' },
+  { value: 'damaged', label: 'Damaged' },
+];
+const OWNERSHIP_OPTIONS = [
+  { value: 'owned', label: 'Owned' },
+  { value: 'rented', label: 'Rented' },
+  { value: 'leased', label: 'Leased' },
+];
 
 interface Draft {
   assetTag: string;
@@ -240,24 +263,14 @@ export default function NewAssetPage() {
             />
           </Field>
           <Field label="Category *">
-            <Select
+            <SearchableSelect
               value={draft.category}
               onValueChange={(v) =>
                 setDraft((p) => ({ ...p, category: v as AssetCategory }))
               }
-            >
-              <SelectTrigger className="h-9 w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="laptop">Laptop</SelectItem>
-                <SelectItem value="desktop">Desktop</SelectItem>
-                <SelectItem value="monitor">Monitor</SelectItem>
-                <SelectItem value="phone">Phone</SelectItem>
-                <SelectItem value="accessory">Accessory</SelectItem>
-                <SelectItem value="other">Other (specify)</SelectItem>
-              </SelectContent>
-            </Select>
+              options={CATEGORY_OPTIONS}
+              placeholder="Search category..."
+            />
           </Field>
           {draft.category === 'other' && (
             <Field label="Custom Type *" error={errors.categoryOtherName}>
@@ -299,22 +312,14 @@ export default function NewAssetPage() {
             />
           </Field>
           <Field label="Condition">
-            <Select
+            <SearchableSelect
               value={draft.condition}
               onValueChange={(v) =>
                 setDraft((p) => ({ ...p, condition: v as AssetCondition }))
               }
-            >
-              <SelectTrigger className="h-9 w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="new">New</SelectItem>
-                <SelectItem value="good">Good</SelectItem>
-                <SelectItem value="fair">Fair</SelectItem>
-                <SelectItem value="damaged">Damaged</SelectItem>
-              </SelectContent>
-            </Select>
+              options={CONDITION_OPTIONS}
+              placeholder="Search condition..."
+            />
           </Field>
         </div>
       </Section>
@@ -326,41 +331,30 @@ export default function NewAssetPage() {
       >
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Field label="Ownership *">
-            <Select
+            <SearchableSelect
               value={draft.ownership}
               onValueChange={(v) =>
                 setDraft((p) => ({ ...p, ownership: v as AssetOwnership }))
               }
-            >
-              <SelectTrigger className="h-9 w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="owned">Owned</SelectItem>
-                <SelectItem value="rented">Rented</SelectItem>
-                <SelectItem value="leased">Leased</SelectItem>
-              </SelectContent>
-            </Select>
+              options={OWNERSHIP_OPTIONS}
+              placeholder="Search ownership..."
+            />
           </Field>
           <Field label="Vendor">
-            <Select
+            <SearchableSelect
               value={draft.vendorId || 'none'}
               onValueChange={(v) =>
                 setDraft((p) => ({ ...p, vendorId: v === 'none' ? '' : v }))
               }
-            >
-              <SelectTrigger className="h-9 w-full">
-                <SelectValue placeholder="Pick a vendor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No vendor</SelectItem>
-                {((vendors ?? []) as AssetVendor[]).map((v) => (
-                  <SelectItem key={v.id} value={String(v.id)}>
-                    {v.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={[
+                { value: 'none', label: 'No vendor' },
+                ...((vendors ?? []) as AssetVendor[]).map((v) => ({
+                  value: String(v.id),
+                  label: v.name,
+                })),
+              ]}
+              placeholder="Search vendor..."
+            />
           </Field>
           <Field label="Warranty Expiry">
             <Input
