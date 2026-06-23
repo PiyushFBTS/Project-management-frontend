@@ -14,6 +14,8 @@ export interface OnLeaveTodayUser {
   totalDays: number;
   /** Approval state — UI badges these as "Approved" / "Pending HR" / "Pending RM". */
   status: 'pending' | 'manager_approved' | 'hr_approved';
+  /** Half-day marker (Sprint: half-day leaves). Null on full-day rows. */
+  halfDayKind?: 'first_half' | 'second_half' | null;
 }
 
 // Admin approve/reject/cancel live under /leave-requests/:id/... (JwtAdminGuard).
@@ -90,6 +92,8 @@ export const leaveRequestsApi = {
     // When set, an HR employee files leave for someone else. The backend
     // stamps the actual caller in `applied_by_*` columns for audit.
     onBehalfOfEmployeeId?: number;
+    // Half-day marker. Server rejects unless dateFrom === dateTo.
+    halfDayKind?: 'first_half' | 'second_half';
   }) =>
     api.post<ApiResponse<LeaveRequest>>('/employee/leave-requests', data),
 
@@ -106,6 +110,7 @@ export const leaveRequestsApi = {
     remarks?: string;
     watcherIds?: number[];
     onBehalfOfEmployeeId?: number;
+    halfDayKind?: 'first_half' | 'second_half';
   }) =>
     api.post<ApiResponse<LeaveRequest>>('/leave-requests', data),
 

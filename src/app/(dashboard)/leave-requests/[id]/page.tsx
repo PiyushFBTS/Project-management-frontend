@@ -228,7 +228,14 @@ export default function LeaveRequestDetailPage() {
               </div>
               <div>
                 <p className="text-[10px] text-muted-foreground">Days</p>
-                <p className="text-sm font-bold">{detail.totalDays}</p>
+                <p className="text-sm font-bold">
+                  {Number(detail.totalDays)}
+                  {detail.halfDayKind && (
+                    <span className="ml-1 inline-block rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-bold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300 align-middle">
+                      {detail.halfDayKind === 'first_half' ? 'AM' : 'PM'}
+                    </span>
+                  )}
+                </p>
               </div>
             </div>
           </CardContent>

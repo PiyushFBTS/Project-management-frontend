@@ -53,15 +53,30 @@ export default function LeaveBalancePage() {
   // Pull this employee's own leave requests so we can compute "used" per type
   const { data: myLeaves = [], isLoading: leavesLoading } = useQuery({
     queryKey: ['my-leaves-balance'],
-    queryFn: () => leaveRequestsApi.getMyLeaves({ limit: 200 }).then((r) => r.data?.data ?? []),
+    // Backend PaginationDto caps `limit` at 100 — anything higher is
+    // a 400 Bad Request, which silently emptied the list here and
+    // made the balance read as "0 used" for everyone. Stay at the
+    // cap; an employee with > 100 leaves in a year is an edge case
+    // we can handle by widening to multi-page later.
+    queryFn: () => leaveRequestsApi.getMyLeaves({ limit: 100 }).then((r) => r.data?.data ?? []),
     enabled: !!user && isEmployee,
   });
+
+  // Treat every *active* request as a commitment against the balance —
+  // pending, manager-approved, and HR-approved all count. Rejected /
+  // cancelled rows drop out so the employee sees their true remaining
+  // headroom (otherwise applying 5 days twice in a row would still
+  // show the full balance until HR approves).
+  const ACTIVE_LEAVE_STATUSES = new Set([
+    'pending',
+    'manager_approved',
+    'hr_approved',
+  ]);
 
   const usedByType = useMemo(() => {
     const map: Record<number, number> = {};
     for (const lr of myLeaves) {
-      // Count only approved leaves (hr_approved is the final state in this system)
-      if (lr.status === 'hr_approved') {
+      if (ACTIVE_LEAVE_STATUSES.has(lr.status)) {
         map[lr.leaveReasonId] = (map[lr.leaveReasonId] ?? 0) + Number(lr.totalDays ?? 0);
       }
     }
@@ -205,7 +220,7 @@ export default function LeaveBalancePage() {
         <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
         <p>
           Annual allowances are configured by HR in <span className="font-medium">Leave Types</span>.
-          Used days are computed from your HR-approved leave requests.
+          Used days are computed from your active leave requests (pending, manager-approved, and HR-approved).
         </p>
       </div>
     </div>

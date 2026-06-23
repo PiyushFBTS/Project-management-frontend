@@ -56,6 +56,21 @@ function toSimpleStatus(raw: LeaveRequestStatus): SimpleStatus {
   return 'pending';
 }
 
+/**
+ * Tiny AM/PM pill rendered next to the day count when the request is
+ * a half-day. Returns null for full-day requests so the caller can
+ * inline it without a wrapper conditional.
+ */
+function HalfDayPill({ kind }: { kind?: 'first_half' | 'second_half' | null }) {
+  if (!kind) return null;
+  const label = kind === 'first_half' ? 'AM' : 'PM';
+  return (
+    <span className="ml-1 inline-block rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-bold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300 align-middle">
+      {label}
+    </span>
+  );
+}
+
 function StatusBadge({ lr }: { lr: { status: LeaveRequestStatus } }) {
   const simple = toSimpleStatus(lr.status);
   const cfg = SIMPLE_STATUS_CONFIG[simple];
@@ -146,6 +161,9 @@ function LeaveRequestsContent() {
     remarks: '',
     watcherIds: [] as number[],
     onBehalfOfEmployeeId: '' as string,
+    // 'full' = full day(s); maps to undefined on the wire.
+    // 'first_half' / 'second_half' map straight through.
+    halfDayKind: 'full' as 'full' | 'first_half' | 'second_half',
   });
 
   // Auto-open apply dialog from dashboard link (?apply=true)
@@ -185,6 +203,15 @@ function LeaveRequestsContent() {
 
   const submitLeaveMutation = useMutation({
     mutationFn: () => {
+      // Defensive: half-day on a multi-day range gets a 400 from the
+      // server. Clamp here so a stale `halfDayKind` from a user who
+      // toggled dates after selecting AM/PM doesn't slip through.
+      const isSingleDay =
+        applyForm.dateFrom !== '' && applyForm.dateFrom === applyForm.dateTo;
+      const halfDayKind =
+        isSingleDay && applyForm.halfDayKind !== 'full'
+          ? applyForm.halfDayKind
+          : undefined;
       const payload = {
         leaveReasonId: Number(applyForm.leaveReasonId),
         dateFrom: applyForm.dateFrom,
@@ -195,6 +222,7 @@ function LeaveRequestsContent() {
           applyMode === 'on-behalf' && applyForm.onBehalfOfEmployeeId
             ? Number(applyForm.onBehalfOfEmployeeId)
             : undefined,
+        halfDayKind,
       };
       return isAdmin
         ? leaveRequestsApi.submitAdminLeave(payload)
@@ -204,7 +232,7 @@ function LeaveRequestsContent() {
       toast.success('Leave request submitted successfully');
       setApplyOpen(false);
       setApplyMode('self');
-      setApplyForm({ leaveReasonId: '', dateFrom: '', dateTo: '', remarks: '', watcherIds: [], onBehalfOfEmployeeId: '' });
+      setApplyForm({ leaveReasonId: '', dateFrom: '', dateTo: '', remarks: '', watcherIds: [], onBehalfOfEmployeeId: '', halfDayKind: 'full' });
       invalidateAll();
     },
     onError: (e: any) => {
@@ -943,7 +971,10 @@ function LeaveRequestsContent() {
                     <TableCell className="text-sm">{lr.leaveReason?.reasonName ?? '-'}</TableCell>
                     <TableCell className="text-xs font-mono">{lr.dateFrom}</TableCell>
                     <TableCell className="text-xs font-mono">{lr.dateTo}</TableCell>
-                    <TableCell className="text-center font-semibold">{lr.totalDays}</TableCell>
+                    <TableCell className="text-center font-semibold">
+                      {Number(lr.totalDays)}
+                      <HalfDayPill kind={lr.halfDayKind} />
+                    </TableCell>
                     <TableCell><StatusBadge lr={lr as any} /></TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {lr.manager?.name ?? '-'}
@@ -1023,7 +1054,7 @@ function LeaveRequestsContent() {
 
       {/* Apply for Leave Dialog — open for both employee and admin */}
       {(isEmployee || isAdmin) && (
-        <Dialog open={applyOpen} onOpenChange={(v) => { if (!v) { setApplyOpen(false); setApplyMode('self'); setApplyForm({ leaveReasonId: '', dateFrom: '', dateTo: '', remarks: '', watcherIds: [], onBehalfOfEmployeeId: '' }); } }}>
+        <Dialog open={applyOpen} onOpenChange={(v) => { if (!v) { setApplyOpen(false); setApplyMode('self'); setApplyForm({ leaveReasonId: '', dateFrom: '', dateTo: '', remarks: '', watcherIds: [], onBehalfOfEmployeeId: '', halfDayKind: 'full' }); } }}>
           <DialogContent className="max-w-md overflow-hidden py-8">
             <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-orange-500 via-rose-500 to-violet-500" />
             <DialogHeader>
@@ -1074,7 +1105,13 @@ function LeaveRequestsContent() {
                   <Input
                     type="date"
                     value={applyForm.dateFrom}
-                    onChange={(e) => setApplyForm((p) => ({ ...p, dateFrom: e.target.value }))}
+                    onChange={(e) =>
+                      setApplyForm((p) => ({
+                        ...p,
+                        dateFrom: e.target.value,
+                        halfDayKind: e.target.value !== p.dateTo ? 'full' : p.halfDayKind,
+                      }))
+                    }
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -1082,16 +1119,94 @@ function LeaveRequestsContent() {
                   <Input
                     type="date"
                     value={applyForm.dateTo}
-                    onChange={(e) => setApplyForm((p) => ({ ...p, dateTo: e.target.value }))}
+                    onChange={(e) =>
+                      setApplyForm((p) => ({
+                        ...p,
+                        dateTo: e.target.value,
+                        // Half-day is single-day-only. If the user
+                        // widens the range, snap back to full day so
+                        // the picker can't ride along in an invalid
+                        // state.
+                        halfDayKind: e.target.value !== p.dateFrom ? 'full' : p.halfDayKind,
+                      }))
+                    }
                   />
                 </div>
               </div>
 
-              {/* Calculated days */}
+              {/* Half-day picker — always rendered so users can see
+                  the option exists. Full day is always selectable;
+                  AM/PM are disabled when the request isn't a single
+                  day (no dates picked, or multi-day span). A small
+                  helper note explains why. */}
+              {(() => {
+                const isSingleDay =
+                  applyForm.dateFrom !== '' &&
+                  applyForm.dateFrom === applyForm.dateTo;
+                return (
+                  <div className="space-y-1.5">
+                    <Label className="text-sm font-medium">Duration</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {([
+                        { v: 'full', label: 'Full day', singleOnly: false },
+                        { v: 'first_half', label: 'First half (AM)', singleOnly: true },
+                        { v: 'second_half', label: 'Second half (PM)', singleOnly: true },
+                      ] as const).map((opt) => {
+                        const disabled = opt.singleOnly && !isSingleDay;
+                        const selected = applyForm.halfDayKind === opt.v;
+                        return (
+                          <label
+                            key={opt.v}
+                            title={
+                              disabled
+                                ? 'Half-day is only available for single-day requests (pick the same From + To date)'
+                                : undefined
+                            }
+                            className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors ${
+                              disabled
+                                ? 'cursor-not-allowed bg-muted/50 text-muted-foreground/60 border-muted'
+                                : selected
+                                  ? 'cursor-pointer bg-orange-500 border-orange-500 text-white'
+                                  : 'cursor-pointer bg-background hover:bg-muted'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="halfDayKind"
+                              value={opt.v}
+                              disabled={disabled}
+                              checked={selected}
+                              onChange={() =>
+                                setApplyForm((p) => ({ ...p, halfDayKind: opt.v }))
+                              }
+                              className="sr-only"
+                            />
+                            {opt.label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {!isSingleDay && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Half-day is available only on single-day requests — set the same From and To date.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Calculated days — collapses to 0.5 for half-day. */}
               {applyForm.dateFrom && applyForm.dateTo && applyForm.dateFrom <= applyForm.dateTo && (
                 <div className="rounded-md bg-orange-50 dark:bg-orange-500/10 px-3 py-2 text-sm text-orange-700 dark:text-orange-400">
                   Total days: <span className="font-semibold">
-                    {Math.ceil((new Date(applyForm.dateTo).getTime() - new Date(applyForm.dateFrom).getTime()) / 86400000) + 1}
+                    {applyForm.halfDayKind !== 'full' &&
+                    applyForm.dateFrom === applyForm.dateTo
+                      ? '0.5'
+                      : Math.ceil(
+                          (new Date(applyForm.dateTo).getTime() -
+                            new Date(applyForm.dateFrom).getTime()) /
+                            86400000,
+                        ) + 1}
                   </span>
                 </div>
               )}
@@ -1157,7 +1272,7 @@ function LeaveRequestsContent() {
                   onClick={() => {
                     setApplyOpen(false);
                     setApplyMode('self');
-                    setApplyForm({ leaveReasonId: '', dateFrom: '', dateTo: '', remarks: '', watcherIds: [], onBehalfOfEmployeeId: '' });
+                    setApplyForm({ leaveReasonId: '', dateFrom: '', dateTo: '', remarks: '', watcherIds: [], onBehalfOfEmployeeId: '', halfDayKind: 'full' });
                   }}
                 >
                   Cancel
@@ -1216,7 +1331,10 @@ function LeaveRequestsContent() {
                 </div>
                 <div>
                   <p className="text-muted-foreground text-xs">Total Days</p>
-                  <p className="font-semibold">{detail.totalDays}</p>
+                  <p className="font-semibold">
+                    {Number(detail.totalDays)}
+                    <HalfDayPill kind={detail.halfDayKind} />
+                  </p>
                 </div>
               </div>
 

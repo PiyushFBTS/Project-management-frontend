@@ -185,6 +185,14 @@ function TodayEventsWidget({ isEmployee }: { isEmployee?: boolean }) {
                   /> */}
                 </div>
                 <p className="text-xs font-medium text-center max-w-[80px] truncate">{r.name.split(' ')[0]}</p>
+                {r.halfDayKind && (
+                  <span
+                    className="text-[9px] font-bold rounded bg-orange-100 dark:bg-orange-500/15 text-orange-700 dark:text-orange-300 px-1.5 py-0.5"
+                    title={`Half day — ${r.halfDayKind === 'first_half' ? 'morning' : 'afternoon'}`}
+                  >
+                    {r.halfDayKind === 'first_half' ? 'AM' : 'PM'}
+                  </span>
+                )}
                 {/* <span
                   className={`text-[10px] font-medium rounded-full px-1.5 py-0.5 ${meta.cls}`}
                   title={`${r.leaveType} · ${r.dateFrom}${r.dateFrom !== r.dateTo ? ` → ${r.dateTo}` : ''}`}

@@ -722,6 +722,13 @@ export type LeaveRequestStatus =
   | 'hr_rejected'
   | 'cancelled';
 
+/**
+ * Half-day flag — null on full-day requests, 'first_half' for morning,
+ * 'second_half' for afternoon. Only allowed when dateFrom === dateTo
+ * (server rejects multi-day half-day submissions).
+ */
+export type HalfDayKind = 'first_half' | 'second_half';
+
 export interface LeaveRequest {
   id: number;
   // Either employeeId (employee-submitted) or adminId (admin-submitted) is
@@ -734,7 +741,10 @@ export interface LeaveRequest {
   leaveReason?: LeaveType;
   dateFrom: string;
   dateTo: string;
+  /** MySQL DECIMAL columns come over as strings via mysql2; normalise
+   *  with `Number(...)` before display / math. */
   totalDays: number;
+  halfDayKind?: HalfDayKind | null;
   remarks?: string | null;
   status: LeaveRequestStatus;
   managerId?: number | null;
