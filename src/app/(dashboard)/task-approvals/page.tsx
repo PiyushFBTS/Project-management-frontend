@@ -346,15 +346,6 @@ export default function TaskApprovalsPage() {
                     {sheet?.sheetDate?.slice(0, 10) ?? '—'}
                   </span>
                 </div>
-                {/* Picked approver — only when the submitter chose one
-                    for this entry. Helps the PM see the row is also in
-                    the approver's queue (Sprint 1: runs alongside). */}
-                {row.taskApprover && (
-                  <div className="mt-1 inline-flex items-center gap-1 text-[10px] text-violet-700 dark:text-violet-300 bg-violet-500/10 px-1.5 py-0.5 rounded">
-                    <span className="font-medium">Approver:</span>
-                    <span className="truncate">{row.taskApprover.name}</span>
-                  </div>
-                )}
                 {/* Row 3: entry label + title */}
                 <div className="mt-2 flex items-center gap-2 flex-wrap">
                   {entry?.ticket?.ticketNumber ? (
@@ -501,12 +492,6 @@ export default function TaskApprovalsPage() {
                         {entryPreview && (
                           <span className="text-xs text-muted-foreground truncate">
                             {entryPreview}
-                          </span>
-                        )}
-                        {row.taskApprover && (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-violet-700 dark:text-violet-300 bg-violet-500/10 px-1.5 py-0.5 rounded self-start">
-                            <span className="font-medium">Approver:</span>
-                            <span>{row.taskApprover.name}</span>
                           </span>
                         )}
                       </div>

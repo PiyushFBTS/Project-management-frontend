@@ -227,7 +227,6 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
   const [editIsHr, setEditIsHr] = useState(false);
   const [editIsAccounts, setEditIsAccounts] = useState(false);
   const [editIsAdmin, setEditIsAdmin] = useState(false);
-  const [editIsTaskApprover, setEditIsTaskApprover] = useState(false);
   const [editFillDays, setEditFillDays] = useState('');
   const [editAnnualCTC, setEditAnnualCTC] = useState('');
   const [editBloodGroup, setEditBloodGroup] = useState('');
@@ -517,7 +516,6 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
     setEditIsHr(!!emp.isHr);
     setEditIsAccounts(!!(emp as any).isAccounts);
     setEditIsAdmin(!!(emp as any).isAdmin);
-    setEditIsTaskApprover(!!(emp as any).isTaskApprover);
     setEditFillDays(emp.fillDaysOverride != null ? String(emp.fillDaysOverride) : '');
     setEditAnnualCTC(emp.annualCTC != null ? String(emp.annualCTC) : '');
     setEditBloodGroup(emp.bloodGroup ?? '');
@@ -582,7 +580,6 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
         consultantType: editType, department: editDepartment || undefined,
         joiningDate: editJoiningDate || undefined,
         isHr: editIsHr, isAccounts: editIsAccounts, isAdmin: editIsAdmin,
-        isTaskApprover: editIsTaskApprover,
         reportsToId,
         fillDaysOverride: editFillDays ? Number(editFillDays) : null,
         bloodGroup: editBloodGroup || undefined,
@@ -1023,13 +1020,6 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                             <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
                               <input type="checkbox" checked={editIsAdmin} onChange={(e) => setEditIsAdmin(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
                               {editIsAdmin ? 'Yes' : 'No'}
-                            </label>
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Task Approver</p>
-                            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-                              <input type="checkbox" checked={editIsTaskApprover} onChange={(e) => setEditIsTaskApprover(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
-                              {editIsTaskApprover ? 'Yes' : 'No'}
                             </label>
                           </div>
                         </>

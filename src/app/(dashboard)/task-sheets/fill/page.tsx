@@ -11,7 +11,6 @@ import {
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/auth-provider';
 import { taskSheetsApi } from '@/lib/api/task-sheets';
-import { employeesApi } from '@/lib/api/employees';
 import { api } from '@/lib/api/axios-instance';
 import { TaskEntry, TaskStatus } from '@/types';
 import { SearchableSelect } from '@/components/ui/searchable-select';
@@ -55,9 +54,6 @@ const emptyForm = {
   taskDescription: '',
   blockers: '',
   status: 'in_progress' as string,
-  // 'none' sentinel keeps the picker controlled when no approver is
-  // chosen; the mutation maps 'none' → undefined on the wire.
-  taskApproverId: 'none' as string,
 };
 
 const ACTIVITY_VALUES = new Set(['internal_meeting', 'client_meeting', 'others']);
@@ -338,15 +334,6 @@ function FillTaskSheetPage() {
     enabled: !!form.projectId && form.projectId !== 'other',
   });
 
-  // Active employees flagged `isTaskApprover` — populates the optional
-  // per-entry approver picker. Cached for the whole session because the
-  // list rarely changes during a sheet-fill flow.
-  const { data: taskApprovers } = useQuery({
-    queryKey: ['task-approvers'],
-    queryFn: () => employeesApi.getTaskApprovers().then((r) => r.data.data),
-    staleTime: 5 * 60 * 1000,
-  });
-
   // Add entry
   const addMutation = useMutation({
     mutationFn: (data: typeof emptyForm) => {
@@ -362,10 +349,6 @@ function FillTaskSheetPage() {
         // Empty string → omit so the backend stays at null.
         ...(data.blockers.trim() ? { blockers: data.blockers.trim() } : {}),
         status: data.status as TaskStatus,
-        // 'none' sentinel → omit so backend leaves it null.
-        ...(data.taskApproverId !== 'none'
-          ? { taskApproverId: Number(data.taskApproverId) }
-          : {}),
         ...ticketRef,
       });
     },
@@ -396,10 +379,6 @@ function FillTaskSheetPage() {
         // the value from a previously saved entry.
         blockers: data.blockers.trim() || null,
         status: data.status as TaskStatus,
-        // Always send the field on update — 'none' becomes null on the
-        // wire so the user can clear a previously chosen approver.
-        taskApproverId:
-          data.taskApproverId !== 'none' ? Number(data.taskApproverId) : null,
         ...ticketRef,
       });
     },
@@ -485,9 +464,6 @@ function FillTaskSheetPage() {
       taskDescription: entry.taskDescription,
       blockers: entry.blockers ?? '',
       status: entry.status,
-      taskApproverId: entry.taskApproverId
-        ? String(entry.taskApproverId)
-        : 'none',
     };
     setForm(seeded);
     // Snapshot the seeded values — every field is a primitive string
@@ -1121,28 +1097,6 @@ function FillTaskSheetPage() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-
-            {/* 7. Task Approver (optional) — runs alongside the
-                project's PM approval queue. Picking someone here means
-                they also see this entry in their inbox; leaving it
-                blank routes through the PM / HR-admin path only. */}
-            <div className="space-y-1.5">
-              <Label className="text-sm font-medium">
-                Approver <span className="text-xs text-muted-foreground font-normal">(optional)</span>
-              </Label>
-              <SearchableSelect
-                value={form.taskApproverId}
-                onValueChange={(v) => setForm((p) => ({ ...p, taskApproverId: v }))}
-                placeholder="Search approver..."
-                options={[
-                  { value: 'none', label: 'No approver — PM only' },
-                  ...((taskApprovers ?? []) as Array<{ id: number; name: string; empCode: string }>).map((a) => ({
-                    value: String(a.id),
-                    label: a.name,
-                  })),
-                ]}
-              />
             </div>
 
           </div>

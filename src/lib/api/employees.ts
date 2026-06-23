@@ -30,17 +30,6 @@ export const employeesApi = {
   getByType: (type: ConsultantType) =>
     api.get<ApiResponse<Employee[]>>(`/employees/by-type/${type}`),
 
-  /**
-   * Active employees with the `isTaskApprover` flag — populates the
-   * per-entry approver picker on the task sheet form. Available to
-   * any logged-in employee (route is on the colleague-facing
-   * controller, not the admin one).
-   */
-  getTaskApprovers: () =>
-    api.get<ApiResponse<Array<{ id: number; name: string; empCode: string }>>>(
-      '/employee/employees/task-approvers',
-    ),
-
   create: (dto: CreateEmployeeDto) => api.post<ApiResponse<Employee>>('/employees', dto),
 
   /**

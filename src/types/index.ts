@@ -416,7 +416,6 @@ export interface Employee {
   reportsTo?: { id: number; name: string; empCode: string } | null;
   isHr: boolean;
   isAccounts: boolean;
-  isTaskApprover: boolean;
   isActive: boolean;
   dateOfBirth?: string | null;
   joiningDate?: string | null;
@@ -469,7 +468,6 @@ export interface CreateEmployeeDto {
   reportsToId?: number | null;
   isHr?: boolean;
   isAccounts?: boolean;
-  isTaskApprover?: boolean;
   dateOfBirth?: string;
   joiningDate?: string;
   fillDaysOverride?: number | null;
@@ -495,7 +493,6 @@ export interface UpdateEmployeeDto {
   reportsToId?: number | null;
   isHr?: boolean;
   isAccounts?: boolean;
-  isTaskApprover?: boolean;
   isActive?: boolean;
   dateOfBirth?: string | null;
   joiningDate?: string | null;
@@ -534,10 +531,6 @@ export interface TaskEntry {
   toTime: string;
   durationHours: number;
   status: TaskStatus;
-  /** Per-entry task approver chosen at create time. Null = no approver
-   *  picked; the entry only routes through the PM / HR-admin path. */
-  taskApproverId?: number | null;
-  taskApprover?: { id: number; name: string } | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -590,10 +583,6 @@ export interface TaskSheetApproval {
   project?: { id: number; projectName: string; projectCode?: string } | null;
   pmId: number | null;
   pm?: { id: number; name: string } | null;
-  /** Snapshot of the entry's `taskApproverId` at submission time. The
-   *  chosen approver sees this row alongside the project's PM. */
-  taskApproverId?: number | null;
-  taskApprover?: { id: number; name: string } | null;
   round: number;
   status: TaskSheetApprovalRowStatus;
   notes: string | null;

@@ -55,7 +55,6 @@ export const taskSheetsApi = {
     taskDescription: string;
     blockers?: string | null;
     status?: TaskStatus;
-    taskApproverId?: number | null;
   }) =>
     api.post<ApiResponse<TaskEntry>>(`${base()}/${sheetId}/entries`, data),
 
@@ -69,7 +68,6 @@ export const taskSheetsApi = {
     taskDescription?: string;
     blockers?: string | null;
     status?: TaskStatus;
-    taskApproverId?: number | null;
   }) =>
     api.patch<ApiResponse<TaskEntry>>(`${base()}/${sheetId}/entries/${entryId}`, data),
 
