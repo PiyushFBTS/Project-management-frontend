@@ -50,6 +50,7 @@ const defaultForm = {
   isHr: false,
   isAccounts: false,
   isAdmin: false,
+  isTaskApprover: false,
   dateOfBirth: '',
   joiningDate: '',
   fillDaysOverride: '',
@@ -129,6 +130,7 @@ function NewEmployeeContent() {
       isHr: form.isHr,
       isAccounts: form.isAccounts,
       isAdmin: form.isAdmin,
+      isTaskApprover: form.isTaskApprover,
       dateOfBirth: form.dateOfBirth || undefined,
       joiningDate: form.joiningDate || undefined,
       fillDaysOverride: form.fillDaysOverride ? Number(form.fillDaysOverride) : null,
@@ -235,6 +237,12 @@ function NewEmployeeContent() {
                 <label className="flex items-center gap-2 h-9 text-sm cursor-pointer">
                   <input type="checkbox" checked={form.isAdmin} onChange={(e) => setForm((p) => ({ ...p, isAdmin: e.target.checked }))} className="h-4 w-4 rounded border-gray-300" />
                   <span>Grant full admin permissions</span>
+                </label>
+              </Field>
+              <Field label="Task Approver">
+                <label className="flex items-center gap-2 h-9 text-sm cursor-pointer">
+                  <input type="checkbox" checked={form.isTaskApprover} onChange={(e) => setForm((p) => ({ ...p, isTaskApprover: e.target.checked }))} className="h-4 w-4 rounded border-gray-300" />
+                  <span>Can be picked as approver on task entries</span>
                 </label>
               </Field>
             </div>

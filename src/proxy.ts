@@ -28,5 +28,13 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  // Skip the auth gate for API + Next.js internals + favicon AND any
+  // public/ asset whose pathname ends in a common image / font / static
+  // extension. Without this, the login page itself can't load
+  // `/ITSM_LOGO.png` (or any other public/ asset) because the proxy
+  // fires on the image request, sees no auth cookie, and 307s to
+  // /login — leaving a broken image icon.
+  matcher: [
+    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|webp|avif|ico|woff|woff2|ttf|otf)).*)',
+  ],
 };

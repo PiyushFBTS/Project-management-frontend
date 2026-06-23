@@ -11,6 +11,7 @@ import {
 import { toast } from 'sonner';
 import { useAuth } from '@/providers/auth-provider';
 import { taskSheetsApi } from '@/lib/api/task-sheets';
+import { employeesApi } from '@/lib/api/employees';
 import { api } from '@/lib/api/axios-instance';
 import { TaskEntry, TaskStatus } from '@/types';
 import { SearchableSelect } from '@/components/ui/searchable-select';
@@ -54,6 +55,9 @@ const emptyForm = {
   taskDescription: '',
   blockers: '',
   status: 'in_progress' as string,
+  // 'none' sentinel keeps the picker controlled when no approver is
+  // chosen; the mutation maps 'none' → undefined on the wire.
+  taskApproverId: 'none' as string,
 };
 
 const ACTIVITY_VALUES = new Set(['internal_meeting', 'client_meeting', 'others']);
@@ -334,6 +338,15 @@ function FillTaskSheetPage() {
     enabled: !!form.projectId && form.projectId !== 'other',
   });
 
+  // Active employees flagged `isTaskApprover` — populates the optional
+  // per-entry approver picker. Cached for the whole session because the
+  // list rarely changes during a sheet-fill flow.
+  const { data: taskApprovers } = useQuery({
+    queryKey: ['task-approvers'],
+    queryFn: () => employeesApi.getTaskApprovers().then((r) => r.data.data),
+    staleTime: 5 * 60 * 1000,
+  });
+
   // Add entry
   const addMutation = useMutation({
     mutationFn: (data: typeof emptyForm) => {
@@ -349,6 +362,10 @@ function FillTaskSheetPage() {
         // Empty string → omit so the backend stays at null.
         ...(data.blockers.trim() ? { blockers: data.blockers.trim() } : {}),
         status: data.status as TaskStatus,
+        // 'none' sentinel → omit so backend leaves it null.
+        ...(data.taskApproverId !== 'none'
+          ? { taskApproverId: Number(data.taskApproverId) }
+          : {}),
         ...ticketRef,
       });
     },
@@ -379,6 +396,10 @@ function FillTaskSheetPage() {
         // the value from a previously saved entry.
         blockers: data.blockers.trim() || null,
         status: data.status as TaskStatus,
+        // Always send the field on update — 'none' becomes null on the
+        // wire so the user can clear a previously chosen approver.
+        taskApproverId:
+          data.taskApproverId !== 'none' ? Number(data.taskApproverId) : null,
         ...ticketRef,
       });
     },
@@ -464,6 +485,9 @@ function FillTaskSheetPage() {
       taskDescription: entry.taskDescription,
       blockers: entry.blockers ?? '',
       status: entry.status,
+      taskApproverId: entry.taskApproverId
+        ? String(entry.taskApproverId)
+        : 'none',
     };
     setForm(seeded);
     // Snapshot the seeded values — every field is a primitive string
@@ -906,15 +930,22 @@ function FillTaskSheetPage() {
 
       {/* Add / Edit Entry Dialog */}
       <Dialog open={formOpen} onOpenChange={(v) => { if (!v) closeForm(); }}>
-        <DialogContent className="max-w-md overflow-hidden">
+        {/* Cap the dialog height to roughly 85vh and lay it out as a
+            flex column so the form body can scroll independently
+            while the title and the action buttons stay pinned. */}
+        <DialogContent className="max-w-md max-h-[85vh] flex flex-col gap-0 p-0 overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-blue-500 to-blue-700" />
-          <DialogHeader>
+          <DialogHeader className="px-6 pt-6 pb-3 shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-violet-500" />
               {editingEntry ? 'Edit Task Entry' : 'Add Task Entry'}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          {/* Scrollable body — every form field lives here. The
+              outer flex-1 makes this region absorb leftover height;
+              overflow-y-auto turns on the scrollbar only when the
+              content actually exceeds it. */}
+          <div className="flex-1 overflow-y-auto px-6 py-2 space-y-4">
             {/* 1. Project (required - searchable) */}
             <div className="space-y-1.5">
               <Label className="text-sm font-medium">Project <span className="text-destructive">*</span></Label>
@@ -1092,28 +1123,52 @@ function FillTaskSheetPage() {
               </Select>
             </div>
 
-            {/* Actions */}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" size="sm" onClick={closeForm}>
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                className="bg-linear-to-r from-blue-600 to-blue-800 text-white hover:opacity-90 shadow-sm shadow-blue-500/25 border-0"
-                // Same idea as the "Update Sheet" gate: in Edit mode
-                // the button stays disabled until the user actually
-                // changes a field. Add mode is never gated this way.
-                disabled={isSaving || (!!editingEntry && !editHasChanges)}
-                title={
-                  editingEntry && !editHasChanges
-                    ? 'No changes to update'
-                    : undefined
-                }
-                onClick={handleSave}
-              >
-                {isSaving ? 'Saving...' : editingEntry ? 'Update Entry' : 'Add Entry'}
-              </Button>
+            {/* 7. Task Approver (optional) — runs alongside the
+                project's PM approval queue. Picking someone here means
+                they also see this entry in their inbox; leaving it
+                blank routes through the PM / HR-admin path only. */}
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">
+                Approver <span className="text-xs text-muted-foreground font-normal">(optional)</span>
+              </Label>
+              <SearchableSelect
+                value={form.taskApproverId}
+                onValueChange={(v) => setForm((p) => ({ ...p, taskApproverId: v }))}
+                placeholder="Search approver..."
+                options={[
+                  { value: 'none', label: 'No approver — PM only' },
+                  ...((taskApprovers ?? []) as Array<{ id: number; name: string; empCode: string }>).map((a) => ({
+                    value: String(a.id),
+                    label: a.name,
+                  })),
+                ]}
+              />
             </div>
+
+          </div>
+          {/* Sticky footer — sits outside the scrollable body so the
+              Cancel / Save buttons remain visible no matter how far
+              the user has scrolled the form. */}
+          <div className="shrink-0 flex justify-end gap-2 px-6 py-3 border-t bg-background">
+            <Button variant="outline" size="sm" onClick={closeForm}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="bg-linear-to-r from-blue-600 to-blue-800 text-white hover:opacity-90 shadow-sm shadow-blue-500/25 border-0"
+              // Same idea as the "Update Sheet" gate: in Edit mode
+              // the button stays disabled until the user actually
+              // changes a field. Add mode is never gated this way.
+              disabled={isSaving || (!!editingEntry && !editHasChanges)}
+              title={
+                editingEntry && !editHasChanges
+                  ? 'No changes to update'
+                  : undefined
+              }
+              onClick={handleSave}
+            >
+              {isSaving ? 'Saving...' : editingEntry ? 'Update Entry' : 'Add Entry'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

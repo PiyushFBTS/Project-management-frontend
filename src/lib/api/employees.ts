@@ -30,7 +30,38 @@ export const employeesApi = {
   getByType: (type: ConsultantType) =>
     api.get<ApiResponse<Employee[]>>(`/employees/by-type/${type}`),
 
+  /**
+   * Active employees with the `isTaskApprover` flag — populates the
+   * per-entry approver picker on the task sheet form. Available to
+   * any logged-in employee (route is on the colleague-facing
+   * controller, not the admin one).
+   */
+  getTaskApprovers: () =>
+    api.get<ApiResponse<Array<{ id: number; name: string; empCode: string }>>>(
+      '/employee/employees/task-approvers',
+    ),
+
   create: (dto: CreateEmployeeDto) => api.post<ApiResponse<Employee>>('/employees', dto),
+
+  /**
+   * Narrow payroll-identity update — admin / HR / accounts. Backs the
+   * Payroll Identity card on the employee detail page. Accepts only
+   * PAN / UAN / PF / bank / Annual CTC so accounts users can't reach
+   * role / HR / admin toggles via this route.
+   */
+  updatePayrollIdentity: (
+    id: number,
+    dto: {
+      panNumber?: string;
+      uanNumber?: string;
+      pfNumber?: string;
+      bankName?: string;
+      bankAccountNo?: string;
+      bankIfsc?: string;
+      annualCTC?: number | null;
+    },
+  ) =>
+    api.patch<ApiResponse<Employee>>(`/employees/${id}/payroll-identity`, dto),
 
   update: (id: number, dto: UpdateEmployeeDto) =>
     api.patch<ApiResponse<Employee>>(`/employees/${id}`, dto),

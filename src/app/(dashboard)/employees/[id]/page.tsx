@@ -227,6 +227,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
   const [editIsHr, setEditIsHr] = useState(false);
   const [editIsAccounts, setEditIsAccounts] = useState(false);
   const [editIsAdmin, setEditIsAdmin] = useState(false);
+  const [editIsTaskApprover, setEditIsTaskApprover] = useState(false);
   const [editFillDays, setEditFillDays] = useState('');
   const [editAnnualCTC, setEditAnnualCTC] = useState('');
   const [editBloodGroup, setEditBloodGroup] = useState('');
@@ -516,6 +517,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
     setEditIsHr(!!emp.isHr);
     setEditIsAccounts(!!(emp as any).isAccounts);
     setEditIsAdmin(!!(emp as any).isAdmin);
+    setEditIsTaskApprover(!!(emp as any).isTaskApprover);
     setEditFillDays(emp.fillDaysOverride != null ? String(emp.fillDaysOverride) : '');
     setEditAnnualCTC(emp.annualCTC != null ? String(emp.annualCTC) : '');
     setEditBloodGroup(emp.bloodGroup ?? '');
@@ -580,9 +582,9 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
         consultantType: editType, department: editDepartment || undefined,
         joiningDate: editJoiningDate || undefined,
         isHr: editIsHr, isAccounts: editIsAccounts, isAdmin: editIsAdmin,
+        isTaskApprover: editIsTaskApprover,
         reportsToId,
         fillDaysOverride: editFillDays ? Number(editFillDays) : null,
-        annualCTC: editAnnualCTC ? Number(editAnnualCTC) : null,
         bloodGroup: editBloodGroup || undefined,
         maritalStatus: editMaritalStatus || undefined,
         isActive: editIsActive,
@@ -616,25 +618,30 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
     setEditBankName((emp as any).bankName ?? '');
     setEditBankAccountNo((emp as any).bankAccountNo ?? '');
     setEditBankIfsc((emp as any).bankIfsc ?? '');
+    setEditAnnualCTC(emp.annualCTC != null ? String(emp.annualCTC) : '');
     setEditPayrollMode(true);
   };
 
   /**
-   * Update only the payroll identity fields. Hits the same admin
-   * employees endpoint as the personal-info save — the backend's
-   * `Object.assign(employee, dto)` only touches the keys we send.
+   * Update only the payroll identity fields. Hits the dedicated
+   * payroll endpoint (admin / HR / accounts) instead of the admin-only
+   * `/employees/:id` route — so accounts users can edit bank / PAN /
+   * Annual CTC without inheriting access to role or HR toggles.
    */
   const savePayrollMut = useMutation({
     mutationFn: async () => {
-      const dto: any = {
+      const dto = {
         panNumber: editPanNumber || undefined,
         uanNumber: editUanNumber || undefined,
         pfNumber: editPfNumber || undefined,
         bankName: editBankName || undefined,
         bankAccountNo: editBankAccountNo || undefined,
         bankIfsc: editBankIfsc || undefined,
+        // Cleared field → null so the backend overwrites the column.
+        // Sending `undefined` would let the server skip it.
+        annualCTC: editAnnualCTC ? Number(editAnnualCTC) : null,
       };
-      return employeesApi.update(Number(id), dto);
+      return employeesApi.updatePayrollIdentity(Number(id), dto);
     },
     onSuccess: async () => {
       toast.success('Payroll identity updated');
@@ -882,7 +889,24 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                       </div>
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Date of Birth</p>
-                        {editMode ? <Input type="date" value={editDob} onChange={(e) => setEditDob(e.target.value)} className="h-8 text-sm" /> : <p className="text-sm font-medium">{emp.dateOfBirth ? format(new Date(emp.dateOfBirth + 'T00:00:00'), 'dd MMM yyyy') : '—'}</p>}
+                        {editMode ? (
+                          <Input type="date" value={editDob} onChange={(e) => setEditDob(e.target.value)} className="h-8 text-sm" />
+                        ) : (
+                          <p className="text-sm font-medium">
+                            {emp.dateOfBirth
+                              ? (() => {
+                                  // Only admin / HR / the employee themselves
+                                  // see the full year. Everyone else (plain
+                                  // colleagues) gets the year masked — e.g.
+                                  // "08 Jun 19**" — so birthdays stay
+                                  // shareable without revealing age.
+                                  const full = format(new Date(emp.dateOfBirth + 'T00:00:00'), 'dd MMM yyyy');
+                                  if (canManageAllDocs || isSelf) return full;
+                                  return full.slice(0, -2) + '**';
+                                })()
+                              : '—'}
+                          </p>
+                        )}
                       </div>
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">User Role</p>
@@ -1001,6 +1025,13 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                               {editIsAdmin ? 'Yes' : 'No'}
                             </label>
                           </div>
+                          <div>
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Task Approver</p>
+                            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                              <input type="checkbox" checked={editIsTaskApprover} onChange={(e) => setEditIsTaskApprover(e.target.checked)} className="h-4 w-4 rounded border-gray-300" />
+                              {editIsTaskApprover ? 'Yes' : 'No'}
+                            </label>
+                          </div>
                         </>
                       )}
                       <div>
@@ -1048,14 +1079,6 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                           <p className="text-sm font-medium">{emp.maritalStatus || '—'}</p>
                         )}
                       </div>
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Annual CTC</p>
-                        {editMode && canManageAllDocs ? (
-                          <Input type="number" min={0} step="1000" placeholder="e.g. 600000" value={editAnnualCTC} onChange={(e) => setEditAnnualCTC(e.target.value)} className="h-8 text-sm" />
-                        ) : (
-                          <p className="text-sm font-medium">{emp.annualCTC ? `₹${Number(emp.annualCTC).toLocaleString('en-IN')}` : '—'}</p>
-                        )}
-                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -1095,10 +1118,10 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                 {/* Payroll Identity — separate form. Visible to admin /
                     HR / accounts on every profile; plain employees only
                     see this section on their own page (other people's
-                    bank / PAN data stays private). Independent Edit /
-                    Save / Cancel so bank-info changes don't have to be
-                    bundled with personal-info edits. */}
-                {(canManageAllDocs || isSelf) && (
+                    bank / PAN / CTC data stays private). Independent
+                    Edit / Save / Cancel so bank-info changes don't
+                    have to be bundled with personal-info edits. */}
+                {(canManageAllDocs || isAccounts || isSelf) && (
                   <Card className="shadow-sm">
                     <CardContent className="px-5 py-4">
                       <div className="flex items-center justify-between mb-4">
@@ -1109,7 +1132,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                         {/* Only admin / HR / accounts can mutate these.
                             Plain employees (looking at their own page)
                             see read-only values. */}
-                        {canManageAllDocs && !editPayrollMode && (
+                        {(canManageAllDocs || isAccounts) && !editPayrollMode && (
                           <Button size="sm" variant="outline" onClick={startEditPayroll}>Edit</Button>
                         )}
                         {editPayrollMode && (
@@ -1170,6 +1193,31 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                           onChange={setEditBankIfsc}
                           placeholder="e.g. HDFC0004017"
                         />
+                        {/* Annual CTC — moved here from the personal
+                            info section so only admin / HR / accounts /
+                            self can see it, matching the rest of the
+                            payroll fields. Custom render because CTC
+                            wants ₹-formatted read + number-typed input. */}
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Annual CTC</p>
+                          {editPayrollMode ? (
+                            <Input
+                              type="number"
+                              min={0}
+                              step="1000"
+                              placeholder="e.g. 600000"
+                              value={editAnnualCTC}
+                              onChange={(e) => setEditAnnualCTC(e.target.value)}
+                              className="h-8 text-sm"
+                            />
+                          ) : (
+                            <p className="text-sm font-medium">
+                              {emp.annualCTC
+                                ? `₹${Number(emp.annualCTC).toLocaleString('en-IN')}`
+                                : '—'}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </CardContent>
                   </Card>

@@ -36,6 +36,7 @@ const typeConfig: Record<NotificationType, {
   task_sheet_pm_approval_pending: { icon: ClipboardCheck, iconBg: 'bg-amber-100 dark:bg-amber-500/15',    iconColor: 'text-amber-600 dark:text-amber-400',     label: 'Approval' },
   task_sheet_pm_approved:         { icon: ClipboardCheck, iconBg: 'bg-emerald-100 dark:bg-emerald-500/15', iconColor: 'text-emerald-600 dark:text-emerald-400', label: 'Approval' },
   task_sheet_pm_rejected:         { icon: ClipboardCheck, iconBg: 'bg-red-100 dark:bg-red-500/15',         iconColor: 'text-red-600 dark:text-red-400',         label: 'Approval' },
+  task_sheet_resubmitted:         { icon: ClipboardCheck, iconBg: 'bg-violet-100 dark:bg-violet-500/15',   iconColor: 'text-violet-600 dark:text-violet-400',   label: 'Approval' },
   leave_request_submitted:        { icon: CalendarPlus,  iconBg: 'bg-orange-100 dark:bg-orange-500/15',   iconColor: 'text-orange-600 dark:text-orange-400',   label: 'Leave' },
   leave_request_manager_approved: { icon: CalendarCheck, iconBg: 'bg-blue-100 dark:bg-blue-500/15',       iconColor: 'text-blue-600 dark:text-blue-400',       label: 'Leave' },
   leave_request_manager_rejected: { icon: CalendarX,     iconBg: 'bg-red-100 dark:bg-red-500/15',         iconColor: 'text-red-600 dark:text-red-400',         label: 'Leave' },
@@ -68,6 +69,9 @@ function getNotificationRoute(notif: Notification, isEmployee: boolean): string 
     case 'task_sheet_submitted':
       return meta?.sheetId ? `/task-sheets/${meta.sheetId}` : '/task-sheets';
     case 'task_sheet_pm_approval_pending':
+    case 'task_sheet_resubmitted':
+      // Resubmits ping the PM AND the chosen task approver — both
+      // want the approval inbox, not the employee's own sheet view.
       return '/task-approvals';
     case 'task_sheet_pm_approved':
     case 'task_sheet_pm_rejected':
