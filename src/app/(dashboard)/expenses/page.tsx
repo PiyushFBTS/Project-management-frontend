@@ -198,10 +198,13 @@ export default function ExpensesPage() {
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to add expense'),
   });
 
+  // Expense pending delete confirmation (null = modal closed).
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+
   // Delete expense
   const deleteMut = useMutation({
     mutationFn: (id: number) => isAdmin ? adminExpensesApi.delete(id) : expensesApi.delete(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); toast.success('Deleted'); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['expenses'] }); toast.success('Deleted'); setDeleteTarget(null); },
     onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed'),
   });
 
@@ -479,7 +482,7 @@ export default function ExpensesPage() {
                 size="sm"
                 variant="ghost"
                 className={`text-red-500 hover:text-red-600 ${canActionRow ? '' : 'ml-auto'}`}
-                onClick={() => deleteMut.mutate(exp.id)}
+                onClick={() => setDeleteTarget(exp)}
                 title="Delete"
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -675,7 +678,7 @@ export default function ExpensesPage() {
                                 );
                               })()}
                               {(isAdmin || (isEmployee && exp.status === 'pending')) && (
-                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500" onClick={() => deleteMut.mutate(exp.id)} title="Delete">
+                                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500" onClick={() => setDeleteTarget(exp)} title="Delete">
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
                               )}
@@ -765,7 +768,7 @@ export default function ExpensesPage() {
                       <td className="px-3 py-2 text-center" onClick={(ev) => ev.stopPropagation()}>
                         <div className="flex items-center justify-center gap-1">
                           {(isAdmin || (isEmployee && exp.status === 'pending')) && (
-                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500" onClick={() => deleteMut.mutate(exp.id)} title="Delete">
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-500" onClick={() => setDeleteTarget(exp)} title="Delete">
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           )}
@@ -965,6 +968,35 @@ export default function ExpensesPage() {
               To attach files: put the filename (e.g. receipt.jpg) in the Attachment column, then select Excel + files together.
             </p>
             <Button onClick={() => setImportDialogOpen(false)}>Close</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation modal */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-red-500" /> Delete expense?
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will permanently delete this expense
+            {deleteTarget ? (
+              <> — <span className="font-semibold text-foreground">{deleteTarget.expenseType}</span>
+                {' '}({'₹'}{Number(deleteTarget.amount || 0).toLocaleString('en-IN')})</>
+            ) : null}. This action cannot be undone.
+          </p>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteMut.isPending}
+              onClick={() => deleteTarget && deleteMut.mutate(deleteTarget.id)}
+            >
+              {deleteMut.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Trash2 className="h-4 w-4 mr-1" />}
+              Delete
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

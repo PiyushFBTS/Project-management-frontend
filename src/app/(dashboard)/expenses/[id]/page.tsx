@@ -43,6 +43,7 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
   const [approveOpen, setApproveOpen] = useState(false);
   const [approveAmount, setApproveAmount] = useState('');
   const [approveRemarks, setApproveRemarks] = useState('');
+  const [deleteOpen, setDeleteOpen] = useState(false);
   // Set to true when the inline image preview fails to load (e.g. the
   // file was uploaded to an ephemeral disk that's since been wiped, or
   // CORS / server hiccup). We then fall back to the same file-card UI
@@ -421,7 +422,7 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
 
           {(isAdmin || (isEmployee && e.status === 'pending')) && (
             <Button variant="outline" className="w-full text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
-              onClick={() => { if (confirm('Delete this expense?')) deleteMut.mutate(); }}>
+              onClick={() => setDeleteOpen(true)}>
               <Trash2 className="h-4 w-4 mr-1.5" /> Delete
             </Button>
           )}
@@ -509,6 +510,24 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
                 Reject
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation modal */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Trash2 className="h-5 w-5 text-red-500" /> Delete expense?</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will permanently delete this expense — <span className="font-semibold text-foreground">{e.expenseType}</span>
+            {' '}({'₹'}{Number(e.amount || 0).toLocaleString('en-IN')}). This action cannot be undone.
+          </p>
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+            <Button variant="destructive" disabled={deleteMut.isPending} onClick={() => deleteMut.mutate()}>
+              {deleteMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Trash2 className="h-4 w-4 mr-1" />}
+              Delete
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

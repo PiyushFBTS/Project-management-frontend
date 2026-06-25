@@ -8,7 +8,7 @@ import {
   LayoutDashboard, FolderKanban, Tags, Users, Receipt,
   ClipboardList, BarChart3, ChevronDown, X,
   ChevronLeft, ChevronRight, CalendarDays, Building2, LogOut, Settings, Ticket, Mail,
-  Megaphone, Wallet, Layers, Laptop2,
+  Megaphone, Wallet, Layers, Laptop2, Inbox,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -20,6 +20,7 @@ import { useSidebar } from '@/providers/sidebar-provider';
 import { useAuth } from '@/providers/auth-provider';
 import { useCompany } from '@/providers/company-provider';
 import { pmTaskApprovalsApi } from '@/lib/api/task-sheets';
+import { requestsApi, adminRequestsApi, hrRequestsApi } from '@/lib/api/requests';
 import { ClipboardCheck } from 'lucide-react';
 
 type NavChild = { label: string; href: string; dotColor: string; hrOrAdminOnly?: boolean };
@@ -121,6 +122,14 @@ const navItems: NavItem[] = [
     iconColor: 'text-lime-400', iconBg: 'bg-lime-500/20',
     activeBg: 'bg-lime-500/20', hoverBg: 'hover:bg-lime-500/10',
     borderColor: 'border-l-lime-400', dotColor: 'bg-lime-400',
+  },
+  {
+    // "Raise a Request" — employees file requests, admin / HR review.
+    // Visible to everyone; the page itself splits into My / All tabs.
+    label: 'Requests', href: '/requests', icon: Inbox,
+    iconColor: 'text-fuchsia-400', iconBg: 'bg-fuchsia-500/20',
+    activeBg: 'bg-fuchsia-500/20', hoverBg: 'hover:bg-fuchsia-500/10',
+    borderColor: 'border-l-fuchsia-400', dotColor: 'bg-fuchsia-400',
   },
   {
     label: 'Salary Slips', href: '/salary-slips', icon: Wallet,
@@ -228,6 +237,28 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isCli
     refetchOnWindowFocus: true,
   });
   const pendingApprovalsCount = pendingApprovalRows?.length ?? 0;
+
+  // Pending-request count for the "Requests" entry. Reviewers (admin / HR)
+  // see the whole company queue; plain employees see only the pending count
+  // for the team(s) they belong to (0 if none, so no badge). We read
+  // `meta.total` so the count reflects the full queue, not one page.
+  const requestsBadgeEnabled = approvalsEnabled;
+  const { data: pendingRequestsCount } = useQuery({
+    queryKey: ['sidebar-pending-requests', selectedCompany?.id ?? null],
+    queryFn: async () => {
+      let r;
+      if (!isEmployee) r = await adminRequestsApi.getAll({ status: 'pending', limit: 1 });
+      else if (isHr) r = await hrRequestsApi.getAll({ status: 'pending', limit: 1 });
+      else r = await requestsApi.getTeamQueue({ status: 'pending', limit: 1 });
+      const body = r.data?.data ?? r.data;
+      return body?.meta?.total ?? (Array.isArray(body) ? body.length : body?.data?.length ?? 0);
+    },
+    enabled: requestsBadgeEnabled,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+  const requestsCount = pendingRequestsCount ?? 0;
+
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     Reports: pathname.startsWith('/reports'),
     'Leave Management': pathname.startsWith('/leave-r') || pathname.startsWith('/holidays'),
@@ -371,8 +402,13 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isCli
         }
 
         const isActive = pathname === item.href;
-        const showApprovalsBadge =
-          item.label === 'My Approvals' && pendingApprovalsCount > 0;
+        // Generic count badge — "My Approvals" and "Requests" both surface
+        // a pending count the same way.
+        const badgeCount =
+          item.label === 'My Approvals' ? pendingApprovalsCount
+          : item.label === 'Requests' ? requestsCount
+          : 0;
+        const showBadge = badgeCount > 0;
 
         if (collapsed) {
           return (
@@ -380,7 +416,7 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isCli
               key={item.href}
               href={item.href!}
               onClick={onNavigate}
-              title={showApprovalsBadge ? `${item.label} (${pendingApprovalsCount})` : item.label}
+              title={showBadge ? `${item.label} (${badgeCount})` : item.label}
               className={cn(
                 'relative flex items-center justify-center rounded-lg p-2 transition-all',
                 item.hoverBg, 'hover:text-gray-900 dark:hover:text-white',
@@ -393,7 +429,7 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isCli
               )}>
                 <item.icon className={cn('h-4 w-4 transition-colors', isActive ? item.iconColor : 'text-gray-400 dark:text-slate-500')} />
               </div>
-              {showApprovalsBadge && (
+              {showBadge && (
                 <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-sidebar" />
               )}
             </Link>
@@ -420,12 +456,12 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isCli
               <item.icon className={cn('h-4 w-4 transition-colors', isActive ? item.iconColor : 'text-gray-400 dark:text-slate-500')} />
             </div>
             {item.label}
-            {showApprovalsBadge && (
+            {showBadge && (
               <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-semibold leading-none text-white">
-                {pendingApprovalsCount > 99 ? '99+' : pendingApprovalsCount}
+                {badgeCount > 99 ? '99+' : badgeCount}
               </span>
             )}
-            {isActive && !showApprovalsBadge && (
+            {isActive && !showBadge && (
               <div className={cn('ml-auto h-1.5 w-1.5 rounded-full', item.dotColor)} />
             )}
           </Link>
