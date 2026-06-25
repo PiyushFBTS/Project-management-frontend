@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/providers/auth-provider';
 import { employeesApi } from '@/lib/api/employees';
 import {
   salarySlipsApi,
@@ -60,16 +61,23 @@ export function SalarySlipForm(props: {
   // In edit mode we still load it so the header card on the form shows
   // the recipient's name/code, but we don't auto-fill the form fields
   // (those should already be set from the slip itself).
+  // Caller role drives which employee-read endpoint we use. Admins hit the
+  // admin routes; HR / Accounts are `_type === 'employee'` and CANNOT call
+  // the admin-only `/employees/:id` (it 403s, leaving the form blank), so
+  // they read via `/employee/employees/:id`, which exposes payroll identity
+  // to HR/Accounts.
+  const { user } = useAuth();
+  const callerIsAdmin = user?._type === 'admin';
+
   const { data: empRaw } = useQuery({
-    queryKey: ['employee-for-slip', targetType, employeeId],
+    queryKey: ['employee-for-slip', targetType, employeeId, callerIsAdmin],
     queryFn: async () => {
-      // Try the admin endpoint first since the create/edit pages are
-      // gated to admin/HR/accounts. The response shape is `{ data: ... }`
-      // so unwrap defensively.
-      const r =
-        targetType === 'admin'
+      // Response shape is `{ data: ... }` so unwrap defensively.
+      const r = callerIsAdmin
+        ? targetType === 'admin'
           ? await employeesApi.getAdmin(employeeId)
-          : await employeesApi.getOne(employeeId);
+          : await employeesApi.getOne(employeeId)
+        : await employeesApi.employeeGetOne(employeeId);
       return r.data?.data ?? r.data;
     },
     enabled: !!employeeId,
@@ -180,9 +188,12 @@ export function SalarySlipForm(props: {
     // typed it). If it's blank or zero, pull from the employee's annual
     // CTC — covers both first-slip and "prior slip never had CTC set".
     const numIsEmpty = (s: string) => !s || Number(s) === 0;
+    // The user record serializes the column as `annualCtc`; tolerate the
+    // legacy `annualCTC` casing too.
+    const annualCtc = emp.annualCtc ?? emp.annualCTC;
     let derivedCtc = monthlyCtc ? Number(monthlyCtc) : 0;
-    if (numIsEmpty(monthlyCtc) && emp.annualCTC) {
-      derivedCtc = Math.round(Number(emp.annualCTC) / 12);
+    if (numIsEmpty(monthlyCtc) && annualCtc) {
+      derivedCtc = Math.round(Number(annualCtc) / 12);
       setMonthlyCtc(String(derivedCtc));
     }
 

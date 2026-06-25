@@ -12,9 +12,7 @@ import { employeesApi } from '@/lib/api/employees';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -47,33 +45,50 @@ export default function TaskSheetsPage() {
   const [fromDate, setFromDate] = useState(monthStart);
   const [toDate, setToDate] = useState(today);
   const [empId, setEmpId] = useState<string>('');
-  const [submitted, setSubmitted] = useState<string>('');
+  // Selected employee's name, kept so the trigger label survives refetches
+  // when server-search returns a page that no longer includes them.
+  const [empName, setEmpName] = useState<string>('');
+  // Server-side search term (admin only — getAll supports `search`).
+  const [empSearch, setEmpSearch] = useState<string>('');
 
-  // Employee list for the team filter. Admin/HR → all employees; a
-  // reporting manager → only their direct reports (scoped server-side).
-  const { data: employees } = useQuery({
-    queryKey: ['task-sheet-filter-employees', isAdmin],
+  // Employee list for the team filter. Admin → server-searched (so all
+  // employees are findable past the 100 cap); a reporting manager / HR →
+  // their full scoped list (filtered client-side). Sorted alphabetically.
+  const { data: employees, isFetching: empFetching } = useQuery({
+    queryKey: ['task-sheet-filter-employees', isAdmin, empSearch],
     queryFn: async () => {
-      if (isAdmin) {
-        const r = await employeesApi.getAll({ limit: 200 });
-        return (r.data.data ?? []).map((e: any) => ({ id: e.id, name: e.name }));
-      }
-      const r = await taskSheetsApi.teamEmployees();
-      return (r.data.data ?? []).map((e: any) => ({ id: e.id, name: e.name }));
+      const r = isAdmin
+        ? await employeesApi.getAll({ search: empSearch || undefined, isActive: true, limit: 100 })
+        : await taskSheetsApi.teamEmployees();
+      const body: any = r.data?.data ?? r.data;
+      const list: any[] = Array.isArray(body) ? body : (body?.data ?? []);
+      return list
+        .map((e: any) => ({ id: e.id as number, name: (e.name ?? '') as string }))
+        .sort((a, b) => a.name.localeCompare(b.name));
     },
     enabled: canSeeTeam,
+    placeholderData: (prev) => prev, // avoid flicker while typing a search
   });
+
+  // Options for the picker: "All Employees" + the (sorted) list. Keep the
+  // selected employee pinned even if the current server page excludes them.
+  const empOptions = [
+    { value: '', label: 'All Employees' },
+    ...(empId && empName && !(employees ?? []).some((e) => String(e.id) === empId)
+      ? [{ value: empId, label: empName }]
+      : []),
+    ...(employees ?? []).map((e) => ({ value: String(e.id), label: e.name })),
+  ];
 
   // Team tab: admin / HR → whole company; reporting manager → direct
   // reports. Backend enforces the scope; we just choose the route.
   const { data: teamData, isLoading: teamLoading } = useQuery({
-    queryKey: ['task-sheets-team', isAdmin, fromDate, toDate, empId, submitted],
+    queryKey: ['task-sheets-team', isAdmin, fromDate, toDate, empId],
     queryFn: () => {
       const params = {
         fromDate,
         toDate,
         employeeId: empId ? Number(empId) : undefined,
-        isSubmitted: submitted === '' ? undefined : submitted === 'true',
         limit: 100,
       };
       return (isAdmin ? taskSheetsApi.adminGetAll(params) : taskSheetsApi.teamGetAll(params))
@@ -164,24 +179,21 @@ export default function TaskSheetsPage() {
           <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="flex-1 sm:w-36" />
         </div>
         {canSeeTeam && activeTab === 'team' && (
-          <>
-            <Select value={empId || 'all'} onValueChange={(v) => setEmpId(v === 'all' ? '' : v)}>
-              <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="All employees" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Employees</SelectItem>
-                {(employees ?? []).map((e) => (
-                  <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={submitted || 'all'} onValueChange={(v) => setSubmitted(v === 'all' ? '' : v)}>
-              <SelectTrigger className="w-full sm:w-36"><SelectValue placeholder="All status" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="true">Submitted</SelectItem>
-              </SelectContent>
-            </Select>
-          </>
+          <SearchableSelect
+            value={empId}
+            onValueChange={(v) => {
+              setEmpId(v);
+              // Remember the chosen name so the trigger keeps showing it.
+              setEmpName(v ? (empOptions.find((o) => o.value === v)?.label ?? '') : '');
+            }}
+            options={empOptions}
+            // Admin uses server search (find anyone past the 100 cap);
+            // manager/HR filter their full scoped list client-side.
+            onSearch={isAdmin ? setEmpSearch : undefined}
+            loading={isAdmin && empFetching}
+            placeholder="All Employees"
+            className="w-full sm:w-56"
+          />
         )}
       </div>
 

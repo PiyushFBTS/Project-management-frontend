@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { Search, Check, ChevronDown, X } from 'lucide-react';
+import { Search, Check, ChevronDown, X, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface SearchableSelectOption {
@@ -16,6 +16,15 @@ interface SearchableSelectProps {
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  /**
+   * Optional server-driven search. When provided, the component stops
+   * filtering `options` locally and instead calls `onSearch` (debounced) so
+   * the parent can refetch matching options. Leave undefined for the default
+   * client-side filtering over the supplied `options`.
+   */
+  onSearch?: (query: string) => void;
+  /** Show a spinner row while the parent is fetching (server-search mode). */
+  loading?: boolean;
 }
 
 export function SearchableSelect({
@@ -25,18 +34,35 @@ export function SearchableSelect({
   placeholder = 'Select...',
   disabled = false,
   className,
+  onSearch,
+  loading = false,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState('');
   const [openUpward, setOpenUpward] = React.useState(false);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectedLabel = options.find((o) => o.value === value)?.label;
 
-  const filtered = search
-    ? options.filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
-    : options;
+  // Server-search mode hands filtering to the parent; client mode filters the
+  // supplied options by label.
+  const filtered = onSearch
+    ? options
+    : search
+      ? options.filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
+      : options;
+
+  // Debounced server-search dispatch.
+  const emitSearch = React.useCallback(
+    (q: string) => {
+      if (!onSearch) return;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => onSearch(q), 250);
+    },
+    [onSearch],
+  );
 
   // Close on outside click
   React.useEffect(() => {
@@ -48,6 +74,11 @@ export function SearchableSelect({
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Clear any pending debounce timer on unmount.
+  React.useEffect(() => () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
   }, []);
 
   const handleOpen = () => {
@@ -114,12 +145,22 @@ export function SearchableSelect({
             <input
               ref={inputRef}
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                emitSearch(e.target.value);
+              }}
               placeholder="Search..."
               className="placeholder:text-muted-foreground w-full bg-transparent text-sm outline-none"
             />
-            {search && (
-              <button onClick={() => setSearch('')} className="text-muted-foreground hover:text-foreground ml-1">
+            {loading && <Loader2 className="text-muted-foreground ml-1 size-3.5 animate-spin" />}
+            {search && !loading && (
+              <button
+                onClick={() => {
+                  setSearch('');
+                  emitSearch('');
+                }}
+                className="text-muted-foreground hover:text-foreground ml-1"
+              >
                 <X className="size-3.5" />
               </button>
             )}
@@ -127,7 +168,11 @@ export function SearchableSelect({
 
           {/* Options list */}
           <div className="max-h-[200px] overflow-y-auto p-1">
-            {filtered.length === 0 ? (
+            {loading && filtered.length === 0 ? (
+              <div className="text-muted-foreground flex items-center justify-center gap-2 py-4 text-sm">
+                <Loader2 className="size-4 animate-spin" /> Searching…
+              </div>
+            ) : filtered.length === 0 ? (
               <div className="text-muted-foreground py-4 text-center text-sm">No results found</div>
             ) : (
               filtered.map((option) => (

@@ -7,20 +7,16 @@ import Link from 'next/link';
 import {
   Search, ClipboardList, Eye, X, CalendarDays, Clock, Award,
   CheckCircle2, FileEdit, ChevronRight, User, Users, Building2,
-  AlertCircle, Filter, RefreshCw, Download,
+  AlertCircle, RefreshCw, Download,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { taskSheetsApi } from '@/lib/api/task-sheets';
-import { employeesApi } from '@/lib/api/employees';
 import { downloadBlob } from '@/lib/utils/download';
 import { useAuth } from '@/providers/auth-provider';
 import { useCompany } from '@/providers/company-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import type { DailyTaskSheet } from '@/types';
 
 function initialsOf(name: string): string {
@@ -57,8 +53,6 @@ export default function SheetHistoryReportPage() {
   const [tab, setTab] = useState<'mine' | 'team'>('mine');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [employeeId, setEmployeeId] = useState<string>('all');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'submitted' | 'draft'>('all');
   const [search, setSearch] = useState('');
 
   const extractRows = (r: unknown): DailyTaskSheet[] => {
@@ -83,21 +77,14 @@ export default function SheetHistoryReportPage() {
   });
 
   const { data: teamRaw, isLoading: teamLoading, error: teamError } = useQuery({
-    queryKey: ['sheet-history-team', fromDate, toDate, employeeId, selectedCompany?.id ?? null],
+    queryKey: ['sheet-history-team', fromDate, toDate, selectedCompany?.id ?? null],
     queryFn: () => taskSheetsApi.adminGetAll({
       ...(fromDate ? { fromDate } : {}),
       ...(toDate ? { toDate } : {}),
-      employeeId: employeeId === 'all' ? undefined : Number(employeeId),
       page: 1,
       limit: PAGE_LIMIT,
     }).then(extractRows),
     enabled: !authLoading && canSeeTeam && tab === 'team' && !needsCompanyContext,
-  });
-
-  const { data: employees } = useQuery({
-    queryKey: ['employees-for-sheet-history'],
-    queryFn: () => employeesApi.getAll({ limit: PAGE_LIMIT, isActive: true }).then((r) => r.data.data),
-    enabled: canSeeTeam && tab === 'team',
   });
 
   const myList = myRaw ?? [];
@@ -105,15 +92,11 @@ export default function SheetHistoryReportPage() {
 
   const filterRows = (rows: DailyTaskSheet[]) => {
     const q = search.trim().toLowerCase();
+    if (!q) return rows;
     return rows.filter((s) => {
-      if (statusFilter === 'submitted' && !s.isSubmitted) return false;
-      if (statusFilter === 'draft' && s.isSubmitted) return false;
-      if (q) {
-        const name = (s.employee?.name ?? '').toLowerCase();
-        const code = (s.employee?.empCode ?? '').toLowerCase();
-        if (!name.includes(q) && !code.includes(q)) return false;
-      }
-      return true;
+      const name = (s.employee?.name ?? '').toLowerCase();
+      const code = (s.employee?.empCode ?? '').toLowerCase();
+      return name.includes(q) || code.includes(q);
     });
   };
 
@@ -128,14 +111,12 @@ export default function SheetHistoryReportPage() {
     return { submitted, draft, totalHours, totalMD };
   };
 
-  const filtersActive = !!(fromDate || toDate || statusFilter !== 'all' || search || employeeId !== 'all');
+  const filtersActive = !!(fromDate || toDate || search);
 
   const clearFilters = () => {
     setFromDate('');
     setToDate('');
-    setStatusFilter('all');
     setSearch('');
-    setEmployeeId('all');
   };
 
   const refresh = () => {
@@ -155,11 +136,7 @@ export default function SheetHistoryReportPage() {
       const isTeam = canSeeTeam && tab === 'team';
       // Mirror the active tab's filters so the export matches what the user sees.
       const res = isTeam
-        ? await taskSheetsApi.adminExportTeam({
-            ...dateRange,
-            ...(employeeId !== 'all' ? { employeeId: Number(employeeId) } : {}),
-            ...(statusFilter !== 'all' ? { isSubmitted: statusFilter === 'submitted' } : {}),
-          })
+        ? await taskSheetsApi.adminExportTeam({ ...dateRange })
         : await taskSheetsApi.exportHistory(dateRange);
       const tag = `${fromDate || 'all'}_${toDate || 'all'}`;
       const filename = isTeam
@@ -395,6 +372,21 @@ export default function SheetHistoryReportPage() {
   const filterBar = (
     <div className="rounded-xl bg-card ring-1 ring-border shadow-sm p-3">
       <div className="flex flex-wrap items-end gap-3">
+        {/* Search — sits to the left of the date range */}
+        <div className="flex-1 min-w-[12rem]">
+          <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 flex items-center gap-1">
+            <Search className="h-3 w-3" /> Search
+          </p>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder={tab === 'team' ? 'Search employee name / code…' : 'Search…'}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 h-9"
+            />
+          </div>
+        </div>
         <div className="flex-shrink-0">
           <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 flex items-center gap-1">
             <CalendarDays className="h-3 w-3" /> From
@@ -417,68 +409,27 @@ export default function SheetHistoryReportPage() {
             className="h-9 w-40 focus:ring-blue-500/30"
           />
         </div>
-        <div className="flex-shrink-0">
-          <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 flex items-center gap-1">
-            <Filter className="h-3 w-3" /> Status
-          </p>
-          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
-            <SelectTrigger className="h-9 w-36"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="submitted">Submitted</SelectItem>
-              <SelectItem value="draft">Drafts only</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        {canSeeTeam && tab === 'team' && (
-          <div className="min-w-[16rem] flex-shrink-0">
-            <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 flex items-center gap-1">
-              <User className="h-3 w-3" /> Employee
-            </p>
-            <Select value={employeeId} onValueChange={setEmployeeId}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="All employees" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All employees</SelectItem>
-                {(employees ?? []).map((e) => (
-                  <SelectItem key={e.id} value={String(e.id)}>{e.name} ({e.empCode})</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-        <div className="flex-1 min-w-[12rem]">
-          <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mb-1 flex items-center gap-1">
-            <Search className="h-3 w-3" /> Search
-          </p>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              placeholder={tab === 'team' ? 'Search employee name / code…' : 'Search…'}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 h-9"
-            />
-          </div>
-        </div>
-        {filtersActive && (
+        <div className="ml-auto flex items-end gap-2">
+          {filtersActive && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 text-red-500 hover:text-red-600 hover:bg-red-500/10"
+              onClick={clearFilters}
+            >
+              <X className="h-3.5 w-3.5 mr-1" /> Clear
+            </Button>
+          )}
           <Button
-            variant="ghost"
             size="sm"
-            className="h-9 text-red-500 hover:text-red-600 hover:bg-red-500/10"
-            onClick={clearFilters}
+            onClick={handleExport}
+            disabled={exporting || needsCompanyContext}
+            className="h-9 bg-linear-to-r from-blue-600 to-blue-800 text-white hover:opacity-90 shadow-sm shadow-blue-500/25 border-0"
           >
-            <X className="h-3.5 w-3.5 mr-1" /> Clear
+            <Download className="h-3.5 w-3.5 mr-1.5" />
+            {exporting ? 'Exporting…' : 'Export Excel'}
           </Button>
-        )}
-        <Button
-          size="sm"
-          onClick={handleExport}
-          disabled={exporting || needsCompanyContext}
-          className="h-9 bg-linear-to-r from-blue-600 to-blue-800 text-white hover:opacity-90 shadow-sm shadow-blue-500/25 border-0"
-        >
-          <Download className="h-3.5 w-3.5 mr-1.5" />
-          {exporting ? 'Exporting…' : 'Export Excel'}
-        </Button>
+        </div>
       </div>
     </div>
   );
