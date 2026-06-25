@@ -774,16 +774,16 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
               <Send className="h-4 w-4" />
             </Button>
           )}
-          {isAdmin && (
-            <Button
-              variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600"
-              title="Delete"
-              disabled={deleteSlipMut.isPending}
-              onClick={() => setSlipToDelete(slip)}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          )}
+          {/* Salary-slip managers (admin / HR / accounts) can delete any
+              slip — draft or published. */}
+          <Button
+            variant="ghost" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600"
+            title="Delete"
+            disabled={deleteSlipMut.isPending}
+            onClick={() => setSlipToDelete(slip)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
         </>
       )}
     </div>

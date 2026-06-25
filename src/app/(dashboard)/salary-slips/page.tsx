@@ -144,11 +144,7 @@ function SalarySlipsHubContent() {
       qc.invalidateQueries({ queryKey: ['salary-slips-hub'] });
     },
     onError: (e: any) =>
-      toast.error(
-        e?.response?.status === 403
-          ? 'Only admins can delete slips.'
-          : e?.response?.data?.message ?? 'Delete failed',
-      ),
+      toast.error(e?.response?.data?.message ?? 'Delete failed'),
   });
 
   const handleExport = async () => {
@@ -260,7 +256,7 @@ function SalarySlipsHubContent() {
       } else {
         toast.error(
           forbidden
-            ? 'Only admins can delete slips.'
+            ? `You don't have permission to ${action === 'unpublish' ? 'withdraw' : action} one or more of the selected slips.`
             : `Could not ${action === 'unpublish' ? 'withdraw' : action} the selected slips.`,
         );
       }
@@ -652,19 +648,26 @@ function BulkGenerateModal(props: {
   onCreated: () => void;
 }) {
   const { open, onOpenChange, defaultMonth, onCreated } = props;
+  const { user } = useAuth();
+  // Admins read the admin directory; HR / Accounts are `_type === 'employee'`
+  // and must use /employee/employees (the admin route 403s for them, which is
+  // why the picker showed "No employees match").
+  const isAdmin = user?._type === 'admin';
   const [slipMonth, setSlipMonth] = useState(defaultMonth || defaultMonthFallback());
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
-  // Cap at 200 in the modal so the rendered list stays snappy. HR rarely
-  // has more than ~200 active employees; if it grows beyond, switch to
-  // a paginated picker.
+  // Cap at 100 (backend pagination max). If the roster grows beyond, the
+  // server-side `search` narrows it.
   const empQ = useQuery({
-    queryKey: ['hub-employees', search],
+    queryKey: ['hub-employees', isAdmin, search],
     enabled: open,
     queryFn: async () => {
-      const r = await employeesApi.getAll({ search, isActive: true, limit: 100 });
-      const list = r.data?.data ?? [];
+      const r = isAdmin
+        ? await employeesApi.getAll({ search, isActive: true, limit: 100 })
+        : await employeesApi.employeeGetAll({ search, isActive: true, limit: 100 });
+      const body: any = r.data?.data ?? r.data;
+      const list = Array.isArray(body) ? body : (body?.data ?? []);
       return Array.isArray(list) ? list : [];
     },
   });

@@ -92,10 +92,11 @@ export default function EmployeeBreakdownPage({
     total_man_days: number;
   };
 
-  // Collapsible project sections — collapsed ids are hidden.
-  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  // Collapsible project sections — track which ids are EXPANDED so every
+  // project starts collapsed by default (empty set = all closed).
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const toggleProject = (id: number) =>
-    setCollapsed((prev) => {
+    setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
@@ -177,7 +178,7 @@ export default function EmployeeBreakdownPage({
       ) : (
         <div className="space-y-3">
           {projects.map((proj) => {
-            const isOpen = !collapsed.has(proj.project_id);
+            const isOpen = expanded.has(proj.project_id);
             return (
             <div key={proj.project_id} className="rounded-lg border bg-card overflow-hidden shadow-sm">
               {/* Project header — click to collapse / expand */}
