@@ -102,9 +102,24 @@ export default function TaskSheetDetailPage() {
   // for — they only see their own slice plus inline approve / reject
   // controls. Owner / HR / admin keep the full read.
   const isOwner = !!sheet && callerUserId === sheet.employeeId;
+  const isAdmin = user?._type === 'admin';
   // A reporting-manager/HR team read (scopeTeam) is a full read-only view,
   // not the PM-approval slice — so it's explicitly excluded from PM view.
   const isPmView = !!sheet && isEmployee && !isOwner && !isHr && !scopeTeam;
+
+  // Who can act on a row's approval: the snapshot PM, or HR/admin on a
+  // null-project ("no project") row — mirrors the /pm/task-approvals inbox
+  // scope. This lets an admin/HR PM approve/reject from the FULL sheet view
+  // (they aren't in `isPmView`), without switching them to the PM-only slice.
+  const canDecide = (a?: TaskSheetApproval) =>
+    !!a && a.status === 'pending' &&
+    (a.pmId === callerUserId || ((isAdmin || isHr) && a.pmId === null));
+  // Show the Actions column for the PM slice, or for admin/HR on their own
+  // full read — but for admin/HR only when there's actually a row they can
+  // act on, so a non-PM admin doesn't get a column full of dashes.
+  // Suppressed on the read-only team view (?scope=team).
+  const hasActionableRow = [...latestByEntry.values()].some((a) => canDecide(a));
+  const showActions = !scopeTeam && (isPmView || ((isAdmin || isHr) && hasActionableRow));
 
   // The set of entry ids where the caller is the snapshot PM on the
   // current round. PM view filters entries down to these only.
@@ -321,8 +336,8 @@ export default function TaskSheetDetailPage() {
                             {showApprovalCol && (
                               <TableHead className="w-36">Approval</TableHead>
                             )}
-                            {isPmView && (
-                              <TableHead className="w-56 text-right">
+                            {showActions && (
+                              <TableHead className="w-28 text-right">
                                 Actions
                               </TableHead>
                             )}
@@ -339,11 +354,7 @@ export default function TaskSheetDetailPage() {
                                 ? 'Client Meeting'
                                 : 'Other';
                             const approval = latestByEntry.get(e.id);
-                            const canDecide =
-                              isPmView &&
-                              !!approval &&
-                              approval.status === 'pending' &&
-                              approval.pmId === callerUserId;
+                            const canAct = canDecide(approval);
                             return (
                               <TableRow key={e.id}>
                                 <TableCell className="text-muted-foreground">{i + 1}</TableCell>
@@ -397,9 +408,9 @@ export default function TaskSheetDetailPage() {
                                     )}
                                   </TableCell>
                                 )}
-                                {isPmView && (
+                                {showActions && (
                                   <TableCell className="text-right">
-                                    {canDecide && approval ? (
+                                    {canAct && approval ? (
                                       <div className="flex justify-end gap-2">
                                         <Button
                                           size="sm"
@@ -415,7 +426,7 @@ export default function TaskSheetDetailPage() {
                                           }}
                                         >
                                           <X className="mr-1 h-4 w-4" />
-                                          Reject
+                                          {/* Reject */}
                                         </Button>
                                         <Button
                                           size="sm"
@@ -429,7 +440,7 @@ export default function TaskSheetDetailPage() {
                                           }
                                         >
                                           <Check className="mr-1 h-4 w-4" />
-                                          Approve
+                                          {/* Approve */}
                                         </Button>
                                       </div>
                                     ) : (
