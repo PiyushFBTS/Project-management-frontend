@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { format } from 'date-fns';
 import {
   ArrowLeft,
@@ -44,23 +44,29 @@ const ROW_STATUS_CLASS: Record<TaskSheetApprovalRowStatus, string> = {
 export default function TaskSheetDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const qc = useQueryClient();
   const { user } = useAuth();
   const isEmployee = user?._type === 'employee';
   const callerUserId = (user as { id?: number } | null)?.id ?? null;
   const isHr = isEmployee && !!(user as { isHr?: boolean } | null)?.isHr;
+  // Opened from the "My Team Sheets" tab by a non-admin manager/HR — read via
+  // the reportsTo/HR-scoped endpoint and render the full sheet read-only
+  // (not the PM-review slice).
+  const scopeTeam = searchParams.get('scope') === 'team';
 
   // PM-rejection dialog state (used in PM view only).
   const [rejectTarget, setRejectTarget] = useState<TaskSheetApproval | null>(null);
   const [rejectNotes, setRejectNotes] = useState('');
 
   const { data: sheet, isLoading } = useQuery({
-    queryKey: ['task-sheet', id, isEmployee],
-    queryFn: () =>
-      (isEmployee
-        ? taskSheetsApi.getById(Number(id))
-        : taskSheetsApi.adminGetOne(Number(id))
-      ).then((r) => r.data.data),
+    queryKey: ['task-sheet', id, isEmployee, scopeTeam],
+    queryFn: () => {
+      if (!isEmployee) return taskSheetsApi.adminGetOne(Number(id)).then((r) => r.data.data);
+      // Team scope (manager/HR) → reportsTo/HR-authorized read.
+      if (scopeTeam) return taskSheetsApi.teamGetOne(Number(id)).then((r) => r.data.data);
+      return taskSheetsApi.getById(Number(id)).then((r) => r.data.data);
+    },
   });
 
   const { data: approvals } = useQuery({
@@ -96,7 +102,9 @@ export default function TaskSheetDetailPage() {
   // for — they only see their own slice plus inline approve / reject
   // controls. Owner / HR / admin keep the full read.
   const isOwner = !!sheet && callerUserId === sheet.employeeId;
-  const isPmView = !!sheet && isEmployee && !isOwner && !isHr;
+  // A reporting-manager/HR team read (scopeTeam) is a full read-only view,
+  // not the PM-approval slice — so it's explicitly excluded from PM view.
+  const isPmView = !!sheet && isEmployee && !isOwner && !isHr && !scopeTeam;
 
   // The set of entry ids where the caller is the snapshot PM on the
   // current round. PM view filters entries down to these only.
@@ -170,7 +178,7 @@ export default function TaskSheetDetailPage() {
         </Button>
         <h1 className="text-xl font-semibold text-foreground">
           {isPmView ? 'Review' : 'Task Sheet'}
-          {(!isEmployee || isPmView) && (
+          {(!isEmployee || isPmView || scopeTeam) && (
             <> — {sheet.employee?.name ?? `#${sheet.employeeId}`}</>
           )}
         </h1>

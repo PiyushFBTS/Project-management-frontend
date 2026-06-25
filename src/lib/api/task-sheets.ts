@@ -17,6 +17,18 @@ export const taskSheetsApi = {
   adminGetOne: (id: number) =>
     api.get<ApiResponse<DailyTaskSheet>>(`/admin/task-sheets/${id}`),
 
+  // ── Team endpoints (reporting manager / HR) ──
+  // Non-admin path: HR sees the whole company, a reporting manager only
+  // their direct reports. Backend enforces the scope.
+  teamGetAll: (params?: PaginationParams & { employeeId?: number; fromDate?: string; toDate?: string; isSubmitted?: boolean }) =>
+    api.get<ApiResponse<DailyTaskSheet[]>>('/task-sheets/team', { params }),
+
+  teamGetOne: (id: number) =>
+    api.get<ApiResponse<DailyTaskSheet>>(`/task-sheets/team/${id}`),
+
+  teamEmployees: () =>
+    api.get<ApiResponse<{ id: number; name: string; empCode: string | null }[]>>('/task-sheets/team/employees'),
+
   // ── Self endpoints (routed by login type) ──
   getToday: () =>
     api.get<ApiResponse<DailyTaskSheet>>(`${base()}/today`),

@@ -36,34 +36,50 @@ export default function TaskSheetsPage() {
   const { user } = useAuth();
   const isEmployee = user?._type === 'employee';
   const isAdmin = user?._type === 'admin';
+  // HR and non-admin reporting managers also get the team tab.
+  const isHr = isEmployee && !!(user as any)?.isHr;
+  const isReportingManager = !!(user as any)?.isReportingManager;
+  const canSeeTeam = isAdmin || isHr || isReportingManager;
 
-  // Admin defaults to team tab; employees always on "my"
-  const [activeTab, setActiveTab] = useState<'my' | 'team'>(isAdmin ? 'team' : 'my');
+  // Anyone who can see team defaults to the team tab; others on "my".
+  const [activeTab, setActiveTab] = useState<'my' | 'team'>(canSeeTeam ? 'team' : 'my');
 
   const [fromDate, setFromDate] = useState(monthStart);
   const [toDate, setToDate] = useState(today);
   const [empId, setEmpId] = useState<string>('');
   const [submitted, setSubmitted] = useState<string>('');
 
-  // Admin: employee list for filter
+  // Employee list for the team filter. Admin/HR → all employees; a
+  // reporting manager → only their direct reports (scoped server-side).
   const { data: employees } = useQuery({
-    queryKey: ['employees-list'],
-    queryFn: () => employeesApi.getAll({ limit: 200 }).then((r) => r.data.data),
-    enabled: isAdmin,
+    queryKey: ['task-sheet-filter-employees', isAdmin],
+    queryFn: async () => {
+      if (isAdmin) {
+        const r = await employeesApi.getAll({ limit: 200 });
+        return (r.data.data ?? []).map((e: any) => ({ id: e.id, name: e.name }));
+      }
+      const r = await taskSheetsApi.teamEmployees();
+      return (r.data.data ?? []).map((e: any) => ({ id: e.id, name: e.name }));
+    },
+    enabled: canSeeTeam,
   });
 
-  // Team tab (admin only): all task sheets in company
+  // Team tab: admin / HR → whole company; reporting manager → direct
+  // reports. Backend enforces the scope; we just choose the route.
   const { data: teamData, isLoading: teamLoading } = useQuery({
-    queryKey: ['task-sheets-team', fromDate, toDate, empId, submitted],
-    queryFn: () =>
-      taskSheetsApi.adminGetAll({
+    queryKey: ['task-sheets-team', isAdmin, fromDate, toDate, empId, submitted],
+    queryFn: () => {
+      const params = {
         fromDate,
         toDate,
         employeeId: empId ? Number(empId) : undefined,
         isSubmitted: submitted === '' ? undefined : submitted === 'true',
         limit: 100,
-      }).then((r) => r.data.data),
-    enabled: isAdmin && activeTab === 'team',
+      };
+      return (isAdmin ? taskSheetsApi.adminGetAll(params) : taskSheetsApi.teamGetAll(params))
+        .then((r) => r.data.data);
+    },
+    enabled: canSeeTeam && activeTab === 'team',
   });
 
   // My tab: current user's own history (admin uses bridged-admin endpoint, employees use /task-sheets/history)
@@ -84,8 +100,12 @@ export default function TaskSheetsPage() {
   const isLoading = activeTab === 'team' ? teamLoading : myLoading;
   const canFillOwn = isEmployee || isAdmin;
 
+  // Detail link. Non-admin team viewers (HR / manager) read via the
+  // reportsTo/HR-scoped /task-sheets/team/:id route — flag it with ?scope=team.
+  const sheetHref = (id: number) =>
+    `/task-sheets/${id}${activeTab === 'team' && !isAdmin ? '?scope=team' : ''}`;
+
   // Edit window: admin + HR get 30 days, regular employees 3 days.
-  const isHr = isEmployee && !!(user as any)?.isHr;
   const defaultFillDays = isAdmin || isHr ? 30 : 3;
   const fillWindowDays = (user as any)?.fillDaysOverride ?? defaultFillDays;
 
@@ -117,8 +137,8 @@ export default function TaskSheetsPage() {
         </div>
       </div>
 
-      {/* Tabs — admin sees both; employee sees only "My Sheets" */}
-      {isAdmin && (
+      {/* Tabs — admin / HR / reporting managers see both; others see only "My Sheets" */}
+      {canSeeTeam && (
         <div className="flex gap-1 p-0.5 bg-muted rounded-lg w-fit">
           {(['my', 'team'] as const).map((tab) => (
             <button
@@ -143,7 +163,7 @@ export default function TaskSheetsPage() {
           <label className="text-xs text-muted-foreground shrink-0">To</label>
           <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="flex-1 sm:w-36" />
         </div>
-        {isAdmin && activeTab === 'team' && (
+        {canSeeTeam && activeTab === 'team' && (
           <>
             <Select value={empId || 'all'} onValueChange={(v) => setEmpId(v === 'all' ? '' : v)}>
               <SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="All employees" /></SelectTrigger>
@@ -193,9 +213,9 @@ export default function TaskSheetsPage() {
                 key={s.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => router.push(`/task-sheets/${s.id}`)}
+                onClick={() => router.push(sheetHref(s.id))}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/task-sheets/${s.id}`); }
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(sheetHref(s.id)); }
                 }}
                 className="rounded-xl border bg-card p-3 shadow-sm cursor-pointer hover:border-primary/40 hover:shadow-md transition-all"
               >
@@ -280,7 +300,7 @@ export default function TaskSheetsPage() {
                     // the dedicated eye button. The Edit cell stops
                     // propagation so its own link doesn't double-fire.
                     className="cursor-pointer hover:bg-muted/40"
-                    onClick={() => router.push(`/task-sheets/${s.id}`)}
+                    onClick={() => router.push(sheetHref(s.id))}
                   >
                     {activeTab === 'team' && (
                       <TableCell className="font-medium">{s.employee?.name ?? `#${s.employeeId}`}</TableCell>
