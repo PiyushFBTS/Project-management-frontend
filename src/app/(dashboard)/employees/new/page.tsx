@@ -179,16 +179,16 @@ function NewEmployeeContent() {
           <Section title="Basic Information">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Field label="Employee Code" required>
-                <Input value={form.empCode} onChange={(e) => setForm((p) => ({ ...p, empCode: e.target.value }))} placeholder="EMP-010" />
+                <Input value={form.empCode} onChange={(e) => setForm((p) => ({ ...p, empCode: e.target.value }))} placeholder="Enter employee code" />
               </Field>
               <Field label="Full Name" required>
-                <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="Rahul Sharma" />
+                <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="Enter full name" />
               </Field>
               <Field label="Email" required>
-                <Input type="email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} placeholder="rahul@company.com" />
+                <Input type="email" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} placeholder="Enter email" />
               </Field>
               <Field label="Phone">
-                <Input value={form.mobileNumber} onChange={(e) => setForm((p) => ({ ...p, mobileNumber: e.target.value }))} placeholder="+91..." />
+                <Input value={form.mobileNumber} onChange={(e) => setForm((p) => ({ ...p, mobileNumber: e.target.value }))} placeholder="Enter phone number" />
               </Field>
               <Field label="Password" required>
                 <Input type="password" value={form.password} onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))} placeholder="Min. 8 characters" />
@@ -249,7 +249,7 @@ function NewEmployeeContent() {
                 <Input type="date" value={form.joiningDate} onChange={(e) => setForm((p) => ({ ...p, joiningDate: e.target.value }))} />
               </Field>
               <Field label="Fill Days Override" hint="Blank = default (3 days). 30 days recommended for HR.">
-                <Input type="number" min="1" max="90" value={form.fillDaysOverride} onChange={(e) => setForm((p) => ({ ...p, fillDaysOverride: e.target.value }))} placeholder="3" />
+                <Input type="number" min="1" max="90" value={form.fillDaysOverride} onChange={(e) => setForm((p) => ({ ...p, fillDaysOverride: e.target.value }))} placeholder="Enter fill days" />
               </Field>
             </div>
           </Section>
@@ -257,7 +257,7 @@ function NewEmployeeContent() {
           <Section title="Compensation & Personal">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Field label="Annual CTC (₹)">
-                <Input type="number" min="0" value={form.annualCTC} onChange={(e) => setForm((p) => ({ ...p, annualCTC: e.target.value }))} placeholder="600000" />
+                <Input type="number" min="0" value={form.annualCTC} onChange={(e) => setForm((p) => ({ ...p, annualCTC: e.target.value }))} placeholder="Enter Annual CTC" />
               </Field>
               <Field label="Blood Group">
                 {/* SearchableSelect — the leading "none" sentinel is

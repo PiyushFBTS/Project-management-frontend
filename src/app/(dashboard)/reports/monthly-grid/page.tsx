@@ -320,7 +320,10 @@ export default function MonthlyGridPage() {
                 {empRow.days.map((entry) => {
                   const day = parseInt(entry.date.split('-')[2], 10);
                   const sun = isSunday(entry.date);
-                  const clickable = !sun && entry.sheetId != null;
+                  const filled = entry.hours !== null;
+                  // A filled Sunday renders like any worked day — the grey
+                  // "Sunday" treatment only applies to empty Sundays.
+                  const clickable = entry.sheetId != null;
                   const hasLeave = !sun && entry.leave !== null;
                   const tone = entry.leave ? leaveTone(entry.leave.status) : null;
                   // Cell tone precedence:
@@ -330,14 +333,14 @@ export default function MonthlyGridPage() {
                   //   Pure leave → leaveTone(status).
                   //   Otherwise → existing draft/submitted/not-filled logic.
                   let cellClass = '';
-                  if (sun) {
-                    cellClass = 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800';
-                  } else if (hasLeave && tone) {
+                  if (hasLeave && tone) {
                     cellClass = tone.cell;
-                  } else if (entry.hours !== null) {
+                  } else if (filled) {
                     cellClass = entry.submitted
                       ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
                       : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800';
+                  } else if (sun) {
+                    cellClass = 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800';
                   } else {
                     cellClass = 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800';
                   }
@@ -373,29 +376,32 @@ export default function MonthlyGridPage() {
                         <span className="absolute inset-x-0 bottom-0 h-1 bg-amber-400 dark:bg-amber-600" />
                       )}
                       <div className="flex items-center justify-between gap-1">
-                        <span className={`text-xs font-semibold ${sun ? 'text-gray-400' : ''}`}>{day}</span>
+                        <span className={`text-xs font-semibold ${sun && !filled ? 'text-gray-400' : ''}`}>{day}</span>
                         {hasLeave ? (
                           <Badge variant="outline" className={`text-[8px] px-1 py-0 ${tone!.pill}`}>
                             {tone!.label === 'Approved' ? 'Leave' : tone!.label}
                           </Badge>
-                        ) : !sun && entry.submitted ? (
+                        ) : entry.submitted ? (
                           <Badge variant="outline" className="text-[8px] px-1 py-0 bg-emerald-100 dark:bg-emerald-900 text-emerald-700 dark:text-emerald-300 border-emerald-300">
                             Submitted
                           </Badge>
-                        ) : !sun && entry.hours !== null && !entry.submitted ? (
+                        ) : filled && !entry.submitted ? (
                           <Badge variant="outline" className="text-[8px] px-1 py-0 bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 border-amber-300">
                             Draft
                           </Badge>
                         ) : null}
                       </div>
                       <div className="mt-1">
-                        {sun ? (
+                        {filled ? (
+                          // Always show hours when the sheet is filled — even
+                          // on a Sunday or a leave day. A worked Sunday gets a
+                          // small "Sun" tag so the off-day is still obvious.
+                          <span className="text-lg font-bold">
+                            {entry.hours}h
+                            {sun && <span className="ml-1 align-top text-[9px] font-medium text-gray-400">Sun</span>}
+                          </span>
+                        ) : sun ? (
                           <span className="text-xs text-gray-400">Sunday</span>
-                        ) : entry.hours !== null ? (
-                          // Always show hours when the sheet is filled —
-                          // even on a leave day. The amber stripe + Leave
-                          // pill signal the overlap.
-                          <span className="text-lg font-bold">{entry.hours}h</span>
                         ) : hasLeave ? (
                           // Pure leave: show the leave type instead of
                           // the red em-dash. Truncate long type names.

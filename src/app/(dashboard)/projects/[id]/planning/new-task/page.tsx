@@ -175,7 +175,7 @@ export default function NewTaskPage({ params: paramsPromise }: { params: Promise
             <Input
               value={title}
               onChange={(e) => setTitle(capitalizeFirst(e.target.value))}
-              placeholder="Task title…"
+              placeholder="Enter Ticket title .."
               className={`text-xl font-bold border-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-violet-500 h-auto py-2 ${!title.trim() ? 'border-red-300' : ''}`}
             />
             {!title.trim() && (

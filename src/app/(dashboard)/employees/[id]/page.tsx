@@ -1055,17 +1055,21 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                           </div>
                         </>
                       )}
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Fill Days</p>
-                        {editMode && canManageAllDocs ? (
-                          <div className="flex items-center gap-1.5">
-                            <Input type="number" min={1} max={365} placeholder="Default (3)" value={editFillDays} onChange={(e) => setEditFillDays(e.target.value)} className="h-8 text-sm w-24" />
-                            {editFillDays && <Button variant="ghost" size="sm" className="h-8 text-xs px-2" onClick={() => setEditFillDays('')}>Reset</Button>}
-                          </div>
-                        ) : (
-                          <p className="text-sm font-medium">{emp.fillDaysOverride ?? 'Default (3)'}</p>
-                        )}
-                      </div>
+                      {/* Fill Days is an admin/HR-only payroll control — hidden
+                          from employees viewing their own profile. */}
+                      {canManageAllDocs && (
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Fill Days</p>
+                          {editMode ? (
+                            <div className="flex items-center gap-1.5">
+                              <Input type="number" min={1} max={365} placeholder="Default (3)" value={editFillDays} onChange={(e) => setEditFillDays(e.target.value)} className="h-8 text-sm w-24" />
+                              {editFillDays && <Button variant="ghost" size="sm" className="h-8 text-xs px-2" onClick={() => setEditFillDays('')}>Reset</Button>}
+                            </div>
+                          ) : (
+                            <p className="text-sm font-medium">{emp.fillDaysOverride ?? 'Default (3)'}</p>
+                          )}
+                        </div>
+                      )}
 
                     </div>
                   </CardContent>
