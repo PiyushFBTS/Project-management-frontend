@@ -235,7 +235,6 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
   // Slip form auto-fills them on every new slip.
   const [editPanNumber, setEditPanNumber] = useState('');
   const [editUanNumber, setEditUanNumber] = useState('');
-  const [editPfNumber, setEditPfNumber] = useState('');
   const [editBankName, setEditBankName] = useState('');
   const [editBankAccountNo, setEditBankAccountNo] = useState('');
   const [editBankIfsc, setEditBankIfsc] = useState('');
@@ -522,7 +521,6 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
     setEditMaritalStatus(emp.maritalStatus ?? '');
     setEditPanNumber((emp as any).panNumber ?? '');
     setEditUanNumber((emp as any).uanNumber ?? '');
-    setEditPfNumber((emp as any).pfNumber ?? '');
     setEditBankName((emp as any).bankName ?? '');
     setEditBankAccountNo((emp as any).bankAccountNo ?? '');
     setEditBankIfsc((emp as any).bankIfsc ?? '');
@@ -611,7 +609,6 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
     if (!emp) return;
     setEditPanNumber((emp as any).panNumber ?? '');
     setEditUanNumber((emp as any).uanNumber ?? '');
-    setEditPfNumber((emp as any).pfNumber ?? '');
     setEditBankName((emp as any).bankName ?? '');
     setEditBankAccountNo((emp as any).bankAccountNo ?? '');
     setEditBankIfsc((emp as any).bankIfsc ?? '');
@@ -630,7 +627,6 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
       const dto = {
         panNumber: editPanNumber || undefined,
         uanNumber: editUanNumber || undefined,
-        pfNumber: editPfNumber || undefined,
         bankName: editBankName || undefined,
         bankAccountNo: editBankAccountNo || undefined,
         bankIfsc: editBankIfsc || undefined,
@@ -873,6 +869,10 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-y-5 gap-x-8">
                       <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Employee Code</p>
+                        <p className="text-sm font-medium font-mono">{emp.empCode ?? '—'}</p>
+                      </div>
+                      <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Full Name</p>
                         {editMode ? <Input value={editName} onChange={(e) => setEditName(e.target.value)} className="h-8 text-sm" /> : <p className="text-sm font-medium">{emp.name}</p>}
                       </div>
@@ -892,15 +892,15 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                           <p className="text-sm font-medium">
                             {emp.dateOfBirth
                               ? (() => {
-                                  // Only admin / HR / the employee themselves
-                                  // see the full year. Everyone else (plain
-                                  // colleagues) gets the year masked — e.g.
-                                  // "08 Jun 19**" — so birthdays stay
-                                  // shareable without revealing age.
-                                  const full = format(new Date(emp.dateOfBirth + 'T00:00:00'), 'dd MMM yyyy');
-                                  if (canManageAllDocs || isSelf) return full;
-                                  return full.slice(0, -2) + '**';
-                                })()
+                                // Only admin / HR / the employee themselves
+                                // see the full year. Everyone else (plain
+                                // colleagues) gets the year masked — e.g.
+                                // "08 Jun 19**" — so birthdays stay
+                                // shareable without revealing age.
+                                const full = format(new Date(emp.dateOfBirth + 'T00:00:00'), 'dd MMM yyyy');
+                                if (canManageAllDocs || isSelf) return full;
+                                return full.slice(0, -2) + '**';
+                              })()
                               : '—'}
                           </p>
                         )}
@@ -928,10 +928,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                           <Input type="date" value={editJoiningDate} onChange={(e) => setEditJoiningDate(e.target.value)} className="h-8 text-sm" />
                         ) : <p className="text-sm font-medium">{emp.joiningDate ? format(new Date(emp.joiningDate + 'T00:00:00'), 'dd MMM yyyy') : emp.createdAt ? format(new Date(emp.createdAt), 'dd MMM yyyy') : '—'}</p>}
                       </div>
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Employee Code</p>
-                        <p className="text-sm font-medium font-mono">{emp.empCode ?? '—'}</p>
-                      </div>
+
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Reports To</p>
                         {editMode && canManageAllDocs ? (
@@ -976,6 +973,40 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                           <Badge className={`text-xs border-0 ${emp.isActive ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}`}>
                             {emp.isActive ? 'Active' : 'Inactive'}
                           </Badge>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Blood Group</p>
+                        {editMode ? (
+                          <SearchableSelect
+                            value={editBloodGroup || 'none'}
+                            onValueChange={(v) => setEditBloodGroup(v === 'none' ? '' : v)}
+                            options={[
+                              { value: 'none', label: 'Not set' },
+                              ...['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((bg) => ({ value: bg, label: bg })),
+                            ]}
+                            placeholder="Search blood group..."
+                            className="h-8 text-sm w-full"
+                          />
+                        ) : (
+                          <p className="text-sm font-medium">{emp.bloodGroup || '—'}</p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Marital Status</p>
+                        {editMode ? (
+                          <SearchableSelect
+                            value={editMaritalStatus || 'none'}
+                            onValueChange={(v) => setEditMaritalStatus(v === 'none' ? '' : v)}
+                            options={[
+                              { value: 'none', label: 'Not set' },
+                              ...['Unmarried', 'Married', 'Divorced', 'Widowed'].map((ms) => ({ value: ms, label: ms })),
+                            ]}
+                            placeholder="Search status..."
+                            className="h-8 text-sm w-full"
+                          />
+                        ) : (
+                          <p className="text-sm font-medium">{emp.maritalStatus || '—'}</p>
                         )}
                       </div>
                       {/* Admin target + super admin: set a new password (optional). */}
@@ -1035,40 +1066,7 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                           <p className="text-sm font-medium">{emp.fillDaysOverride ?? 'Default (3)'}</p>
                         )}
                       </div>
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Blood Group</p>
-                        {editMode ? (
-                          <SearchableSelect
-                            value={editBloodGroup || 'none'}
-                            onValueChange={(v) => setEditBloodGroup(v === 'none' ? '' : v)}
-                            options={[
-                              { value: 'none', label: 'Not set' },
-                              ...['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((bg) => ({ value: bg, label: bg })),
-                            ]}
-                            placeholder="Search blood group..."
-                            className="h-8 text-sm w-full"
-                          />
-                        ) : (
-                          <p className="text-sm font-medium">{emp.bloodGroup || '—'}</p>
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Marital Status</p>
-                        {editMode ? (
-                          <SearchableSelect
-                            value={editMaritalStatus || 'none'}
-                            onValueChange={(v) => setEditMaritalStatus(v === 'none' ? '' : v)}
-                            options={[
-                              { value: 'none', label: 'Not set' },
-                              ...['Unmarried', 'Married', 'Divorced', 'Widowed'].map((ms) => ({ value: ms, label: ms })),
-                            ]}
-                            placeholder="Search status..."
-                            className="h-8 text-sm w-full"
-                          />
-                        ) : (
-                          <p className="text-sm font-medium">{emp.maritalStatus || '—'}</p>
-                        )}
-                      </div>
+
                     </div>
                   </CardContent>
                 </Card>
@@ -1150,14 +1148,6 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                           editValue={editUanNumber}
                           onChange={setEditUanNumber}
                           placeholder="Universal Account Number"
-                        />
-                        <ProfileField
-                          label="PF Number"
-                          value={(emp as any).pfNumber}
-                          editing={editPayrollMode}
-                          editValue={editPfNumber}
-                          onChange={setEditPfNumber}
-                          placeholder="Member PF account"
                         />
                         <ProfileField
                           label="Bank Name"

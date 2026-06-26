@@ -71,7 +71,6 @@ const EXPORT_FIELDS: Array<{ key: string; label: string; group: string; alwaysOn
   { key: 'isActive',       label: 'Is Active',        group: 'Permissions' },
   { key: 'panNumber',      label: 'PAN',              group: 'Payroll' },
   { key: 'uanNumber',      label: 'UAN',              group: 'Payroll' },
-  { key: 'pfNumber',       label: 'PF Number',        group: 'Payroll' },
   { key: 'annualCtc',      label: 'Annual CTC',       group: 'Payroll' },
   { key: 'bankName',       label: 'Bank Name',        group: 'Bank' },
   { key: 'bankAccountNo',  label: 'Bank Account No',  group: 'Bank' },

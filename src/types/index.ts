@@ -426,7 +426,6 @@ export interface Employee {
   // Payroll identity — captured once on the profile, auto-fills slips
   panNumber?: string | null;
   uanNumber?: string | null;
-  pfNumber?: string | null;
   bankName?: string | null;
   bankAccountNo?: string | null;
   bankIfsc?: string | null;
@@ -476,7 +475,6 @@ export interface CreateEmployeeDto {
   maritalStatus?: string;
   panNumber?: string;
   uanNumber?: string;
-  pfNumber?: string;
   bankName?: string;
   bankAccountNo?: string;
   bankIfsc?: string;
@@ -502,7 +500,6 @@ export interface UpdateEmployeeDto {
   maritalStatus?: string | null;
   panNumber?: string | null;
   uanNumber?: string | null;
-  pfNumber?: string | null;
   bankName?: string | null;
   bankAccountNo?: string | null;
   bankIfsc?: string | null;

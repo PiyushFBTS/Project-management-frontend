@@ -101,7 +101,6 @@ export function SalarySlipForm(props: {
   const [bankIfsc, setBankIfsc] = useState(seed?.bankIfsc ?? '');
   const [panNumber, setPanNumber] = useState(seed?.panNumber ?? '');
   const [uanNumber, setUanNumber] = useState(seed?.uanNumber ?? '');
-  const [pfNumber, setPfNumber] = useState(seed?.pfNumber ?? '');
   const [monthlyCtc, setMonthlyCtc] = useState<string>(numStr(seed?.monthlyCtc));
   // Attendance
   // Total Working Days defaults to the calendar length of the slip
@@ -177,7 +176,6 @@ export function SalarySlipForm(props: {
     // the `!field` guards make sure we only fill blanks.
     if (!panNumber && emp.panNumber) setPanNumber(emp.panNumber);
     if (!uanNumber && emp.uanNumber) setUanNumber(emp.uanNumber);
-    if (!pfNumber && emp.pfNumber) setPfNumber(emp.pfNumber);
     if (!bankName && emp.bankName) setBankName(emp.bankName);
     if (!bankAccountNo && emp.bankAccountNo) setBankAccountNo(emp.bankAccountNo);
     if (!bankIfsc && emp.bankIfsc) setBankIfsc(emp.bankIfsc);
@@ -285,7 +283,6 @@ export function SalarySlipForm(props: {
       bankIfsc: bankIfsc || undefined,
       panNumber: panNumber || undefined,
       uanNumber: uanNumber || undefined,
-      pfNumber: pfNumber || undefined,
       monthlyCtc: monthlyCtc ? n(monthlyCtc) : undefined,
       totalWorkingDays: totalWorkingDays ? n(totalWorkingDays) : 0,
       lopDays: lopDays ? n(lopDays) : 0,
@@ -473,8 +470,6 @@ export function SalarySlipForm(props: {
         <Field label="Payment Mode"><Input value={paymentMode} onChange={(e) => setPaymentMode(e.target.value)} disabled={isPublished} placeholder="e.g. Bank Transfer" /></Field>
         <Field label="PAN Number"><Input value={panNumber} onChange={(e) => setPanNumber(e.target.value)} disabled={isPublished} placeholder="e.g. ABCDE1234F" /></Field>
         <Field label="UAN Number"><Input value={uanNumber} onChange={(e) => setUanNumber(e.target.value)} disabled={isPublished} placeholder="Universal Account Number" /></Field>
-        <Field label="PF Number"><Input value={pfNumber} onChange={(e) => setPfNumber(e.target.value)} disabled={isPublished} placeholder="Member PF account" /></Field>
-        <Field label="Monthly CTC"><Input type="number" inputMode="decimal" value={monthlyCtc} onChange={(e) => setMonthlyCtc(e.target.value)} disabled={isPublished} placeholder="e.g. 66667" /></Field>
       </Section>
 
       {/* Attendance */}

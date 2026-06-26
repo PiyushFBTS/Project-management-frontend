@@ -288,7 +288,6 @@ export interface SalarySlip {
   bankIfsc: string | null;
   panNumber: string | null;
   uanNumber: string | null;
-  pfNumber: string | null;
   monthlyCtc: number;
 
   // Attendance
@@ -340,7 +339,6 @@ export interface CreateSalarySlipDto {
   bankIfsc?: string;
   panNumber?: string;
   uanNumber?: string;
-  pfNumber?: string;
   monthlyCtc?: number;
   totalWorkingDays?: number;
   lopDays?: number;

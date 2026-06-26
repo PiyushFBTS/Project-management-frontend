@@ -43,7 +43,6 @@ export const employeesApi = {
     dto: {
       panNumber?: string;
       uanNumber?: string;
-      pfNumber?: string;
       bankName?: string;
       bankAccountNo?: string;
       bankIfsc?: string;
