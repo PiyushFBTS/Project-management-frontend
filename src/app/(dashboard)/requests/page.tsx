@@ -241,7 +241,7 @@ export default function RequestsPage() {
                       )}
                       <td className="px-3 py-2 text-center">
                         {req.attachmentPath ? (
-                          <a href={`${apiBase}${req.attachmentPath}`} target="_blank" rel="noreferrer" className="text-primary hover:underline" onClick={(ev) => ev.stopPropagation()}>
+                          <a href={req.attachmentPath?.startsWith('http') ? req.attachmentPath : `${apiBase}${req.attachmentPath}`} target="_blank" rel="noreferrer" className="text-primary hover:underline" onClick={(ev) => ev.stopPropagation()}>
                             {req.attachmentName?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? <ImageIcon className="h-4 w-4 inline" /> : <FileText className="h-4 w-4 inline" />}
                           </a>
                         ) : <span className="text-muted-foreground">—</span>}

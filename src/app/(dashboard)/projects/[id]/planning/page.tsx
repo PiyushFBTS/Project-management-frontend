@@ -1163,10 +1163,10 @@ export default function ProjectPlanningPage() {
                             <div key={att.id} className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
                               {isImg ? <ImageIcon className="h-4 w-4 text-blue-500 shrink-0" /> : <FileText className="h-4 w-4 text-violet-500 shrink-0" />}
                               <div className="flex-1 min-w-0">
-                                <a href={`${apiBase}${att.filePath}`} target="_blank" rel="noopener noreferrer" className="text-xs font-medium hover:text-violet-600 truncate block">{att.originalName}</a>
+                                <a href={att.filePath?.startsWith('http') ? att.filePath : `${apiBase}${att.filePath}`} target="_blank" rel="noopener noreferrer" className="text-xs font-medium hover:text-violet-600 truncate block">{att.originalName}</a>
                                 <p className="text-[10px] text-muted-foreground">{(att.fileSize / 1024).toFixed(1)} KB · {att.uploadedByName}</p>
                               </div>
-                              <a href={`${apiBase}${att.filePath}`} download={att.originalName} className="shrink-0 text-muted-foreground hover:text-foreground"><Download className="h-3.5 w-3.5" /></a>
+                              <a href={att.filePath?.startsWith('http') ? att.filePath : `${apiBase}${att.filePath}`} download={att.originalName} className="shrink-0 text-muted-foreground hover:text-foreground"><Download className="h-3.5 w-3.5" /></a>
                               {!isClient && (
                                 <button className="shrink-0 text-muted-foreground hover:text-red-500" onClick={() => { if (confirm('Delete?')) deleteDetailAttMut.mutate(att.id); }}>
                                   <Trash2 className="h-3.5 w-3.5" />

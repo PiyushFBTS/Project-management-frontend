@@ -1303,7 +1303,10 @@ export function EmployeeDetailView({ employeeId, targetType, isSelfProfile }: { 
                           </div>
                         </div>
                         <div className="flex gap-1 shrink-0">
-                          <a href={`${apiBase}${doc.filePath}`} target="_blank" rel="noopener noreferrer">
+                          {/* Cloudinary docs store an absolute URL; legacy
+                              docs store a /uploads/... path that needs the
+                              API origin prefixed. */}
+                          <a href={doc.filePath?.startsWith('http') ? doc.filePath : `${apiBase}${doc.filePath}`} target="_blank" rel="noopener noreferrer">
                             <Button variant="ghost" size="icon" className="h-8 w-8"><Download className="h-4 w-4" /></Button>
                           </a>
                           {/* Delete is allowed for:

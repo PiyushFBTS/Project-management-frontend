@@ -178,7 +178,7 @@ export default function EditRequestPage({ params: paramsPromise }: { params: Pro
                   <FileText className="h-8 w-8 text-primary shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{existingName || 'Document'}</p>
-                    <a href={`${apiBase}${existingPath}`} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">View current</a>
+                    <a href={existingPath?.startsWith('http') ? existingPath : `${apiBase}${existingPath}`} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">View current</a>
                   </div>
                   <Button size="sm" variant="ghost" className="text-red-500" onClick={() => setRemoveAttachment(true)} title="Remove">
                     <X className="h-4 w-4" />

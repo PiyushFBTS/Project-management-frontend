@@ -183,7 +183,7 @@ export default function EditExpensePage({ params: paramsPromise }: { params: Pro
   const existingAttachment = !removeExistingAttachment && e?.attachmentPath
     ? (() => {
         const name = (e.attachmentName ?? 'Attachment') as string;
-        const url = `${apiBase}${e.attachmentPath}` as string;
+        const url = (e.attachmentPath.startsWith('http') ? e.attachmentPath : `${apiBase}${e.attachmentPath}`) as string;
         const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(e.attachmentPath as string);
         return { name, url, isImage };
       })()

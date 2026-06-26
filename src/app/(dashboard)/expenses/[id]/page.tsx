@@ -351,9 +351,9 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
                   // image src fails to load (network / wiped uploads),
                   // we swap to the file-card UI below.
                   <div className="space-y-3">
-                    <a href={`${apiBase}${e.attachmentPath}`} target="_blank" rel="noreferrer" className="block">
+                    <a href={(e.attachmentPath?.startsWith('http') ? e.attachmentPath : `${apiBase}${e.attachmentPath}`)} target="_blank" rel="noreferrer" className="block">
                       <img
-                        src={`${apiBase}${e.attachmentPath}`}
+                        src={(e.attachmentPath?.startsWith('http') ? e.attachmentPath : `${apiBase}${e.attachmentPath}`)}
                         alt={e.attachmentName || 'Receipt'}
                         onError={() => setImgFailed(true)}
                         className="max-h-80 w-auto mx-auto rounded-xl border shadow-sm hover:shadow-md transition-shadow"
@@ -361,7 +361,7 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
                     </a>
                     <div className="flex items-center justify-center">
                       <a
-                        href={`${apiBase}${e.attachmentPath}`}
+                        href={(e.attachmentPath?.startsWith('http') ? e.attachmentPath : `${apiBase}${e.attachmentPath}`)}
                         target="_blank"
                         rel="noreferrer"
                         download={e.attachmentName || undefined}
@@ -386,7 +386,7 @@ export default function ExpenseDetailPage({ params: paramsPromise }: { params: P
                       </p>
                     </div>
                     <a
-                      href={`${apiBase}${e.attachmentPath}`}
+                      href={(e.attachmentPath?.startsWith('http') ? e.attachmentPath : `${apiBase}${e.attachmentPath}`)}
                       target="_blank"
                       rel="noreferrer"
                       download={e.attachmentName || undefined}

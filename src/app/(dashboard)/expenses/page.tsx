@@ -435,7 +435,7 @@ export default function ExpensesPage() {
             )}
             {exp.attachmentPath && (
               <a
-                href={`${apiBase}${exp.attachmentPath}`}
+                href={(exp.attachmentPath?.startsWith('http') ? exp.attachmentPath : `${apiBase}${exp.attachmentPath}`)}
                 target="_blank"
                 rel="noreferrer"
                 className="text-primary hover:underline"
@@ -617,7 +617,7 @@ export default function ExpensesPage() {
                           <td className="px-3 py-2 text-right font-semibold">{'₹'}{Number(exp.amount).toLocaleString('en-IN')}</td>
                           <td className="px-3 py-2 text-center">
                             {exp.attachmentPath ? (
-                              <a href={`${apiBase}${exp.attachmentPath}`} target="_blank" rel="noreferrer" className="text-primary hover:underline" onClick={(ev) => ev.stopPropagation()}>
+                              <a href={(exp.attachmentPath?.startsWith('http') ? exp.attachmentPath : `${apiBase}${exp.attachmentPath}`)} target="_blank" rel="noreferrer" className="text-primary hover:underline" onClick={(ev) => ev.stopPropagation()}>
                                 {exp.attachmentName?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? <ImageIcon className="h-4 w-4 inline" /> : <FileText className="h-4 w-4 inline" />}
                               </a>
                             ) : '—'}
@@ -728,7 +728,7 @@ export default function ExpensesPage() {
                       <td className="px-3 py-2 text-right font-semibold">{'₹'}{Number(exp.amount).toLocaleString('en-IN')}</td>
                       <td className="px-3 py-2 text-center">
                         {exp.attachmentPath ? (
-                          <a href={`${apiBase}${exp.attachmentPath}`} target="_blank" rel="noreferrer" className="text-primary hover:underline" onClick={(ev) => ev.stopPropagation()}>
+                          <a href={(exp.attachmentPath?.startsWith('http') ? exp.attachmentPath : `${apiBase}${exp.attachmentPath}`)} target="_blank" rel="noreferrer" className="text-primary hover:underline" onClick={(ev) => ev.stopPropagation()}>
                             {exp.attachmentName?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? <ImageIcon className="h-4 w-4 inline" /> : <FileText className="h-4 w-4 inline" />}
                           </a>
                         ) : '—'}

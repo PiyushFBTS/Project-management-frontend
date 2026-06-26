@@ -999,7 +999,7 @@ export function TicketsLogView() {
                               {isImage ? <ImageIcon className="h-4 w-4 text-blue-500 shrink-0" /> : <FileText className="h-4 w-4 text-violet-500 shrink-0" />}
                               <div className="flex-1 min-w-0">
                                 <a
-                                  href={`${apiBase}${att.filePath}`}
+                                  href={att.filePath?.startsWith('http') ? att.filePath : `${apiBase}${att.filePath}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="text-xs font-medium text-foreground hover:text-violet-600 truncate block"
@@ -1011,7 +1011,7 @@ export function TicketsLogView() {
                                 </p>
                               </div>
                               <a
-                                href={`${apiBase}${att.filePath}`}
+                                href={att.filePath?.startsWith('http') ? att.filePath : `${apiBase}${att.filePath}`}
                                 download={att.originalName}
                                 className="shrink-0 text-muted-foreground hover:text-foreground"
                               >

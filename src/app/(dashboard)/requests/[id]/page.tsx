@@ -204,17 +204,17 @@ export default function RequestDetailPage({ params: paramsPromise }: { params: P
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Document</h3>
                 {isImage && !imgFailed ? (
                   <div className="space-y-3">
-                    <a href={`${apiBase}${r.attachmentPath}`} target="_blank" rel="noreferrer" className="block">
+                    <a href={(r.attachmentPath?.startsWith('http') ? r.attachmentPath : `${apiBase}${r.attachmentPath}`)} target="_blank" rel="noreferrer" className="block">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={`${apiBase}${r.attachmentPath}`}
+                        src={(r.attachmentPath?.startsWith('http') ? r.attachmentPath : `${apiBase}${r.attachmentPath}`)}
                         alt={r.attachmentName || 'Document'}
                         onError={() => setImgFailed(true)}
                         className="max-h-80 w-auto mx-auto rounded-xl border shadow-sm hover:shadow-md transition-shadow"
                       />
                     </a>
                     <div className="flex items-center justify-center">
-                      <a href={`${apiBase}${r.attachmentPath}`} target="_blank" rel="noreferrer" download={r.attachmentName || undefined}
+                      <a href={(r.attachmentPath?.startsWith('http') ? r.attachmentPath : `${apiBase}${r.attachmentPath}`)} target="_blank" rel="noreferrer" download={r.attachmentName || undefined}
                         className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent">
                         <Download className="h-3.5 w-3.5" /> Download
                       </a>
@@ -229,7 +229,7 @@ export default function RequestDetailPage({ params: paramsPromise }: { params: P
                       <p className="text-sm font-semibold truncate">{r.attachmentName || 'Document'}</p>
                       <p className="text-xs text-muted-foreground">{imgFailed ? 'Inline preview unavailable — download instead' : 'Click to download'}</p>
                     </div>
-                    <a href={`${apiBase}${r.attachmentPath}`} target="_blank" rel="noreferrer" download={r.attachmentName || undefined}
+                    <a href={(r.attachmentPath?.startsWith('http') ? r.attachmentPath : `${apiBase}${r.attachmentPath}`)} target="_blank" rel="noreferrer" download={r.attachmentName || undefined}
                       className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-accent shrink-0">
                       <Download className="h-3.5 w-3.5" /> Download
                     </a>

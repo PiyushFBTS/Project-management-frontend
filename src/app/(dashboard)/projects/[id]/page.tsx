@@ -1780,7 +1780,7 @@ export default function ProjectDetailPage() {
                   </div>
                 </div>
                 <div className="flex gap-1 shrink-0">
-                  <a href={`${process.env.NEXT_PUBLIC_API_URL ?? ''}${doc.filePath}`} target="_blank" rel="noopener noreferrer">
+                  <a href={doc.filePath?.startsWith('http') ? doc.filePath : `${process.env.NEXT_PUBLIC_API_URL ?? ''}${doc.filePath}`} target="_blank" rel="noopener noreferrer">
                     <Button variant="ghost" size="icon" className="h-7 w-7" title="Download">
                       <Download className="h-3.5 w-3.5" />
                     </Button>

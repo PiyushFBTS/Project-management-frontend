@@ -383,7 +383,7 @@ export default function AnnouncementsPage() {
                         >
                           {fileIcon(att.mimeType, att.originalName)}
                           <a
-                            href={`${filesOrigin}${att.filePath}`}
+                            href={att.filePath?.startsWith('http') ? att.filePath : `${filesOrigin}${att.filePath}`}
                             target="_blank"
                             rel="noreferrer"
                             className="font-medium hover:underline max-w-[200px] truncate"
@@ -592,7 +592,7 @@ export default function AnnouncementsPage() {
                             {a.attachments!.map((att) => (
                               <a
                                 key={att.id}
-                                href={`${filesOrigin}${att.filePath}`}
+                                href={att.filePath?.startsWith('http') ? att.filePath : `${filesOrigin}${att.filePath}`}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="inline-flex items-center gap-1.5 rounded-md border bg-muted/30 hover:bg-muted/60 px-2 py-1 text-[11px] transition-colors"

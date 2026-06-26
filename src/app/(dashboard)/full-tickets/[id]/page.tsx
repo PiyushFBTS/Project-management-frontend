@@ -538,7 +538,7 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
                           {att.uploadedByName ? ` · ${att.uploadedByName}` : ''}
                         </p>
                       </div>
-                      <a href={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${att.filePath}`} target="_blank" rel="noreferrer">
+                      <a href={att.filePath?.startsWith('http') ? att.filePath : `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '')}${att.filePath}`} target="_blank" rel="noreferrer">
                         <Button size="sm" variant="ghost" className="h-7 w-7 p-0"><Download className="h-3.5 w-3.5" /></Button>
                       </a>
                       {(isAdmin || att.uploadedByName === (user as any)?.name || att.uploadedByName === (user as any)?.name) && (
