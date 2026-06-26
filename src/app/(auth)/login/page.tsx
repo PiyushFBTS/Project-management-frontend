@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Loader2, ShieldCheck, BarChart3, Users } from 'lucide-react';
+import { Loader2, ShieldCheck, BarChart3, Users, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/providers/auth-provider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +35,7 @@ export default function LoginPage() {
   const { login } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
@@ -134,7 +135,7 @@ export default function LoginPage() {
               <Input
                 id="email"
                 type="email"
-                placeholder="you@company.com"
+                placeholder="Enter your email"
                 className="h-10"
                 {...register('email')}
               />
@@ -143,13 +144,24 @@ export default function LoginPage() {
 
             <div className="space-y-1.5">
               <Label htmlFor="password" className="text-sm font-medium">Password <span className="text-red-500">*</span></Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                className="h-10"
-                {...register('password')}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Enter your password"
+                  className="h-10 pr-10"
+                  {...register('password')}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-0 top-0 flex h-10 w-10 items-center justify-center text-muted-foreground hover:text-foreground"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
             </div>
 

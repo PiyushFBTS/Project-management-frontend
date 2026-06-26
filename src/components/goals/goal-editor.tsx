@@ -12,7 +12,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 type Timeframe = 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
 type Status = 'not_started' | 'started' | 'in_progress' | 'finished';
@@ -182,21 +182,13 @@ export function GoalEditor({ context, goalId }: Props) {
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 block">
               Timeframe
             </label>
-            <Select
+            <SearchableSelect
+              className="w-full"
+              placeholder="Select timeframe"
               value={form.timeframe}
-              onValueChange={(v) => setForm({ ...form, timeframe: v as Timeframe })}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select timeframe" />
-              </SelectTrigger>
-              <SelectContent>
-                {TIMEFRAMES.map((opt) => (
-                  <SelectItem key={opt.key} value={opt.key}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              onValueChange={(v) => setForm({ ...form, timeframe: (v || 'monthly') as Timeframe })}
+              options={TIMEFRAMES.map((opt) => ({ value: opt.key, label: opt.label }))}
+            />
           </div>
 
           {isEditing && (

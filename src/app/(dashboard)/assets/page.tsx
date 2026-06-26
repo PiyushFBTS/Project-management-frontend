@@ -31,13 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 const STATUS_COLORS: Record<AssetStatus, string> = {
   available:
@@ -160,56 +154,48 @@ export default function AssetsPage() {
             className="pl-9 h-9"
           />
         </div>
-        <Select
+        <SearchableSelect
+          placeholder="Category"
           value={category}
-          onValueChange={(v) => setCategory(v as AssetCategory | 'all')}
-        >
-          <SelectTrigger className="h-9">
-            <SelectValue placeholder="Category" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All categories</SelectItem>
-            <SelectItem value="laptop">Laptop</SelectItem>
-            <SelectItem value="desktop">Desktop</SelectItem>
-            <SelectItem value="monitor">Monitor</SelectItem>
-            <SelectItem value="phone">Phone</SelectItem>
-            <SelectItem value="accessory">Accessory</SelectItem>
-            <SelectItem value="other">Other</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select
+          onValueChange={(v) => setCategory((v || 'all') as AssetCategory | 'all')}
+          options={[
+            { value: 'all', label: 'All categories' },
+            { value: 'laptop', label: 'Laptop' },
+            { value: 'desktop', label: 'Desktop' },
+            { value: 'monitor', label: 'Monitor' },
+            { value: 'phone', label: 'Phone' },
+            { value: 'accessory', label: 'Accessory' },
+            { value: 'other', label: 'Other' },
+          ]}
+        />
+        <SearchableSelect
+          placeholder="Status"
           value={status}
-          onValueChange={(v) => setStatus(v as AssetStatus | 'all')}
-        >
-          <SelectTrigger className="h-9">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="available">Available</SelectItem>
-            <SelectItem value="assigned">Assigned</SelectItem>
-            <SelectItem value="in_repair">In Repair</SelectItem>
-            <SelectItem value="retired">Retired</SelectItem>
-            <SelectItem value="lost">Lost</SelectItem>
-            <SelectItem value="returned_to_vendor">Returned to Vendor</SelectItem>
-          </SelectContent>
-        </Select>
+          onValueChange={(v) => setStatus((v || 'all') as AssetStatus | 'all')}
+          options={[
+            { value: 'all', label: 'All statuses' },
+            { value: 'available', label: 'Available' },
+            { value: 'assigned', label: 'Assigned' },
+            { value: 'in_repair', label: 'In Repair' },
+            { value: 'retired', label: 'Retired' },
+            { value: 'lost', label: 'Lost' },
+            { value: 'returned_to_vendor', label: 'Returned to Vendor' },
+          ]}
+        />
       </div>
       <div className="flex flex-wrap gap-2">
-        <Select
+        <SearchableSelect
+          placeholder="Ownership"
+          className="w-44"
           value={ownership}
-          onValueChange={(v) => setOwnership(v as AssetOwnership | 'all')}
-        >
-          <SelectTrigger className="h-9 w-44">
-            <SelectValue placeholder="Ownership" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All ownership</SelectItem>
-            <SelectItem value="owned">Owned</SelectItem>
-            <SelectItem value="rented">Rented</SelectItem>
-            <SelectItem value="leased">Leased</SelectItem>
-          </SelectContent>
-        </Select>
+          onValueChange={(v) => setOwnership((v || 'all') as AssetOwnership | 'all')}
+          options={[
+            { value: 'all', label: 'All ownership' },
+            { value: 'owned', label: 'Owned' },
+            { value: 'rented', label: 'Rented' },
+            { value: 'leased', label: 'Leased' },
+          ]}
+        />
       </div>
 
       {/* Table */}

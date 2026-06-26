@@ -1086,16 +1086,15 @@ function LeaveRequestsContent() {
               {/* Leave Type */}
               <div className="space-y-1.5">
                 <Label className="text-sm font-medium">Leave Type <span className="text-destructive">*</span></Label>
-                <Select value={applyForm.leaveReasonId} onValueChange={(v) => setApplyForm((p) => ({ ...p, leaveReasonId: v }))}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select a reason" />
-                  </SelectTrigger>
-                  <SelectContent position="popper">
-                    {(leaveReasons ?? []).map((r) => (
-                      <SelectItem key={r.id} value={String(r.id)}>{r.reasonName}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  placeholder="Select a reason"
+                  value={applyForm.leaveReasonId}
+                  onValueChange={(v) => setApplyForm((p) => ({ ...p, leaveReasonId: v }))}
+                  options={(leaveReasons ?? []).map((r) => ({
+                    value: String(r.id),
+                    label: r.reasonName,
+                  }))}
+                />
               </div>
 
               {/* Date range */}

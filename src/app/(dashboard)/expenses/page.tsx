@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import {
   Plus, Trash2, Loader2, Download, Check, X, Upload, Paperclip,
-  Receipt, Filter, FileText, Image as ImageIcon, FileSpreadsheet,
+  Receipt, FileText, Image as ImageIcon, FileSpreadsheet,
   User as UserIcon,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -25,6 +25,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 
 const EXPENSE_TYPES = [
   'Travel', 'Food', 'Accommodation', 'Transport', 'Office Supplies',
@@ -510,15 +511,18 @@ export default function ExpensesPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-8 flex-1 min-w-[160px] sm:w-[220px] sm:flex-none text-xs"
           />
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[130px] h-8 text-xs"><Filter className="h-3 w-3 mr-1" /><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="approved">Approved</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            className="w-[130px]"
+            placeholder="All Status"
+            value={statusFilter}
+            onValueChange={(v) => setStatusFilter(v || 'all')}
+            options={[
+              { value: 'all', label: 'All Status' },
+              { value: 'pending', label: 'Pending' },
+              { value: 'approved', label: 'Approved' },
+              { value: 'rejected', label: 'Rejected' },
+            ]}
+          />
           <Button size="sm" variant="outline" onClick={() => importInputRef.current?.click()} disabled={excelImporting}
             title="Select Excel + attachment files together. In Excel, put the filename (e.g. receipt.jpg) in the Attachment column. Embedded images in Excel cells are not supported.">
             {excelImporting ? <Loader2 className="h-4 w-4 sm:mr-1 animate-spin" /> : <Upload className="h-4 w-4 sm:mr-1" />}

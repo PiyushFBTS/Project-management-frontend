@@ -597,37 +597,44 @@ export function TicketsLogView() {
 
         {/* Row 2: filter dropdowns */}
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-9 w-full sm:w-36"><SelectValue placeholder="Status" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="todo">To Do</SelectItem>
-              <SelectItem value="in_progress">In Progress</SelectItem>
-              <SelectItem value="in_review">In Review</SelectItem>
-              <SelectItem value="done">Done</SelectItem>
-              <SelectItem value="closed">Closed</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-            <SelectTrigger className="h-9 w-full sm:w-36"><SelectValue placeholder="Priority" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Priorities</SelectItem>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="critical">Critical</SelectItem>
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            className="w-full sm:w-36"
+            placeholder="Status"
+            value={statusFilter}
+            onValueChange={(v) => setStatusFilter(v || 'all')}
+            options={[
+              { value: 'all', label: 'All Statuses' },
+              { value: 'todo', label: 'To Do' },
+              { value: 'in_progress', label: 'In Progress' },
+              { value: 'in_review', label: 'In Review' },
+              { value: 'done', label: 'Done' },
+              { value: 'closed', label: 'Closed' },
+            ]}
+          />
+          <SearchableSelect
+            className="w-full sm:w-36"
+            placeholder="Priority"
+            value={priorityFilter}
+            onValueChange={(v) => setPriorityFilter(v || 'all')}
+            options={[
+              { value: 'all', label: 'All Priorities' },
+              { value: 'low', label: 'Low' },
+              { value: 'medium', label: 'Medium' },
+              { value: 'high', label: 'High' },
+              { value: 'critical', label: 'Critical' },
+            ]}
+          />
           {!isClient && (
-            <Select value={projectFilter} onValueChange={setProjectFilter}>
-              <SelectTrigger className="h-9 w-full sm:w-44"><SelectValue placeholder="Project" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Projects</SelectItem>
-                {(projectsList ?? []).map((p) => (
-                  <SelectItem key={p.id} value={String(p.id)}>{p.projectName}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              className="w-full sm:w-44"
+              placeholder="Project"
+              value={projectFilter}
+              onValueChange={(v) => setProjectFilter(v || 'all')}
+              options={[
+                { value: 'all', label: 'All Projects' },
+                ...(projectsList ?? []).map((p) => ({ value: String(p.id), label: p.projectName })),
+              ]}
+            />
           )}
           <SearchableSelect
             value={assigneeFilter}
@@ -637,20 +644,24 @@ export function TicketsLogView() {
               ...(companyEmployees ?? [])
                 .filter((emp: any) => emp._type !== 'admin')
                 .filter((e, i, arr) => arr.findIndex((x) => x.id === e.id) === i)
-                .map((emp) => ({ value: String(emp.id), label: emp.name })),
+                .map((emp) => ({ value: String(emp.id), label: emp.name }))
+                .sort((a, b) => a.label.localeCompare(b.label)),
             ]}
             placeholder="All Employees"
             className="w-full sm:w-48"
           />
-          <Select value={dueDateFilter} onValueChange={setDueDateFilter}>
-            <SelectTrigger className="h-9 w-full sm:w-36"><SelectValue placeholder="Due Date" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Due Dates</SelectItem>
-              <SelectItem value="overdue">Overdue</SelectItem>
-              <SelectItem value="due_today">Due Today</SelectItem>
-              <SelectItem value="no_due_date">No Due Date</SelectItem>
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            className="w-full sm:w-36"
+            placeholder="Due Date"
+            value={dueDateFilter}
+            onValueChange={(v) => setDueDateFilter(v || 'all')}
+            options={[
+              { value: 'all', label: 'All Due Dates' },
+              { value: 'overdue', label: 'Overdue' },
+              { value: 'due_today', label: 'Due Today' },
+              { value: 'no_due_date', label: 'No Due Date' },
+            ]}
+          />
           {(statusFilter !== 'all' || priorityFilter !== 'all' || projectFilter !== 'all' || assigneeFilter !== 'all' || dueDateFilter !== 'all' || search) && (
             <Button
               variant="ghost"

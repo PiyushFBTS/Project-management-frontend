@@ -271,42 +271,43 @@ export function MyTicketsView() {
         </div>
         <div className="hidden sm:block h-6 w-px bg-border" />
         <div className="grid grid-cols-1 xs:grid-cols-3 gap-2 sm:flex sm:gap-3">
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full sm:w-36">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="todo">To Do</SelectItem>
-              <SelectItem value="in_progress">In Progress</SelectItem>
-              <SelectItem value="in_review">In Review</SelectItem>
-              <SelectItem value="done">Done</SelectItem>
-              <SelectItem value="closed">Closed</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-            <SelectTrigger className="w-full sm:w-36">
-              <SelectValue placeholder="Priority" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Priorities</SelectItem>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-              <SelectItem value="critical">Critical</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={projectFilter} onValueChange={setProjectFilter}>
-            <SelectTrigger className="w-full sm:w-44">
-              <SelectValue placeholder="Project" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Projects</SelectItem>
-              {(projectsList ?? []).map((p) => (
-                <SelectItem key={p.id} value={String(p.id)}>{p.projectName}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            className="w-full sm:w-36"
+            placeholder="Status"
+            value={statusFilter}
+            onValueChange={(v) => setStatusFilter(v || 'all')}
+            options={[
+              { value: 'all', label: 'All Statuses' },
+              { value: 'todo', label: 'To Do' },
+              { value: 'in_progress', label: 'In Progress' },
+              { value: 'in_review', label: 'In Review' },
+              { value: 'done', label: 'Done' },
+              { value: 'closed', label: 'Closed' },
+            ]}
+          />
+          <SearchableSelect
+            className="w-full sm:w-36"
+            placeholder="Priority"
+            value={priorityFilter}
+            onValueChange={(v) => setPriorityFilter(v || 'all')}
+            options={[
+              { value: 'all', label: 'All Priorities' },
+              { value: 'low', label: 'Low' },
+              { value: 'medium', label: 'Medium' },
+              { value: 'high', label: 'High' },
+              { value: 'critical', label: 'Critical' },
+            ]}
+          />
+          <SearchableSelect
+            className="w-full sm:w-44"
+            placeholder="Project"
+            value={projectFilter}
+            onValueChange={(v) => setProjectFilter(v || 'all')}
+            options={[
+              { value: 'all', label: 'All Projects' },
+              ...(projectsList ?? []).map((p) => ({ value: String(p.id), label: p.projectName })),
+            ]}
+          />
         </div>
       </div>
 
@@ -572,7 +573,8 @@ export function MyTicketsView() {
                     onValueChange={setReassignTo}
                     options={(companyEmployees ?? [])
                       .filter((emp: any) => emp._type !== 'admin')
-                      .map((emp) => ({ value: String(emp.id), label: emp.name }))}
+                      .map((emp) => ({ value: String(emp.id), label: emp.name }))
+                      .sort((a, b) => a.label.localeCompare(b.label))}
                     placeholder="Select employee..."
                     disabled={taskDetail.status === 'closed'}
                     className="w-full sm:w-52"

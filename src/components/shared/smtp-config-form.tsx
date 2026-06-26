@@ -18,6 +18,7 @@ import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { SaveSmtpConfigDto, SmtpConfig } from '@/types';
 import { AxiosResponse } from 'axios';
 
@@ -441,30 +442,28 @@ export function SmtpConfigForm({
               </div>
               <div className="space-y-1.5">
                 <Label>Encryption</Label>
-                <Select
+                <SearchableSelect
+                  className="w-full"
                   value={form.encryption || 'tls'}
-                  onValueChange={(v) => setForm((p) => ({ ...p, encryption: v }))}
-                >
-                  <SelectTrigger  className="w-full"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="tls">TLS</SelectItem>
-                    <SelectItem value="ssl">SSL</SelectItem>
-                    <SelectItem value="none">None</SelectItem>
-                  </SelectContent>
-                </Select>
+                  onValueChange={(v) => setForm((p) => ({ ...p, encryption: v || 'tls' }))}
+                  options={[
+                    { value: 'tls', label: 'TLS' },
+                    { value: 'ssl', label: 'SSL' },
+                    { value: 'none', label: 'None' },
+                  ]}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>Status</Label>
-                <Select
+                <SearchableSelect
+                  className="w-full"
                   value={form.isActive || 'active'}
-                  onValueChange={(v) => setForm((p) => ({ ...p, isActive: v }))}
-                >
-                  <SelectTrigger  className="w-full"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
+                  onValueChange={(v) => setForm((p) => ({ ...p, isActive: v || 'active' }))}
+                  options={[
+                    { value: 'active', label: 'Active' },
+                    { value: 'inactive', label: 'Inactive' },
+                  ]}
+                />
               </div>
             </div>
 

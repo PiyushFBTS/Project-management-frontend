@@ -1889,6 +1889,7 @@ export default function ProjectDetailPage() {
                 (employeePool ?? [])
                   .filter((e: any) => e._type !== 'admin')
                   .filter((e: any) => !(members as any[])?.some((m) => m.id === e.id))
+                  .sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''))
                   .map((emp: any) => (
                     <label key={emp.id} className="flex items-center gap-3 px-3 py-2 hover:bg-muted/40 cursor-pointer">
                       <input

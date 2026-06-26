@@ -23,6 +23,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Card } from '@/components/ui/card';
 
 const AVATAR_GRADIENT = 'bg-linear-to-r from-emerald-600 via-teal-600 to-cyan-600';
@@ -264,14 +265,16 @@ export default function EmployeesPage() {
           />
         </div>
         {canSeeInactive && (
-          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'active' | 'inactive' | 'all')}>
-            <SelectTrigger className="w-full xs:w-36"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="inactive">Inactive</SelectItem>
-              <SelectItem value="all">All</SelectItem>
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            className="w-full xs:w-36"
+            value={statusFilter}
+            onValueChange={(v) => setStatusFilter((v || 'active') as 'active' | 'inactive' | 'all')}
+            options={[
+              { value: 'active', label: 'Active' },
+              { value: 'inactive', label: 'Inactive' },
+              { value: 'all', label: 'All' },
+            ]}
+          />
         )}
         {/* Excel export — visible to admin and HR. Same filter scope as
             the list on screen (search + isActive) so the file matches
