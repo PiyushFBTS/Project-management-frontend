@@ -137,11 +137,10 @@ export default function AssetDetailPage() {
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-3 py-2 text-sm font-semibold capitalize border-b-2 ${
-              tab === t
+            className={`px-3 py-2 text-sm font-semibold capitalize border-b-2 ${tab === t
                 ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
+              }`}
           >
             {t}
           </button>
@@ -413,8 +412,8 @@ function OverviewTab({
                 <KV k="Monthly Amount">
                   {asset.rentalMonthlyAmount
                     ? `₹${Number(asset.rentalMonthlyAmount).toLocaleString(
-                        'en-IN',
-                      )}`
+                      'en-IN',
+                    )}`
                     : '—'}
                 </KV>
               </>
@@ -615,11 +614,10 @@ function AssignmentsTab({
                   </span>
                   <Badge
                     variant="outline"
-                    className={`text-[10px] ${
-                      a.returnedAt
+                    className={`text-[10px] ${a.returnedAt
                         ? 'text-slate-500'
                         : 'text-emerald-700 border-emerald-300'
-                    }`}
+                      }`}
                   >
                     {a.returnedAt ? 'Returned' : 'Active'}
                   </Badge>
@@ -866,9 +864,9 @@ function MaintenanceTab({
   const lastCompletedDate =
     completed.length > 0
       ? completed
-          .map((j) => j.endDate ?? j.startDate)
-          .sort()
-          .pop() ?? null
+        .map((j) => j.endDate ?? j.startDate)
+        .sort()
+        .pop() ?? null
       : null;
 
   // Read-only card for a historical status snapshot. Shows the job's
@@ -1032,7 +1030,7 @@ function MaintenanceTab({
           )}
         </div>
       </div>
-
+//assets
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
