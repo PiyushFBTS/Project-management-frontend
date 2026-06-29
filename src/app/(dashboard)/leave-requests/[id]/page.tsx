@@ -11,12 +11,12 @@ import {
 } from 'lucide-react';
 import { leaveRequestsApi } from '@/lib/api/leave-requests';
 import { EditLeaveDialog } from '../_components/edit-leave-dialog';
+import { LeaveActionDialog } from '../_components/leave-action-dialog';
 import { useAuth } from '@/providers/auth-provider';
 import { LeaveRequestStatus } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 
 // Header badge — collapsed to 3 user-facing buckets (Pending / Approved /
@@ -60,8 +60,11 @@ export default function LeaveRequestDetailPage() {
   const { user } = useAuth();
   const isAdmin = user?._type === 'admin';
   const isEmployee = user?._type === 'employee';
-  const [actionRemarks, setActionRemarks] = useState('');
   const [editOpen, setEditOpen] = useState(false);
+  const [actionDialog, setActionDialog] = useState<{ open: boolean; action: 'approve' | 'reject' }>({
+    open: false,
+    action: 'approve',
+  });
 
   const leaveId = Number(id);
 
@@ -89,11 +92,15 @@ export default function LeaveRequestDetailPage() {
     const userId = (user as { id: number }).id;
     const isOwnEmployeeLeave = isEmployee && detail.employeeId === userId;
     const isOwnAdminLeave = isAdmin && detail.adminId != null && detail.adminId === userId;
-    const isOwn = isOwnEmployeeLeave || isOwnAdminLeave;
-    // Owners can edit/cancel ONLY while the request is still pending — once
-    // RM or HR actions it (approved/rejected at any level), it's frozen.
-    // Editing is employee-only (no admin edit endpoint yet).
-    const canCancel = isOwn && detail.status === 'pending';
+    const isHrUser = isEmployee && !!(user as { isHr?: boolean }).isHr;
+    // Plain owners can edit/cancel ONLY while pending — once RM/HR actions it,
+    // it's frozen. Admin + HR can cancel any ACTIVE leave (incl. a fully
+    // approved one), since Reject is hidden once approved and cancel is the
+    // way to undo it. Editing stays employee-owner + pending only.
+    const ACTIVE_CANCELLABLE = ['pending', 'manager_approved', 'hr_approved'];
+    const canCancel = (isAdmin || isHrUser)
+      ? ACTIVE_CANCELLABLE.includes(detail.status)
+      : (isOwnEmployeeLeave && detail.status === 'pending');
     const canEdit = isOwnEmployeeLeave && detail.status === 'pending';
 
     let canApprove = false;
@@ -102,8 +109,8 @@ export default function LeaveRequestDetailPage() {
       // Block admin from acting on their own admin-submitted leave.
       if (!isOwnAdminLeave) {
         canApprove = ['pending', 'manager_approved'].includes(detail.status);
-        // Admin can also reject an already-approved leave to revoke it.
-        canReject = ['pending', 'manager_approved', 'hr_approved'].includes(detail.status);
+        // Reject is hidden once approved — use Cancel to undo an approval.
+        canReject = ['pending', 'manager_approved'].includes(detail.status);
       }
     } else if (isEmployee) {
       const isManager = detail.employee?.reportsToId === userId;
@@ -128,18 +135,9 @@ export default function LeaveRequestDetailPage() {
     qc.invalidateQueries({ queryKey: ['pending-approvals'] });
   };
 
-  const approveMut = useMutation({
-    mutationFn: () => leaveRequestsApi.approveLeave(leaveId, actionRemarks || undefined),
-    onSuccess: () => { toast.success('Approved'); invalidateAll(); setActionRemarks(''); },
-    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
-  });
-
-  const rejectMut = useMutation({
-    mutationFn: () => leaveRequestsApi.rejectLeave(leaveId, actionRemarks || undefined),
-    onSuccess: () => { toast.success('Rejected'); invalidateAll(); setActionRemarks(''); },
-    onError: (e: any) => toast.error(e?.response?.data?.message ?? 'Failed'),
-  });
-
+  // Approve / Reject now run through the shared <LeaveActionDialog />, which
+  // owns the remarks field (optional on approve, required on reject) and its
+  // own mutations. Only cancel stays here — it needs no remarks prompt.
   const cancelMut = useMutation({
     mutationFn: () => leaveRequestsApi.cancelLeave(leaveId),
     onSuccess: () => { toast.success('Cancelled'); invalidateAll(); },
@@ -399,42 +397,28 @@ export default function LeaveRequestDetailPage() {
                 <MessageSquare className="h-3 w-3" /> Actions
               </div>
               {(canAct.canApprove || canAct.canReject) && (
-                <>
-                  <Textarea
-                    placeholder="Remarks (optional)"
-                    value={actionRemarks}
-                    onChange={(e) => setActionRemarks(e.target.value)}
-                    rows={2}
-                  />
-                  <div className="flex gap-2">
-                    {canAct.canApprove && (
-                      <Button
-                        size="sm"
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                        disabled={approveMut.isPending || rejectMut.isPending}
-                        onClick={() => approveMut.mutate()}
-                      >
-                        <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                        {approveMut.isPending ? 'Processing...' : 'Approve'}
-                      </Button>
-                    )}
-                    {canAct.canReject && (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        disabled={approveMut.isPending || rejectMut.isPending}
-                        onClick={() => rejectMut.mutate()}
-                      >
-                        <XCircle className="mr-1.5 h-3.5 w-3.5" />
-                        {rejectMut.isPending
-                          ? 'Processing...'
-                          : detail.status === 'hr_approved'
-                            ? 'Reject (revoke approval)'
-                            : 'Reject'}
-                      </Button>
-                    )}
-                  </div>
-                </>
+                <div className="flex gap-2">
+                  {canAct.canApprove && (
+                    <Button
+                      size="sm"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      onClick={() => setActionDialog({ open: true, action: 'approve' })}
+                    >
+                      <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                      Approve
+                    </Button>
+                  )}
+                  {canAct.canReject && (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => setActionDialog({ open: true, action: 'reject' })}
+                    >
+                      <XCircle className="mr-1.5 h-3.5 w-3.5" />
+                      {detail.status === 'hr_approved' ? 'Reject (revoke approval)' : 'Reject'}
+                    </Button>
+                  )}
+                </div>
               )}
               {(canAct.canEdit || canAct.canCancel) && (
                 <div className="flex flex-wrap gap-2">
@@ -473,6 +457,15 @@ export default function LeaveRequestDetailPage() {
 
         {/* Edit dialog — owner-only, pending-only. */}
         <EditLeaveDialog open={editOpen} onOpenChange={setEditOpen} leave={detail} />
+
+        {/* Approve / Reject dialog — remarks optional on approve, required on reject. */}
+        <LeaveActionDialog
+          open={actionDialog.open}
+          onOpenChange={(v) => setActionDialog((p) => ({ ...p, open: v }))}
+          action={actionDialog.action}
+          leaveId={leaveId}
+          rejectIsRevoke={detail.status === 'hr_approved'}
+        />
 
       </div>
 

@@ -12,6 +12,7 @@ import { leaveRequestsApi } from '@/lib/api/leave-requests';
 import { wfhRequestsApi } from '@/lib/api/wfh-requests';
 import { LeaveRequest, LeaveRequestStatus } from '@/types';
 import { ApplyWfhDialog } from './_components/apply-wfh-dialog';
+import { LeaveActionDialog } from './_components/leave-action-dialog';
 import { WfhTab } from './_components/wfh-tab';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -122,6 +123,36 @@ function LeaveRequestsContent() {
   const isRm = isEmployee && !isHr && (rmPing?.length ?? 0) > 0;
   // Single permission gate: who is allowed to see the Team Leaves tab.
   const canSeeTeam = isAdmin || isHr || isRm;
+
+  // Pending-action counts for the Team tab badges — same semantics as the
+  // sidebar badge: requests awaiting THIS user's action. Employees hit the
+  // pending-approvals endpoint; admins (final gate) count company-wide
+  // pending + manager_approved. Only fetched for users who see Team tabs.
+  const pendingTotal = (r: any) =>
+    r.data?.meta?.total ?? (Array.isArray(r.data?.data) ? r.data.data.length : 0);
+  const countPending = async (mod: typeof leaveRequestsApi | typeof wfhRequestsApi) => {
+    if (isEmployee) return pendingTotal(await mod.getPendingApprovals({ limit: 1 }));
+    const [p, m] = await Promise.all([
+      mod.getAll({ status: 'pending' as LeaveRequestStatus, limit: 1 }),
+      mod.getAll({ status: 'manager_approved' as LeaveRequestStatus, limit: 1 }),
+    ]);
+    return pendingTotal(p) + pendingTotal(m);
+  };
+  const { data: teamLeavePending = 0 } = useQuery({
+    queryKey: ['leave-tab-pending', isAdmin, isEmployee],
+    queryFn: () => countPending(leaveRequestsApi),
+    enabled: !!user && canSeeTeam,
+    staleTime: 30_000,
+  });
+  const { data: teamWfhPending = 0 } = useQuery({
+    queryKey: ['wfh-tab-pending', isAdmin, isEmployee],
+    queryFn: () => countPending(wfhRequestsApi),
+    enabled: !!user && canSeeTeam,
+    staleTime: 30_000,
+  });
+  const tabBadge = (t: string) =>
+    t === 'team-leaves' ? teamLeavePending : t === 'team-wfh' ? teamWfhPending : 0;
+
   const queryClient = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -138,8 +169,10 @@ function LeaveRequestsContent() {
   const [adminTab, setAdminTab] = useState<AdminTab>('team-leaves');
   const [calMonth, setCalMonth] = useState(() => new Date());
   const [teamEmployeeId, setTeamEmployeeId] = useState<string>('');
-  const [actionRemarks, setActionRemarks] = useState('');
   const [acting, setActing] = useState(false);
+  const [actionDialog, setActionDialog] = useState<{ open: boolean; action: 'approve' | 'reject'; leaveId: number; isRevoke: boolean }>({
+    open: false, action: 'approve', leaveId: 0, isRevoke: false,
+  });
 
   // ── Apply for WFH dialog (Sprint 2) ──
   // Same self / on-behalf shape as the Leave dialog. Hosted as a
@@ -410,35 +443,8 @@ function LeaveRequestsContent() {
     }
   };
 
-  const handleApprove = async (id: number) => {
-    setActing(true);
-    try {
-      await leaveRequestsApi.approveLeave(id, actionRemarks || undefined);
-      toast.success('Leave request approved');
-      setSelected(null);
-      setActionRemarks('');
-      invalidateAll();
-    } catch {
-      toast.error('Failed to approve leave request');
-    } finally {
-      setActing(false);
-    }
-  };
-
-  const handleReject = async (id: number) => {
-    setActing(true);
-    try {
-      await leaveRequestsApi.rejectLeave(id, actionRemarks || undefined);
-      toast.success('Leave request rejected');
-      setSelected(null);
-      setActionRemarks('');
-      invalidateAll();
-    } catch {
-      toast.error('Failed to reject leave request');
-    } finally {
-      setActing(false);
-    }
-  };
+  // Approve / Reject run through <LeaveActionDialog /> (remarks optional on
+  // approve, required on reject) — same UX as the WFH action dialog.
 
   // Determine if current employee can act on the selected detail.
   // HR / RM cannot approve a leave they themselves submitted — another
@@ -482,11 +488,10 @@ function LeaveRequestsContent() {
     const isOwnEmployeeLeave = !isAdmin && lr.employeeId != null && lr.employeeId === userId;
     if (isOwnAdminLeave || isOwnEmployeeLeave) return { canApprove: false, canReject: false };
     if (isAdmin) {
-      return {
-        canApprove: ['pending', 'manager_approved'].includes(lr.status),
-        // Admin can also revoke an already-approved leave.
-        canReject: ['pending', 'manager_approved', 'hr_approved'].includes(lr.status),
-      };
+      const actionable = ['pending', 'manager_approved'].includes(lr.status);
+      // Reject is hidden once approved — an approved leave is undone via
+      // Cancel on the detail page, not rejected from the list.
+      return { canApprove: actionable, canReject: actionable };
     }
     // HR employee — same status gate.
     const actionable = ['pending', 'manager_approved'].includes(lr.status);
@@ -556,7 +561,7 @@ function LeaveRequestsContent() {
             <button
               key={t}
               onClick={() => { setTab(t); if (t !== 'team-leaves' && t !== 'team-wfh') setTeamEmployeeId(''); }}
-              className={`shrink-0 whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
+              className={`inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
                 tab === t
                   ? 'bg-white dark:bg-card shadow-sm text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
@@ -567,6 +572,11 @@ function LeaveRequestsContent() {
                 : t === 'my-wfh' ? 'My WFH'
                 : t === 'team-wfh' ? 'Team WFH'
                 : 'Calendar'}
+              {tabBadge(t) > 0 && (
+                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-none text-white">
+                  {tabBadge(t) > 99 ? '99+' : tabBadge(t)}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -579,7 +589,7 @@ function LeaveRequestsContent() {
             <button
               key={t}
               onClick={() => setAdminTab(t)}
-              className={`shrink-0 whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
+              className={`inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
                 adminTab === t
                   ? 'bg-white dark:bg-card shadow-sm text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
@@ -590,6 +600,11 @@ function LeaveRequestsContent() {
                 : t === 'my-wfh' ? 'My WFH'
                 : t === 'team-wfh' ? 'Team WFH'
                 : 'Calendar'}
+              {tabBadge(t) > 0 && (
+                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-none text-white">
+                  {tabBadge(t) > 99 ? '99+' : tabBadge(t)}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -1006,8 +1021,7 @@ function LeaveRequestsContent() {
                                 size="icon"
                                 className="h-7 w-7 text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700"
                                 title="Approve"
-                                disabled={acting}
-                                onClick={(e) => { e.stopPropagation(); handleApprove(lr.id); }}
+                                onClick={(e) => { e.stopPropagation(); setActionDialog({ open: true, action: 'approve', leaveId: lr.id, isRevoke: lr.status === 'hr_approved' }); }}
                               >
                                 <CheckCircle2 className="h-4 w-4" />
                               </Button>
@@ -1018,8 +1032,7 @@ function LeaveRequestsContent() {
                                 size="icon"
                                 className="h-7 w-7 text-red-600 hover:bg-red-500/10 hover:text-red-700"
                                 title="Reject"
-                                disabled={acting}
-                                onClick={(e) => { e.stopPropagation(); handleReject(lr.id); }}
+                                onClick={(e) => { e.stopPropagation(); setActionDialog({ open: true, action: 'reject', leaveId: lr.id, isRevoke: lr.status === 'hr_approved' }); }}
                               >
                                 <XCircle className="h-4 w-4" />
                               </Button>
@@ -1051,6 +1064,16 @@ function LeaveRequestsContent() {
           isAdmin={isAdmin}
         />
       )}
+
+      {/* Approve / Reject dialog — remarks optional on approve, required on reject. */}
+      <LeaveActionDialog
+        open={actionDialog.open}
+        onOpenChange={(v) => setActionDialog((p) => ({ ...p, open: v }))}
+        action={actionDialog.action}
+        leaveId={actionDialog.leaveId}
+        rejectIsRevoke={actionDialog.isRevoke}
+        onSuccess={() => setSelected(null)}
+      />
 
       {/* Apply for Leave Dialog — open for both employee and admin */}
       {(isEmployee || isAdmin) && (
@@ -1291,7 +1314,7 @@ function LeaveRequestsContent() {
       )}
 
       {/* Detail Dialog */}
-      <Dialog open={!!selected} onOpenChange={(v) => { if (!v) { setSelected(null); setActionRemarks(''); } }}>
+      <Dialog open={!!selected} onOpenChange={(v) => { if (!v) setSelected(null); }}>
         <DialogContent className="max-w-lg overflow-hidden">
           <div className="absolute top-0 left-0 right-0 h-1 bg-linear-to-r from-orange-500 via-rose-500 to-violet-500" />
           <DialogHeader>
@@ -1457,35 +1480,24 @@ function LeaveRequestsContent() {
               {isEmployee && (canActOnDetail.canApprove || canActOnDetail.canCancel) && (
                 <div className="border-t pt-3 space-y-3">
                   {canActOnDetail.canApprove && (
-                    <>
-                      <Textarea
-                        placeholder="Remarks (optional)"
-                        value={actionRemarks}
-                        onChange={(e) => setActionRemarks(e.target.value)}
-                        className="text-sm"
-                        rows={2}
-                      />
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                          disabled={acting}
-                          onClick={() => handleApprove(detail.id)}
-                        >
-                          <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                          {acting ? 'Processing...' : 'Approve'}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          disabled={acting}
-                          onClick={() => handleReject(detail.id)}
-                        >
-                          <XCircle className="mr-1.5 h-3.5 w-3.5" />
-                          {acting ? 'Processing...' : 'Reject'}
-                        </Button>
-                      </div>
-                    </>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                        onClick={() => setActionDialog({ open: true, action: 'approve', leaveId: detail.id, isRevoke: detail.status === 'hr_approved' })}
+                      >
+                        <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                        Approve
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => setActionDialog({ open: true, action: 'reject', leaveId: detail.id, isRevoke: detail.status === 'hr_approved' })}
+                      >
+                        <XCircle className="mr-1.5 h-3.5 w-3.5" />
+                        {detail.status === 'hr_approved' ? 'Reject (revoke approval)' : 'Reject'}
+                      </Button>
+                    </div>
                   )}
                   {canActOnDetail.canCancel && (
                     <Button
