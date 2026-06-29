@@ -214,6 +214,13 @@ export default function WfhRequestDetailPage() {
                 <p className="text-sm font-bold">{detail.totalDays}</p>
               </div>
             </div>
+            {/* When the request was submitted — full date + time. */}
+            <div className="pt-2 border-t border-border/50">
+              <p className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                <Clock className="h-3 w-3" /> Requested On
+              </p>
+              <p className="text-sm font-medium">{fmtDateTime(detail.createdAt)}</p>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -252,7 +259,7 @@ export default function WfhRequestDetailPage() {
                     <div className={`mt-1 h-3 w-3 rounded-full shrink-0 ${
                       detail.status === 'manager_rejected' ? 'bg-red-500' :
                       detail.managerActionAt ? 'bg-emerald-500' :
-                      adminFinal ? 'bg-emerald-500' : 'bg-amber-400'
+                      isFinal ? 'bg-emerald-500' : 'bg-amber-400'
                     }`} />
                     <div>
                       <p className="text-sm font-medium">Manager: {detail.manager?.name ?? '—'}</p>
@@ -263,8 +270,11 @@ export default function WfhRequestDetailPage() {
                           </p>
                           {detail.managerRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.managerRemarks}&quot;</p>}
                         </>
-                      ) : adminFinal ? (
-                        <p className="text-xs text-muted-foreground">{autoWord}</p>
+                      ) : isFinal ? (
+                        // HR (or admin) actioned directly — the manager step was
+                        // bypassed, so flag it as auto-approved/-rejected rather
+                        // than leaving it stuck on "Pending action".
+                        <p className="text-xs text-muted-foreground">{autoWord} (HR actioned directly)</p>
                       ) : (
                         <p className="text-xs text-muted-foreground">Pending action</p>
                       )}

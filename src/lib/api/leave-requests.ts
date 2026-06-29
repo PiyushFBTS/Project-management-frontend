@@ -68,6 +68,19 @@ export const leaveRequestsApi = {
   getOneForEmployee: (id: number) =>
     api.get<ApiResponse<LeaveRequest>>(`/employee/leave-requests/${id}`),
 
+  // Edit own PENDING leave request (employee-only endpoint). Locked once
+  // RM or HR has actioned it — the backend enforces the pending guard.
+  updateLeave: (
+    id: number,
+    data: {
+      leaveReasonId: number;
+      dateFrom: string;
+      dateTo: string;
+      remarks?: string;
+      halfDayKind?: 'first_half' | 'second_half';
+    },
+  ) => api.patch<ApiResponse<LeaveRequest>>(`/employee/leave-requests/${id}`, data),
+
   cancelLeave: (id: number) =>
     api.patch<ApiResponse<LeaveRequest>>(actionPath(id, 'cancel')),
 

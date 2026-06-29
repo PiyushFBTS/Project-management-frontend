@@ -118,6 +118,16 @@ export function ApplyWfhDialog({ open, onOpenChange, mode, isAdmin }: Props) {
     submit.mutate();
   };
 
+  // Mirror the DB's `total_days` generated column for WFH:
+  // DATEDIFF(date_to, date_from) + 1 — inclusive calendar days.
+  const dayCount = (() => {
+    if (!form.dateFrom || !form.dateTo) return 0;
+    const from = new Date(form.dateFrom + 'T00:00:00');
+    const to = new Date(form.dateTo + 'T00:00:00');
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to < from) return 0;
+    return Math.floor((to.getTime() - from.getTime()) / 86_400_000) + 1;
+  })();
+
   const toggleWatcher = (id: number) => {
     setForm((p) => ({
       ...p,
@@ -183,6 +193,14 @@ export function ApplyWfhDialog({ open, onOpenChange, mode, isAdmin }: Props) {
               />
             </div>
           </div>
+
+          {/* Computed inclusive day count — mirrors the stored total_days. */}
+          {dayCount > 0 && (
+            <div className="flex items-center justify-between rounded-md bg-muted/50 px-3 py-2 text-sm">
+              <span className="text-muted-foreground">Total days</span>
+              <span className="font-semibold">{dayCount} day{dayCount > 1 ? 's' : ''}</span>
+            </div>
+          )}
 
           <div>
             <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5 block">

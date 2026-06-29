@@ -21,6 +21,9 @@ import { useAuth } from '@/providers/auth-provider';
 import { useCompany } from '@/providers/company-provider';
 import { pmTaskApprovalsApi } from '@/lib/api/task-sheets';
 import { requestsApi, adminRequestsApi, hrRequestsApi } from '@/lib/api/requests';
+import { leaveRequestsApi } from '@/lib/api/leave-requests';
+import { wfhRequestsApi } from '@/lib/api/wfh-requests';
+import { LeaveRequestStatus } from '@/types';
 import { ClipboardCheck } from 'lucide-react';
 
 type NavChild = { label: string; href: string; dotColor: string; hrOrAdminOnly?: boolean };
@@ -259,6 +262,51 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isCli
   });
   const requestsCount = pendingRequestsCount ?? 0;
 
+  // Pending-leave + WFH count for the "Leave Requests" entry. Mirrors the
+  // approvals badge — the number of leave/WFH requests awaiting THIS user's
+  // action. Employees hit the pending-approvals endpoints, which return 0
+  // for plain (non-RM/non-HR) employees, so no badge shows for them. Admins
+  // are the final gate, so we count both pending + manager_approved
+  // company-wide. The badge shows the combined leave + WFH total.
+  const leaveBadgeEnabled = approvalsEnabled;
+  const { data: pendingLeavesCount } = useQuery({
+    queryKey: ['sidebar-pending-leaves', selectedCompany?.id ?? null, isEmployee],
+    queryFn: async () => {
+      // ResponseInterceptor flattens `{ data, meta }` to a top-level body,
+      // so the paginated total lives at `r.data.meta.total`.
+      const total = (r: any) =>
+        r.data?.meta?.total ?? (Array.isArray(r.data?.data) ? r.data.data.length : 0);
+      // Count one module (leave or WFH) for the current user's role.
+      const countFor = async (mod: typeof leaveRequestsApi | typeof wfhRequestsApi) => {
+        if (isEmployee) {
+          const r = await mod.getPendingApprovals({ limit: 1 });
+          return total(r);
+        }
+        const [p, m] = await Promise.all([
+          mod.getAll({ status: 'pending' as LeaveRequestStatus, limit: 1 }),
+          mod.getAll({ status: 'manager_approved' as LeaveRequestStatus, limit: 1 }),
+        ]);
+        return total(p) + total(m);
+      };
+      const [leave, wfh] = await Promise.all([
+        countFor(leaveRequestsApi),
+        countFor(wfhRequestsApi),
+      ]);
+      return leave + wfh;
+    },
+    enabled: leaveBadgeEnabled,
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+  const leavesCount = pendingLeavesCount ?? 0;
+
+  // Per-child badge counts (sub-items under collapsible sections). Parents
+  // surface the sum so the count is still visible when the section is
+  // collapsed or the rail is in icon-only mode.
+  const childBadgeCount = (label: string) => (label === 'Leave Requests' ? leavesCount : 0);
+  const sectionBadgeCount = (item: NavItem) =>
+    (item.children ?? []).reduce((sum, c) => sum + childBadgeCount(c.label), 0);
+
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
     Reports: pathname.startsWith('/reports'),
     'Leave Management': pathname.startsWith('/leave-r') || pathname.startsWith('/holidays'),
@@ -333,15 +381,16 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isCli
         if (item.children) {
           const isActive = item.children.some((c) => pathname.startsWith(c.href));
           const isOpen = openSections[item.label] ?? false;
+          const sectionCount = sectionBadgeCount(item);
 
           if (collapsed) {
             return (
               <button
                 key={item.label}
-                title={item.label}
+                title={sectionCount > 0 ? `${item.label} (${sectionCount})` : item.label}
                 onClick={() => toggleSection(item.label)}
                 className={cn(
-                  'flex w-full items-center justify-center rounded-lg p-2 transition-all',
+                  'relative flex w-full items-center justify-center rounded-lg p-2 transition-all',
                   item.hoverBg, 'hover:text-gray-900 dark:hover:text-white',
                   isActive && `${item.activeBg} text-gray-900 dark:text-white border-l-2 ${item.borderColor}`,
                   !isActive && 'text-gray-500 dark:text-slate-400',
@@ -353,6 +402,9 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isCli
                 )}>
                   <item.icon className={cn('h-4 w-4', isActive ? item.iconColor : 'text-gray-400 dark:text-slate-500')} />
                 </div>
+                {sectionCount > 0 && (
+                  <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-sidebar" />
+                )}
               </button>
             );
           }
@@ -367,20 +419,31 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isCli
                   isActive ? `${item.activeBg} text-gray-900 dark:text-white ${item.borderColor}` : 'text-gray-500 dark:text-slate-400',
                 )}
               >
-                <span className="flex items-center gap-2.5">
+                <span className="flex min-w-0 items-center gap-2.5">
                   <div className={cn(
-                    'flex h-7 w-7 items-center justify-center rounded-md transition-all',
+                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-all',
                     isActive ? item.iconBg : 'bg-sidebar-accent/40',
                   )}>
                     <item.icon className={cn('h-4 w-4', isActive ? item.iconColor : 'text-gray-400 dark:text-slate-500')} />
                   </div>
-                  {item.label}
+                  <span className="truncate">{item.label}</span>
                 </span>
-                <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', isActive ? item.iconColor : 'text-gray-400 dark:text-slate-600', isOpen && 'rotate-180')} />
+                <span className="flex shrink-0 items-center gap-1.5">
+                  {/* When the section is collapsed, surface the child count
+                      here so it isn't hidden behind the fold. */}
+                  {!isOpen && sectionCount > 0 && (
+                    <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-semibold leading-none text-white">
+                      {sectionCount > 99 ? '99+' : sectionCount}
+                    </span>
+                  )}
+                  <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 transition-transform', isActive ? item.iconColor : 'text-gray-400 dark:text-slate-600', isOpen && 'rotate-180')} />
+                </span>
               </button>
               {isOpen && (
                 <div className={cn('ml-4 mt-1 space-y-0.5 border-l-2 pl-3', `${item.borderColor.replace('border-l-', 'border-')}/30`)}>
-                  {item.children.map((c) => (
+                  {item.children.map((c) => {
+                    const childCount = childBadgeCount(c.label);
+                    return (
                     <Link
                       key={c.href}
                       href={c.href}
@@ -391,10 +454,16 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isCli
                         pathname === c.href && 'bg-sidebar-accent text-gray-900 dark:text-white font-medium',
                       )}
                     >
-                      <div className={cn('h-1.5 w-1.5 rounded-full', pathname === c.href ? c.dotColor : 'bg-gray-400 dark:bg-slate-600')} />
-                      {c.label}
+                      <div className={cn('h-1.5 w-1.5 shrink-0 rounded-full', pathname === c.href ? c.dotColor : 'bg-gray-400 dark:bg-slate-600')} />
+                      <span className="truncate">{c.label}</span>
+                      {childCount > 0 && (
+                        <span className="ml-auto inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1.5 text-[10px] font-semibold leading-none text-white">
+                          {childCount > 99 ? '99+' : childCount}
+                        </span>
+                      )}
                     </Link>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

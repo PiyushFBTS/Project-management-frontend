@@ -7,9 +7,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import {
-  ArrowLeft, CalendarDays, CheckCircle2, XCircle, Ban, User, Clock, FileText, Users, MessageSquare,
+  ArrowLeft, CalendarDays, CheckCircle2, XCircle, Ban, User, Clock, FileText, Users, MessageSquare, Pencil,
 } from 'lucide-react';
 import { leaveRequestsApi } from '@/lib/api/leave-requests';
+import { EditLeaveDialog } from '../_components/edit-leave-dialog';
 import { useAuth } from '@/providers/auth-provider';
 import { LeaveRequestStatus } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -60,6 +61,7 @@ export default function LeaveRequestDetailPage() {
   const isAdmin = user?._type === 'admin';
   const isEmployee = user?._type === 'employee';
   const [actionRemarks, setActionRemarks] = useState('');
+  const [editOpen, setEditOpen] = useState(false);
 
   const leaveId = Number(id);
 
@@ -83,12 +85,16 @@ export default function LeaveRequestDetailPage() {
   // `approve` / `adminApprove`), but the UI mirrors the rule so the
   // buttons don't appear in the first place.
   const canAct = (() => {
-    if (!detail || !user) return { canApprove: false, canReject: false, canCancel: false };
+    if (!detail || !user) return { canApprove: false, canReject: false, canCancel: false, canEdit: false };
     const userId = (user as { id: number }).id;
     const isOwnEmployeeLeave = isEmployee && detail.employeeId === userId;
     const isOwnAdminLeave = isAdmin && detail.adminId != null && detail.adminId === userId;
     const isOwn = isOwnEmployeeLeave || isOwnAdminLeave;
-    const canCancel = isOwn && !['cancelled', 'hr_approved', 'hr_rejected', 'manager_rejected'].includes(detail.status);
+    // Owners can edit/cancel ONLY while the request is still pending — once
+    // RM or HR actions it (approved/rejected at any level), it's frozen.
+    // Editing is employee-only (no admin edit endpoint yet).
+    const canCancel = isOwn && detail.status === 'pending';
+    const canEdit = isOwnEmployeeLeave && detail.status === 'pending';
 
     let canApprove = false;
     let canReject = false;
@@ -112,7 +118,7 @@ export default function LeaveRequestDetailPage() {
         canApprove = true; canReject = true;
       }
     }
-    return { canApprove, canReject, canCancel };
+    return { canApprove, canReject, canCancel, canEdit };
   })();
 
   const invalidateAll = () => {
@@ -238,6 +244,13 @@ export default function LeaveRequestDetailPage() {
                 </p>
               </div>
             </div>
+            {/* When the request was submitted — full date + time. */}
+            <div className="pt-2 border-t border-border/50">
+              <p className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                <Clock className="h-3 w-3" /> Requested On
+              </p>
+              <p className="text-sm font-medium">{fmtDateTime(detail.createdAt)}</p>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -285,7 +298,7 @@ export default function LeaveRequestDetailPage() {
                     <div className={`mt-1 h-3 w-3 rounded-full shrink-0 ${
                       detail.status === 'manager_rejected' ? 'bg-red-500' :
                       detail.managerActionAt ? 'bg-emerald-500' :
-                      adminFinal ? 'bg-emerald-500' : 'bg-amber-400'
+                      isFinal ? 'bg-emerald-500' : 'bg-amber-400'
                     }`} />
                     <div>
                       <p className="text-sm font-medium">Manager: {detail.manager?.name ?? '—'}</p>
@@ -296,8 +309,11 @@ export default function LeaveRequestDetailPage() {
                           </p>
                           {detail.managerRemarks && <p className="text-xs text-muted-foreground mt-0.5 italic">&quot;{detail.managerRemarks}&quot;</p>}
                         </>
-                      ) : adminFinal ? (
-                        <p className="text-xs text-muted-foreground">{autoWord}</p>
+                      ) : isFinal ? (
+                        // HR (or admin) actioned directly — the manager step was
+                        // bypassed, so flag it as auto-approved/-rejected rather
+                        // than leaving it stuck on "Pending action".
+                        <p className="text-xs text-muted-foreground">{autoWord} (HR actioned directly)</p>
                       ) : (
                         <p className="text-xs text-muted-foreground">Pending action</p>
                       )}
@@ -376,7 +392,7 @@ export default function LeaveRequestDetailPage() {
         )}
 
         {/* Actions */}
-        {(canAct.canApprove || canAct.canReject || canAct.canCancel) && (
+        {(canAct.canApprove || canAct.canReject || canAct.canCancel || canAct.canEdit) && (
           <Card>
             <CardContent className="p-4 space-y-3">
               <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
@@ -420,21 +436,43 @@ export default function LeaveRequestDetailPage() {
                   </div>
                 </>
               )}
-              {canAct.canCancel && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-destructive border-destructive/30 hover:bg-destructive/10"
-                  disabled={cancelMut.isPending}
-                  onClick={() => cancelMut.mutate()}
-                >
-                  <Ban className="mr-1.5 h-3.5 w-3.5" />
-                  {cancelMut.isPending ? 'Cancelling...' : 'Cancel Request'}
-                </Button>
+              {(canAct.canEdit || canAct.canCancel) && (
+                <div className="flex flex-wrap gap-2">
+                  {canAct.canEdit && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditOpen(true)}
+                    >
+                      <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                      Edit Request
+                    </Button>
+                  )}
+                  {canAct.canCancel && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                      disabled={cancelMut.isPending}
+                      onClick={() => cancelMut.mutate()}
+                    >
+                      <Ban className="mr-1.5 h-3.5 w-3.5" />
+                      {cancelMut.isPending ? 'Cancelling...' : 'Cancel Request'}
+                    </Button>
+                  )}
+                </div>
+              )}
+              {canAct.canEdit && (
+                <p className="text-[11px] text-muted-foreground">
+                  You can edit or cancel this request only while it is pending. Once your manager or HR actions it, it locks.
+                </p>
               )}
             </CardContent>
           </Card>
         )}
+
+        {/* Edit dialog — owner-only, pending-only. */}
+        <EditLeaveDialog open={editOpen} onOpenChange={setEditOpen} leave={detail} />
 
       </div>
 
