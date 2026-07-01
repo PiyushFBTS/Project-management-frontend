@@ -329,7 +329,8 @@ export default function NewTaskPage({ params: paramsPromise }: { params: Promise
                       ...((empList as any[])
                         .filter((e: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.id === e.id) === i)
                         .filter((e: any) => !e._type || e._type === 'employee')
-                        .map((e: any) => ({ value: String(e.id), label: e.name }))),
+                        .map((e: any) => ({ value: String(e.id), label: e.name }))
+                        .sort((a: any, b: any) => (a.label || '').localeCompare(b.label || ''))),
                     ]}
                     className="h-9"
                   />

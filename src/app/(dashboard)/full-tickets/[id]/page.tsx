@@ -211,8 +211,9 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
   const reassignOptions = (() => {
     const all = companyEmployees ?? [];
     const deduped = all.filter((e, i, arr) => arr.findIndex((x) => x.id === e.id && (x as any)._type === (e as any)._type) === i);
-    const empOpts = deduped.filter((e: any) => !e._type || e._type === 'employee').map((emp) => ({ value: `emp-${emp.id}`, label: emp.name }));
-    const adminOpts = deduped.filter((e: any) => e._type === 'admin').map((a) => ({ value: `admin-${a.id}`, label: `${a.name} (Admin)` }));
+    const byLabel = (a: { label: string }, b: { label: string }) => (a.label || '').localeCompare(b.label || '');
+    const empOpts = deduped.filter((e: any) => !e._type || e._type === 'employee').map((emp) => ({ value: `emp-${emp.id}`, label: emp.name })).sort(byLabel);
+    const adminOpts = deduped.filter((e: any) => e._type === 'admin').map((a) => ({ value: `admin-${a.id}`, label: `${a.name} (Admin)` })).sort(byLabel);
     return [...empOpts, ...adminOpts];
   })();
 
@@ -814,6 +815,8 @@ export default function TicketDetailPage({ params: paramsPromise }: { params: Pr
                       .filter((e: any) => e._type !== 'client')
                       .filter((e: any) => !assignees.some(a => a.userId === e.id && a.userType === (e._type || 'employee')))
                       .filter((e: any) => !assigneeSearch || e.name?.toLowerCase().includes(assigneeSearch.toLowerCase()))
+                      .slice()
+                      .sort((a: any, b: any) => (a.name || '').localeCompare(b.name || ''))
                       .map((emp: any) => {
                         const uType = emp._type === 'admin' ? 'admin' : 'employee';
                         return (
