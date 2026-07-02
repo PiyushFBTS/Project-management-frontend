@@ -796,6 +796,37 @@ export interface WfhRequest {
   updatedAt: string;
 }
 
+// ── Weekly-Off (comp-off swap) ──────────────────────────────────────────────
+// A standalone request (NOT a leave type, no balance impact): the employee
+// takes `offDate` off (a weekday) and works `workDate` (the Saturday) instead.
+export type WeeklyOffRequestStatus = LeaveRequestStatus;
+
+export interface WeeklyOffRequest {
+  id: number;
+  employeeId: number | null;
+  adminId?: number | null;
+  employee?: Employee;
+  admin?: { id: number; name: string } | null;
+  offDate: string;
+  workDate: string;
+  reason?: string | null;
+  status: WeeklyOffRequestStatus;
+  managerId?: number | null;
+  manager?: Employee | null;
+  managerActionAt?: string | null;
+  managerRemarks?: string | null;
+  hrId?: number | null;
+  hr?: Employee | null;
+  hrActionAt?: string | null;
+  hrRemarks?: string | null;
+  hrApproverName?: string | null;
+  appliedById?: number | null;
+  appliedByType?: 'employee' | 'admin' | null;
+  appliedByName?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ── Notifications ─────────────────────────────────────────────────────────
 
 export type NotificationType =
@@ -820,6 +851,12 @@ export type NotificationType =
   | 'wfh_request_hr_approved'
   | 'wfh_request_hr_rejected'
   | 'wfh_request_cancelled'
+  | 'weekly_off_request_submitted'
+  | 'weekly_off_request_manager_approved'
+  | 'weekly_off_request_manager_rejected'
+  | 'weekly_off_request_hr_approved'
+  | 'weekly_off_request_hr_rejected'
+  | 'weekly_off_request_cancelled'
   | 'task_assigned'
   | 'task_status_changed'
   | 'task_commented'

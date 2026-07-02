@@ -23,6 +23,7 @@ import { pmTaskApprovalsApi } from '@/lib/api/task-sheets';
 import { requestsApi, adminRequestsApi, hrRequestsApi } from '@/lib/api/requests';
 import { leaveRequestsApi } from '@/lib/api/leave-requests';
 import { wfhRequestsApi } from '@/lib/api/wfh-requests';
+import { weeklyOffRequestsApi } from '@/lib/api/weekly-off-requests';
 import { LeaveRequestStatus } from '@/types';
 import { ClipboardCheck } from 'lucide-react';
 
@@ -276,8 +277,8 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isCli
       // so the paginated total lives at `r.data.meta.total`.
       const total = (r: any) =>
         r.data?.meta?.total ?? (Array.isArray(r.data?.data) ? r.data.data.length : 0);
-      // Count one module (leave or WFH) for the current user's role.
-      const countFor = async (mod: typeof leaveRequestsApi | typeof wfhRequestsApi) => {
+      // Count one module (leave / WFH / weekly-off) for the current user's role.
+      const countFor = async (mod: typeof leaveRequestsApi | typeof wfhRequestsApi | typeof weeklyOffRequestsApi) => {
         if (isEmployee) {
           const r = await mod.getPendingApprovals({ limit: 1 });
           return total(r);
@@ -288,11 +289,12 @@ function NavContent({ onNavigate, collapsed, isEmployee, isHr, isAccounts, isCli
         ]);
         return total(p) + total(m);
       };
-      const [leave, wfh] = await Promise.all([
+      const [leave, wfh, weeklyOff] = await Promise.all([
         countFor(leaveRequestsApi),
         countFor(wfhRequestsApi),
+        countFor(weeklyOffRequestsApi),
       ]);
-      return leave + wfh;
+      return leave + wfh + weeklyOff;
     },
     enabled: leaveBadgeEnabled,
     staleTime: 30_000,

@@ -10,10 +10,13 @@ import { toast } from 'sonner';
 import { useAuth } from '@/providers/auth-provider';
 import { leaveRequestsApi } from '@/lib/api/leave-requests';
 import { wfhRequestsApi } from '@/lib/api/wfh-requests';
+import { weeklyOffRequestsApi } from '@/lib/api/weekly-off-requests';
 import { LeaveRequest, LeaveRequestStatus } from '@/types';
 import { ApplyWfhDialog } from './_components/apply-wfh-dialog';
+import { ApplyWeeklyOffDialog } from './_components/apply-weekly-off-dialog';
 import { LeaveActionDialog } from './_components/leave-action-dialog';
 import { WfhTab } from './_components/wfh-tab';
+import { WeeklyOffTab } from './_components/weekly-off-tab';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -90,8 +93,8 @@ function StatusBadge({ lr }: { lr: { status: LeaveRequestStatus } }) {
 // same status pills — but powered by `wfhRequestsApi` via the
 // `<WfhTab />` component. Calendar stays a single tab that overlays
 // both event sources.
-type Tab = 'my-leaves' | 'team-leaves' | 'my-wfh' | 'team-wfh' | 'calendar';
-type AdminTab = 'my-leaves' | 'team-leaves' | 'my-wfh' | 'team-wfh' | 'calendar';
+type Tab = 'my-leaves' | 'team-leaves' | 'my-wfh' | 'team-wfh' | 'my-weekly-off' | 'team-weekly-off' | 'calendar';
+type AdminTab = 'my-leaves' | 'team-leaves' | 'my-wfh' | 'team-wfh' | 'my-weekly-off' | 'team-weekly-off' | 'calendar';
 
 export default function LeaveRequestsPage() {
   return (
@@ -130,7 +133,7 @@ function LeaveRequestsContent() {
   // pending + manager_approved. Only fetched for users who see Team tabs.
   const pendingTotal = (r: any) =>
     r.data?.meta?.total ?? (Array.isArray(r.data?.data) ? r.data.data.length : 0);
-  const countPending = async (mod: typeof leaveRequestsApi | typeof wfhRequestsApi) => {
+  const countPending = async (mod: typeof leaveRequestsApi | typeof wfhRequestsApi | typeof weeklyOffRequestsApi) => {
     if (isEmployee) return pendingTotal(await mod.getPendingApprovals({ limit: 1 }));
     const [p, m] = await Promise.all([
       mod.getAll({ status: 'pending' as LeaveRequestStatus, limit: 1 }),
@@ -150,8 +153,17 @@ function LeaveRequestsContent() {
     enabled: !!user && canSeeTeam,
     staleTime: 30_000,
   });
+  const { data: teamWeeklyOffPending = 0 } = useQuery({
+    queryKey: ['weekoff-tab-pending', isAdmin, isEmployee],
+    queryFn: () => countPending(weeklyOffRequestsApi),
+    enabled: !!user && canSeeTeam,
+    staleTime: 30_000,
+  });
   const tabBadge = (t: string) =>
-    t === 'team-leaves' ? teamLeavePending : t === 'team-wfh' ? teamWfhPending : 0;
+    t === 'team-leaves' ? teamLeavePending
+    : t === 'team-wfh' ? teamWfhPending
+    : t === 'team-weekly-off' ? teamWeeklyOffPending
+    : 0;
 
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -179,6 +191,8 @@ function LeaveRequestsContent() {
   // separate component so the inline Leave form stays untouched.
   const [applyWfhOpen, setApplyWfhOpen] = useState(false);
   const [applyWfhMode, setApplyWfhMode] = useState<'self' | 'on-behalf'>('self');
+  const [applyWeeklyOffOpen, setApplyWeeklyOffOpen] = useState(false);
+  const [applyWeeklyOffMode, setApplyWeeklyOffMode] = useState<'self' | 'on-behalf'>('self');
 
   // ── Apply for Leave dialog ──
   const [applyOpen, setApplyOpen] = useState(false);
@@ -388,6 +402,32 @@ function LeaveRequestsContent() {
     enabled: onCalendar && isAdmin,
   });
 
+  // Weekly-off (comp-off swap) events for the calendar overlay.
+  const { data: weekOffMine } = useQuery({
+    queryKey: ['calendar-my-weekoff', dateFrom, dateTo],
+    queryFn: () =>
+      weeklyOffRequestsApi
+        .getMyRequests({ dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, limit: 100 })
+        .then((r) => r.data.data),
+    enabled: onCalendar && isEmployee,
+  });
+  const { data: weekOffTeam } = useQuery({
+    queryKey: ['calendar-team-weekoff', dateFrom, dateTo],
+    queryFn: () =>
+      weeklyOffRequestsApi
+        .getTeamRequests({ dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, limit: 100 })
+        .then((r) => r.data.data),
+    enabled: onCalendar && isEmployee && canSeeTeam,
+  });
+  const { data: weekOffAll } = useQuery({
+    queryKey: ['calendar-all-weekoff', dateFrom, dateTo],
+    queryFn: () =>
+      weeklyOffRequestsApi
+        .getAll({ dateFrom: dateFrom || undefined, dateTo: dateTo || undefined, limit: 100 })
+        .then((r) => r.data.data),
+    enabled: onCalendar && isAdmin,
+  });
+
   // Detail
   const { data: detail, isLoading: detailLoading } = useQuery({
     queryKey: ['leave-request-detail', selected?.id, isEmployee],
@@ -515,35 +555,59 @@ function LeaveRequestsContent() {
             </div>
           </div>
           {(isEmployee || isAdmin) && (() => {
-            // Team Leaves / Team WFH tabs → file on someone's behalf.
-            // Anywhere else → file own request.
-            const onTeamTab =
-              (isEmployee && (tab === 'team-leaves' || tab === 'team-wfh')) ||
-              (isAdmin && (adminTab === 'team-leaves' || adminTab === 'team-wfh'));
+            // Show only the apply button that matches the active tab's module.
+            // Team tabs → file on someone's behalf; "My" tabs → file own.
+            // Calendar (no single module) keeps all three, in self mode.
+            const activeTab = isAdmin ? adminTab : tab;
+            const onTeamTab = activeTab === 'team-leaves' || activeTab === 'team-wfh' || activeTab === 'team-weekly-off';
+            const mod = activeTab.includes('weekly-off') ? 'weekly-off'
+              : activeTab.includes('wfh') ? 'wfh'
+              : activeTab.includes('leaves') ? 'leave'
+              : 'calendar';
+            const showLeave = mod === 'leave' || mod === 'calendar';
+            const showWfh = mod === 'wfh' || mod === 'calendar';
+            const showWeeklyOff = mod === 'weekly-off' || mod === 'calendar';
             return (
               <div className="flex w-full sm:w-auto flex-col sm:flex-row gap-2">
-                <Button
-                  onClick={() => {
-                    setApplyMode(onTeamTab ? 'on-behalf' : 'self');
-                    setApplyOpen(true);
-                  }}
-                  className="w-full sm:w-auto shrink-0 bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg"
-                  size="sm"
-                >
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  {onTeamTab ? 'Apply Leave on Behalf' : 'Apply for Leave'}
-                </Button>
-                <Button
-                  onClick={() => {
-                    setApplyWfhMode(onTeamTab ? 'on-behalf' : 'self');
-                    setApplyWfhOpen(true);
-                  }}
-                  className="w-full sm:w-auto shrink-0 bg-white/15 backdrop-blur-sm text-white hover:bg-white/25 border border-white/30 shadow-lg"
-                  size="sm"
-                >
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  {onTeamTab ? 'Apply WFH on Behalf' : 'Apply for WFH'}
-                </Button>
+                {showLeave && (
+                  <Button
+                    onClick={() => {
+                      setApplyMode(onTeamTab ? 'on-behalf' : 'self');
+                      setApplyOpen(true);
+                    }}
+                    className="w-full sm:w-auto shrink-0 bg-white/20 backdrop-blur-sm text-white hover:bg-white/30 border-0 shadow-lg"
+                    size="sm"
+                  >
+                    <Plus className="mr-1.5 h-4 w-4" />
+                    {onTeamTab ? 'Apply Leave on Behalf' : 'Apply for Leave'}
+                  </Button>
+                )}
+                {showWfh && (
+                  <Button
+                    onClick={() => {
+                      setApplyWfhMode(onTeamTab ? 'on-behalf' : 'self');
+                      setApplyWfhOpen(true);
+                    }}
+                    className="w-full sm:w-auto shrink-0 bg-white/15 backdrop-blur-sm text-white hover:bg-white/25 border border-white/30 shadow-lg"
+                    size="sm"
+                  >
+                    <Plus className="mr-1.5 h-4 w-4" />
+                    {onTeamTab ? 'Apply WFH on Behalf' : 'Apply for WFH'}
+                  </Button>
+                )}
+                {showWeeklyOff && (
+                  <Button
+                    onClick={() => {
+                      setApplyWeeklyOffMode(onTeamTab ? 'on-behalf' : 'self');
+                      setApplyWeeklyOffOpen(true);
+                    }}
+                    className="w-full sm:w-auto shrink-0 bg-white/15 backdrop-blur-sm text-white hover:bg-white/25 border border-white/30 shadow-lg"
+                    size="sm"
+                  >
+                    <Plus className="mr-1.5 h-4 w-4" />
+                    {onTeamTab ? 'Weekly-Off on Behalf' : 'Apply Weekly-Off'}
+                  </Button>
+                )}
               </div>
             );
           })()}
@@ -556,11 +620,11 @@ function LeaveRequestsContent() {
       {isEmployee && (
         <div className="flex rounded-lg border border-border bg-muted/50 p-1 w-fit max-w-full overflow-x-auto scrollbar-hide">
           {((canSeeTeam
-            ? ['my-leaves', 'team-leaves', 'my-wfh', 'team-wfh', 'calendar']
-            : ['my-leaves', 'my-wfh', 'calendar']) as Tab[]).map((t) => (
+            ? ['my-leaves', 'team-leaves', 'my-wfh', 'team-wfh', 'my-weekly-off', 'team-weekly-off', 'calendar']
+            : ['my-leaves', 'my-wfh', 'my-weekly-off', 'calendar']) as Tab[]).map((t) => (
             <button
               key={t}
-              onClick={() => { setTab(t); if (t !== 'team-leaves' && t !== 'team-wfh') setTeamEmployeeId(''); }}
+              onClick={() => { setTab(t); if (t !== 'team-leaves' && t !== 'team-wfh' && t !== 'team-weekly-off') setTeamEmployeeId(''); }}
               className={`inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
                 tab === t
                   ? 'bg-white dark:bg-card shadow-sm text-foreground'
@@ -571,6 +635,8 @@ function LeaveRequestsContent() {
                 : t === 'team-leaves' ? 'Team Leaves'
                 : t === 'my-wfh' ? 'My WFH'
                 : t === 'team-wfh' ? 'Team WFH'
+                : t === 'my-weekly-off' ? 'My Week-Off'
+                : t === 'team-weekly-off' ? 'Team Week-Off'
                 : 'Calendar'}
               {tabBadge(t) > 0 && (
                 <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-none text-white">
@@ -585,7 +651,7 @@ function LeaveRequestsContent() {
       {/* Admin tabs — My Leave / Team Leaves / My WFH / Team WFH / Calendar */}
       {isAdmin && (
         <div className="flex rounded-lg border border-border bg-muted/50 p-1 w-fit max-w-full overflow-x-auto scrollbar-hide">
-          {(['my-leaves', 'team-leaves', 'my-wfh', 'team-wfh', 'calendar'] as AdminTab[]).map((t) => (
+          {(['my-leaves', 'team-leaves', 'my-wfh', 'team-wfh', 'my-weekly-off', 'team-weekly-off', 'calendar'] as AdminTab[]).map((t) => (
             <button
               key={t}
               onClick={() => setAdminTab(t)}
@@ -599,6 +665,8 @@ function LeaveRequestsContent() {
                 : t === 'team-leaves' ? 'Team Leaves'
                 : t === 'my-wfh' ? 'My WFH'
                 : t === 'team-wfh' ? 'Team WFH'
+                : t === 'my-weekly-off' ? 'My Week-Off'
+                : t === 'team-weekly-off' ? 'Team Week-Off'
                 : 'Calendar'}
               {tabBadge(t) > 0 && (
                 <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-none text-white">
@@ -679,6 +747,22 @@ function LeaveRequestsContent() {
         />
       )}
 
+      {/* Weekly-Off tabs — dedicated table (comp-off swap). */}
+      {((isEmployee && (tab === 'my-weekly-off' || tab === 'team-weekly-off')) ||
+        (isAdmin && (adminTab === 'my-weekly-off' || adminTab === 'team-weekly-off'))) && (
+        <WeeklyOffTab
+          scope={
+            (isEmployee && tab === 'my-weekly-off') || (isAdmin && adminTab === 'my-weekly-off')
+              ? 'my'
+              : 'team'
+          }
+          statusFilter={statusFilter as any}
+          teamEmployeeId={teamEmployeeId}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+        />
+      )}
+
       {/* Calendar View */}
       {((isEmployee && tab === 'calendar') || (isAdmin && adminTab === 'calendar')) && (() => {
         const allLeaves: LeaveRequest[] = isAdmin ? (data ?? []) : [...(myLeaves ?? []), ...(teamData ?? [])];
@@ -687,6 +771,8 @@ function LeaveRequestsContent() {
         // none). Status filter mirrors Leave.
         const allWfh = isAdmin ? (wfhAll ?? []) : [...(wfhMine ?? []), ...(wfhTeam ?? [])];
         const activeWfh = allWfh.filter((w) => ['hr_approved', 'manager_approved', 'pending'].includes(w.status));
+        const allWeekOff = isAdmin ? (weekOffAll ?? []) : [...(weekOffMine ?? []), ...(weekOffTeam ?? [])];
+        const activeWeekOff = allWeekOff.filter((w) => ['hr_approved', 'manager_approved', 'pending'].includes(w.status));
         const monthStart = startOfMonth(calMonth);
         const monthEnd = endOfMonth(calMonth);
         const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
@@ -700,7 +786,7 @@ function LeaveRequestsContent() {
         // the admin "Apply for Leave" flow); the corresponding side
         // relation will be populated. Resolving both means admin-
         // submitted leaves don't render as "Employee #null" rows.
-        const empMap: Record<string, { name: string; code: string; leaves: LeaveRequest[]; wfh: typeof activeWfh }> = {};
+        const empMap: Record<string, { name: string; code: string; leaves: LeaveRequest[]; wfh: typeof activeWfh; weeklyOff: typeof activeWeekOff }> = {};
         // Same grouping for WFH so we can paint a per-employee row
         // even when they have only WFH (no leave) this month.
         const groupKeyForWfh = (w: typeof activeWfh[number]) =>
@@ -713,8 +799,19 @@ function LeaveRequestsContent() {
             ? (adminRel?.name ?? `Admin #${w.adminId}`)
             : (empRel?.name ?? `Employee #${w.employeeId}`);
           const code = w.adminId != null ? 'Admin' : (empRel?.empCode ?? '');
-          if (!empMap[key]) empMap[key] = { name, code, leaves: [], wfh: [] };
+          if (!empMap[key]) empMap[key] = { name, code, leaves: [], wfh: [], weeklyOff: [] };
           empMap[key].wfh.push(w);
+        });
+        activeWeekOff.forEach((w) => {
+          const key = w.adminId != null ? `adm_${w.adminId}` : `emp_${w.employeeId}`;
+          const adminRel = (w as { admin?: { name?: string } }).admin;
+          const empRel = (w as { employee?: { name?: string; empCode?: string } }).employee;
+          const name = w.adminId != null
+            ? (adminRel?.name ?? `Admin #${w.adminId}`)
+            : (empRel?.name ?? `Employee #${w.employeeId}`);
+          const code = w.adminId != null ? 'Admin' : (empRel?.empCode ?? '');
+          if (!empMap[key]) empMap[key] = { name, code, leaves: [], wfh: [], weeklyOff: [] };
+          empMap[key].weeklyOff.push(w);
         });
         approvedLeaves.forEach((l) => {
           const isAdminLeave = l.adminId != null;
@@ -725,7 +822,7 @@ function LeaveRequestsContent() {
             ? (adminRel?.name ?? `Admin #${l.adminId}`)
             : (empRel?.name ?? `Employee #${l.employeeId}`);
           const code = isAdminLeave ? 'Admin' : (empRel?.empCode ?? '');
-          if (!empMap[groupKey]) empMap[groupKey] = { name, code, leaves: [], wfh: [] };
+          if (!empMap[groupKey]) empMap[groupKey] = { name, code, leaves: [], wfh: [], weeklyOff: [] };
           empMap[groupKey].leaves.push(l);
         });
         const employees = Object.entries(empMap);
@@ -771,6 +868,10 @@ function LeaveRequestsContent() {
               <div className="flex items-center gap-1.5">
                 <span className="h-3 w-3 rounded-full bg-cyan-500" />
                 <span className="text-[10px] font-medium text-muted-foreground">WFH (applied)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded-full bg-teal-500" />
+                <span className="text-[10px] font-medium text-muted-foreground">Weekly Off / Sat swap</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="h-3 w-3 rounded-full bg-blue-200" />
@@ -826,6 +927,11 @@ function LeaveRequestsContent() {
                           const to = new Date(w.dateTo + 'T00:00:00');
                           return isWithinInterval(d, { start: from, end: to });
                         });
+                        // Weekly-off swap: the off day is a weekday; the
+                        // worked day is that week's Saturday.
+                        const cellDateStr = format(d, 'yyyy-MM-dd');
+                        const weekOff = (isWeekend || leave || wfh) ? null : emp.weeklyOff.find((w) => w.offDate === cellDateStr);
+                        const weekOffWork = isSat ? (emp.weeklyOff.find((w) => w.workDate === cellDateStr) ?? null) : null;
                         const reasonName = leave?.leaveReason?.reasonName ?? 'Other';
                         const color = leave ? leaveColors[reasonName] : '';
 
@@ -887,14 +993,29 @@ function LeaveRequestsContent() {
                                   {format(d, 'd')}
                                 </div>
                               </div>
+                            ) : weekOff ? (
+                              <div className="relative flex items-center justify-center h-6">
+                                <div
+                                  className="relative z-10 h-6 w-6 rounded-full bg-teal-500 flex items-center justify-center text-white text-[10px] font-bold cursor-default"
+                                  title={`Weekly Off (${weekOff.status}) — works Sat ${weekOff.workDate}`}
+                                >
+                                  {format(d, 'd')}
+                                </div>
+                              </div>
                             ) : isSun ? (
                               <div className="h-6 bg-red-100 dark:bg-red-900/30 rounded-full mx-0.5 flex items-center justify-center text-red-400 text-[10px] font-medium" title="Sunday - Off">
                                 {format(d, 'd')}
                               </div>
                             ) : isSat ? (
-                              <div className="h-6 bg-blue-100 dark:bg-blue-900/30 rounded-full mx-0.5 flex items-center justify-center text-blue-400 text-[10px] font-medium" title="Saturday - WFH">
-                                {format(d, 'd')}
-                              </div>
+                              weekOffWork ? (
+                                <div className="h-6 bg-teal-100 dark:bg-teal-900/30 rounded-full mx-0.5 flex items-center justify-center text-teal-600 dark:text-teal-400 text-[10px] font-semibold" title={`Working Saturday — weekly-off swap (off on ${weekOffWork.offDate})`}>
+                                  {format(d, 'd')}
+                                </div>
+                              ) : (
+                                <div className="h-6 bg-blue-100 dark:bg-blue-900/30 rounded-full mx-0.5 flex items-center justify-center text-blue-400 text-[10px] font-medium" title="Saturday - WFH">
+                                  {format(d, 'd')}
+                                </div>
+                              )
                             ) : null}
                           </td>
                         );
@@ -909,8 +1030,8 @@ function LeaveRequestsContent() {
       })()}
 
       {/* Table — Leave list. Suppressed on WFH and Calendar tabs. */}
-      {((isEmployee && tab !== 'calendar' && tab !== 'my-wfh' && tab !== 'team-wfh') ||
-        (isAdmin && adminTab !== 'calendar' && adminTab !== 'my-wfh' && adminTab !== 'team-wfh')) && <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
+      {((isEmployee && tab !== 'calendar' && tab !== 'my-wfh' && tab !== 'team-wfh' && tab !== 'my-weekly-off' && tab !== 'team-weekly-off') ||
+        (isAdmin && adminTab !== 'calendar' && adminTab !== 'my-wfh' && adminTab !== 'team-wfh' && adminTab !== 'my-weekly-off' && adminTab !== 'team-weekly-off')) && <div className="rounded-lg border bg-card overflow-x-auto shadow-sm">
         <div className="h-1.5 rounded-t-[inherit] bg-linear-to-r from-orange-500 via-rose-500 to-violet-500" />
         <Table>
           <TableHeader>
@@ -1061,6 +1182,15 @@ function LeaveRequestsContent() {
           open={applyWfhOpen}
           onOpenChange={setApplyWfhOpen}
           mode={applyWfhMode}
+          isAdmin={isAdmin}
+        />
+      )}
+
+      {(isEmployee || isAdmin) && (
+        <ApplyWeeklyOffDialog
+          open={applyWeeklyOffOpen}
+          onOpenChange={setApplyWeeklyOffOpen}
+          mode={applyWeeklyOffMode}
           isAdmin={isAdmin}
         />
       )}

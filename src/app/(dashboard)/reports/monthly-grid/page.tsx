@@ -26,6 +26,10 @@ type DayEntry = {
   hours: number | null;
   submitted: boolean;
   leave: LeaveCell | null;
+  /** Approved weekly-off swap: this weekday is the employee's day off. */
+  weeklyOff?: boolean;
+  /** The Saturday worked in exchange for the weekly-off. */
+  weeklyOffWork?: boolean;
 };
 type EmployeeRow = {
   employeeId: number;
@@ -263,6 +267,7 @@ export default function MonthlyGridPage() {
             <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-amber-200 dark:bg-amber-800 inline-block" /> Draft</span>
             <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-red-200 dark:bg-red-800 inline-block" /> Not Filled</span>
             <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-gray-200 dark:bg-gray-700 inline-block" /> Sunday</span>
+            <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-teal-200 dark:bg-teal-800 inline-block" /> Weekly Off</span>
             <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-violet-200 dark:bg-violet-800 inline-block" /> On Leave</span>
             <span className="flex items-center gap-1"><span className="h-3 w-3 rounded bg-violet-100 dark:bg-violet-900/40 inline-block border border-violet-300 border-dashed" /> Pending Leave</span>
             <span className="flex items-center gap-1"><span className="h-3 w-3 rounded inline-block bg-linear-to-br from-violet-200 to-amber-200" /> Worked on Leave</span>
@@ -320,11 +325,15 @@ export default function MonthlyGridPage() {
                 {empRow.days.map((entry) => {
                   const day = parseInt(entry.date.split('-')[2], 10);
                   const sun = isSunday(entry.date);
+                  const isWeeklyOff = !!entry.weeklyOff;
+                  // Both Sundays and approved weekly-offs get the "off-day"
+                  // treatment; the label + tint below keep them distinct.
+                  const off = sun || isWeeklyOff;
                   const filled = entry.hours !== null;
-                  // A filled Sunday renders like any worked day — the grey
-                  // "Sunday" treatment only applies to empty Sundays.
+                  // A filled off-day renders like any worked day — the grey
+                  // treatment only applies to empty off-days.
                   const clickable = entry.sheetId != null;
-                  const hasLeave = !sun && entry.leave !== null;
+                  const hasLeave = !off && entry.leave !== null;
                   const tone = entry.leave ? leaveTone(entry.leave.status) : null;
                   // Cell tone precedence:
                   //   Sunday → grey (leaves on Sundays are ignored visually).
@@ -339,6 +348,9 @@ export default function MonthlyGridPage() {
                     cellClass = entry.submitted
                       ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800'
                       : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800';
+                  } else if (isWeeklyOff) {
+                    // Distinct teal tint so weekly-off reads apart from a Sunday.
+                    cellClass = 'bg-teal-50 dark:bg-teal-950/30 border-teal-200 dark:border-teal-800';
                   } else if (sun) {
                     cellClass = 'bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-800';
                   } else {
@@ -376,7 +388,7 @@ export default function MonthlyGridPage() {
                         <span className="absolute inset-x-0 bottom-0 h-1 bg-amber-400 dark:bg-amber-600" />
                       )}
                       <div className="flex items-center justify-between gap-1">
-                        <span className={`text-xs font-semibold ${sun && !filled ? 'text-gray-400' : ''}`}>{day}</span>
+                        <span className={`text-xs font-semibold ${off && !filled ? 'text-gray-400' : ''}`}>{day}</span>
                         {hasLeave ? (
                           <Badge variant="outline" className={`text-[8px] px-1 py-0 ${tone!.pill}`}>
                             {tone!.label === 'Approved' ? 'Leave' : tone!.label}
@@ -389,17 +401,25 @@ export default function MonthlyGridPage() {
                           <Badge variant="outline" className="text-[8px] px-1 py-0 bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 border-amber-300">
                             Draft
                           </Badge>
+                        ) : entry.weeklyOffWork ? (
+                          // The Saturday worked in exchange for a weekly-off.
+                          <Badge variant="outline" className="text-[8px] px-1 py-0 bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300 border-teal-300">
+                            Swap
+                          </Badge>
                         ) : null}
                       </div>
                       <div className="mt-1">
                         {filled ? (
                           // Always show hours when the sheet is filled — even
-                          // on a Sunday or a leave day. A worked Sunday gets a
-                          // small "Sun" tag so the off-day is still obvious.
+                          // on an off-day or a leave day. A worked off-day gets
+                          // a small tag so it's still obvious.
                           <span className="text-lg font-bold">
                             {entry.hours}h
                             {sun && <span className="ml-1 align-top text-[9px] font-medium text-gray-400">Sun</span>}
+                            {isWeeklyOff && <span className="ml-1 align-top text-[9px] font-medium text-teal-500">WO</span>}
                           </span>
+                        ) : isWeeklyOff ? (
+                          <span className="text-xs text-teal-600 dark:text-teal-400">Weekly Off</span>
                         ) : sun ? (
                           <span className="text-xs text-gray-400">Sunday</span>
                         ) : hasLeave ? (
